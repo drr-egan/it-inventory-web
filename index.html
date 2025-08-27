@@ -1495,6 +1495,375 @@
                 }
             };
 
+            // Enhanced PDF Processing Functions - Beta Features
+            const enhancedPdfProcessing = {
+                // OCR-like text extraction enhancement
+                enhanceTextExtraction: async (pdfFile) => {
+                    console.log('🔍 Enhanced PDF text extraction started...');
+                    try {
+                        // Use PDF.js for better text extraction
+                        const arrayBuffer = await pdfFile.arrayBuffer();
+                        const uint8Array = new Uint8Array(arrayBuffer);
+                        
+                        const loadingTask = pdfjsLib.getDocument(uint8Array);
+                        const pdfDoc = await loadingTask.promise;
+                        
+                        let fullText = '';
+                        const textPages = [];
+                        
+                        // Process all pages
+                        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+                            console.log(`📄 Processing page ${pageNum}/${pdfDoc.numPages}...`);
+                            const page = await pdfDoc.getPage(pageNum);
+                            const textContent = await page.getTextContent();
+                            
+                            const pageText = textContent.items.map(item => item.str).join(' ');
+                            textPages.push({
+                                pageNumber: pageNum,
+                                text: pageText,
+                                items: textContent.items
+                            });
+                            fullText += pageText + '\n\n';
+                        }
+                        
+                        return {
+                            fullText,
+                            pages: textPages,
+                            pageCount: pdfDoc.numPages
+                        };
+                    } catch (error) {
+                        console.error('Enhanced text extraction failed:', error);
+                        return null;
+                    }
+                },
+
+                // Vendor recognition and categorization
+                recognizeVendor: (text) => {
+                    const vendors = {
+                        'Amazon': {
+                            patterns: ['amazon\\.com', 'amzn\\.com', 'amazon business', 'shipped by amazon'],
+                            taxHandling: 'separate_line',
+                            itemFormat: 'line_item'
+                        },
+                        'Best Buy': {
+                            patterns: ['bestbuy\\.com', 'best buy', 'bby\\.com'],
+                            taxHandling: 'separate_line',
+                            itemFormat: 'line_item'
+                        },
+                        'Office Depot': {
+                            patterns: ['officedepot\\.com', 'office depot'],
+                            taxHandling: 'separate_line',
+                            itemFormat: 'line_item'
+                        },
+                        'CDW': {
+                            patterns: ['cdw\\.com', 'cdw corporation'],
+                            taxHandling: 'separate_line',
+                            itemFormat: 'line_item'
+                        },
+                        'Staples': {
+                            patterns: ['staples\\.com', 'staples inc'],
+                            taxHandling: 'separate_line',
+                            itemFormat: 'line_item'
+                        },
+                        'Generic': {
+                            patterns: [],
+                            taxHandling: 'separate_line',
+                            itemFormat: 'line_item'
+                        }
+                    };
+
+                    const lowerText = text.toLowerCase();
+                    for (const [vendorName, config] of Object.entries(vendors)) {
+                        if (vendorName === 'Generic') continue;
+                        
+                        for (const pattern of config.patterns) {
+                            const regex = new RegExp(pattern, 'i');
+                            if (regex.test(lowerText)) {
+                                console.log(`🏪 Vendor identified: ${vendorName}`);
+                                return { name: vendorName, config };
+                            }
+                        }
+                    }
+                    
+                    console.log('🏪 Using generic vendor processing');
+                    return { name: 'Generic', config: vendors.Generic };
+                },
+
+                // Enhanced line item detection
+                detectLineItems: (text, vendor) => {
+                    console.log('🔍 Detecting line items with enhanced processing...');
+                    const lines = text.split('\n').filter(line => line.trim().length > 0);
+                    const detectedItems = [];
+                    
+                    // Common price patterns
+                    const pricePatterns = [
+                        /\$\s*(\d+(?:,\d{3})*\.?\d{0,2})/g,  // $1,234.56
+                        /(\d+(?:,\d{3})*\.\d{2})\s*USD/gi,   // 1234.56 USD
+                        /USD\s*(\d+(?:,\d{3})*\.\d{2})/gi    // USD 1234.56
+                    ];
+                    
+                    // Common quantity patterns  
+                    const quantityPatterns = [
+                        /qty[:\s]*(\d+)/gi,
+                        /quantity[:\s]*(\d+)/gi,
+                        /x(\d+)/gi,
+                        /(\d+)\s*x\s*/gi
+                    ];
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        
+                        // Skip empty lines, headers, totals
+                        if (!line || 
+                            /^(subtotal|total|tax|shipping|order|date|invoice)/i.test(line) ||
+                            line.length < 10) {
+                            continue;
+                        }
+
+                        // Look for lines with both text and price
+                        let foundPrice = null;
+                        let foundQuantity = 1;
+                        
+                        for (const pattern of pricePatterns) {
+                            const priceMatch = line.match(pattern);
+                            if (priceMatch) {
+                                const priceStr = priceMatch[0].replace(/[^\d.]/g, '');
+                                const price = parseFloat(priceStr);
+                                if (price > 0 && price < 10000) { // Reasonable price range
+                                    foundPrice = price;
+                                    break;
+                                }
+                            }
+                        }
+
+                        for (const pattern of quantityPatterns) {
+                            const qtyMatch = line.match(pattern);
+                            if (qtyMatch) {
+                                const qty = parseInt(qtyMatch[1]);
+                                if (qty > 0 && qty < 100) { // Reasonable quantity range
+                                    foundQuantity = qty;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (foundPrice) {
+                            // Extract item name (remove price and quantity info)
+                            let itemName = line
+                                .replace(/\$\s*[\d,]+\.?\d*/g, '') // Remove prices
+                                .replace(/qty[:\s]*\d+/gi, '')     // Remove qty
+                                .replace(/quantity[:\s]*\d+/gi, '') // Remove quantity
+                                .replace(/x\d+/gi, '')             // Remove x2, x3, etc
+                                .replace(/\d+\s*x\s*/gi, '')       // Remove 2 x, 3 x, etc
+                                .trim();
+
+                            if (itemName.length > 3) {
+                                detectedItems.push({
+                                    name: itemName,
+                                    price: foundPrice,
+                                    quantity: foundQuantity,
+                                    source: 'line_detection',
+                                    confidence: 0.8
+                                });
+                                console.log(`📦 Detected item: ${itemName} ($${foundPrice}) x${foundQuantity}`);
+                            }
+                        }
+                    }
+
+                    return detectedItems;
+                },
+
+                // Enhanced tax and fee detection
+                detectTaxesAndFees: (text) => {
+                    console.log('💰 Detecting taxes and fees...');
+                    let totalTax = 0;
+                    let totalFees = 0;
+                    
+                    const lines = text.split('\n');
+                    
+                    for (const line of lines) {
+                        const lowerLine = line.toLowerCase();
+                        
+                        // Tax detection patterns
+                        if (/tax|vat|gst|hst/.test(lowerLine)) {
+                            const taxMatch = line.match(/\$?\s*(\d+(?:\.\d{2})?)/);
+                            if (taxMatch) {
+                                const taxAmount = parseFloat(taxMatch[1]);
+                                if (taxAmount > 0 && taxAmount < 1000) {
+                                    totalTax += taxAmount;
+                                    console.log(`💸 Found tax: $${taxAmount}`);
+                                }
+                            }
+                        }
+                        
+                        // Fee detection patterns
+                        if (/shipping|delivery|handling|fee|surcharge/.test(lowerLine)) {
+                            const feeMatch = line.match(/\$?\s*(\d+(?:\.\d{2})?)/);
+                            if (feeMatch) {
+                                const feeAmount = parseFloat(feeMatch[1]);
+                                if (feeAmount > 0 && feeAmount < 500) {
+                                    totalFees += feeAmount;
+                                    console.log(`📦 Found fee: $${feeAmount}`);
+                                }
+                            }
+                        }
+                    }
+                    
+                    return { tax: totalTax, fees: totalFees };
+                },
+
+                // Smart item matching with fuzzy search
+                smartItemMatch: (detectedName, inventoryItems) => {
+                    const cleanName = (name) => name.toLowerCase()
+                        .replace(/[^a-z0-9\s]/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    
+                    const cleanDetected = cleanName(detectedName);
+                    const matches = [];
+                    
+                    for (const item of inventoryItems) {
+                        const cleanInventory = cleanName(item.name);
+                        
+                        // Exact match
+                        if (cleanInventory === cleanDetected) {
+                            matches.push({ item, score: 1.0, type: 'exact' });
+                            continue;
+                        }
+                        
+                        // Contains match
+                        if (cleanInventory.includes(cleanDetected) || cleanDetected.includes(cleanInventory)) {
+                            const score = Math.min(cleanDetected.length, cleanInventory.length) / 
+                                         Math.max(cleanDetected.length, cleanInventory.length);
+                            matches.push({ item, score: score * 0.9, type: 'contains' });
+                            continue;
+                        }
+                        
+                        // Word overlap
+                        const detectedWords = cleanDetected.split(' ').filter(w => w.length > 2);
+                        const inventoryWords = cleanInventory.split(' ').filter(w => w.length > 2);
+                        
+                        if (detectedWords.length > 0 && inventoryWords.length > 0) {
+                            const commonWords = detectedWords.filter(word => 
+                                inventoryWords.some(invWord => 
+                                    invWord.includes(word) || word.includes(invWord)
+                                )
+                            );
+                            
+                            if (commonWords.length > 0) {
+                                const score = commonWords.length / Math.max(detectedWords.length, inventoryWords.length);
+                                if (score > 0.3) {
+                                    matches.push({ item, score: score * 0.7, type: 'partial' });
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Sort by score and return best match
+                    matches.sort((a, b) => b.score - a.score);
+                    return matches.length > 0 ? matches[0] : null;
+                }
+            };
+
+            // Enhanced generateShipmentReport with OCR features
+            const generateEnhancedShipmentReport = async () => {
+                console.log('🚀 Starting enhanced shipment report generation...');
+                
+                if (!selectedPdfFile) {
+                    alert('Please select a PDF file');
+                    return;
+                }
+
+                try {
+                    // Enhanced PDF text extraction
+                    const extractedData = await enhancedPdfProcessing.enhanceTextExtraction(selectedPdfFile);
+                    
+                    if (!extractedData) {
+                        alert('Failed to extract text from PDF. Please try again.');
+                        return;
+                    }
+
+                    console.log(`📊 Extracted text from ${extractedData.pageCount} pages`);
+
+                    // Vendor recognition
+                    const vendor = enhancedPdfProcessing.recognizeVendor(extractedData.fullText);
+                    
+                    // Detect line items automatically
+                    const detectedItems = enhancedPdfProcessing.detectLineItems(extractedData.fullText, vendor);
+                    
+                    // Detect taxes and fees
+                    const taxesAndFees = enhancedPdfProcessing.detectTaxesAndFees(extractedData.fullText);
+                    
+                    if (taxesAndFees.tax > 0) {
+                        setShipmentTax(taxesAndFees.tax);
+                        console.log(`💸 Auto-detected tax: $${taxesAndFees.tax}`);
+                    }
+                    
+                    if (taxesAndFees.fees > 0) {
+                        setShipmentFees(taxesAndFees.fees);
+                        console.log(`📦 Auto-detected fees: $${taxesAndFees.fees}`);
+                    }
+
+                    // Smart matching with inventory
+                    const matchedItems = [];
+                    const unmatchedItems = [];
+                    
+                    for (const detectedItem of detectedItems) {
+                        const match = enhancedPdfProcessing.smartItemMatch(detectedItem.name, items);
+                        
+                        if (match && match.score > 0.5) {
+                            matchedItems.push({
+                                detected: detectedItem,
+                                inventory: match.item,
+                                score: match.score,
+                                type: match.type
+                            });
+                            console.log(`✅ Matched: "${detectedItem.name}" -> "${match.item.name}" (${(match.score * 100).toFixed(1)}%)`);
+                        } else {
+                            unmatchedItems.push(detectedItem);
+                            console.log(`❌ No match for: "${detectedItem.name}"`);
+                        }
+                    }
+
+                    // Pre-populate the shipment processing form
+                    const newSelectedItems = matchedItems.map(m => m.inventory.name);
+                    const newQuantities = {};
+                    const newPrices = {};
+                    
+                    for (const match of matchedItems) {
+                        const itemName = match.inventory.name;
+                        newQuantities[itemName] = match.detected.quantity;
+                        newPrices[itemName] = match.detected.price;
+                    }
+                    
+                    setSelectedShipmentItems(newSelectedItems);
+                    setItemQuantities(newQuantities);
+                    setItemPrices(newPrices);
+
+                    // Show results to user
+                    const resultMessage = `
+🔍 Enhanced PDF Processing Results:
+
+📄 Processed: ${extractedData.pageCount} pages
+🏪 Vendor: ${vendor.name}
+📦 Items detected: ${detectedItems.length}
+✅ Items matched: ${matchedItems.length}
+❌ Items unmatched: ${unmatchedItems.length}
+💸 Tax detected: $${taxesAndFees.tax.toFixed(2)}
+📦 Fees detected: $${taxesAndFees.fees.toFixed(2)}
+
+${matchedItems.length > 0 ? 'Matched items have been pre-selected below. Review and adjust as needed.' : ''}
+${unmatchedItems.length > 0 ? '\nUnmatched items:\n' + unmatchedItems.map(item => `• ${item.name} ($${item.price})`).join('\n') : ''}
+                    `;
+
+                    alert(resultMessage);
+                    
+                } catch (error) {
+                    console.error('Error in enhanced PDF processing:', error);
+                    alert('Error processing PDF with enhanced features. Please try manual processing.');
+                }
+            };
+
             // Category management functions
             const addCategory = async () => {
                 const categoryName = newCategory.trim();
@@ -1738,7 +2107,12 @@
                     <header className="bg-white shadow-sm">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="flex justify-between items-center py-6">
-                                <h1 className="text-3xl font-bold text-gray-900">IT Inventory Management</h1>
+                                <div className="flex items-center space-x-3">
+                                    <h1 className="text-3xl font-bold text-gray-900">IT Inventory Management</h1>
+                                    <span className="px-3 py-1 text-sm font-medium bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full animate-pulse">
+                                        🧪 BETA
+                                    </span>
+                                </div>
                                 <div className="text-sm text-gray-500">
                                     Cart: {cart.reduce((sum, item) => sum + item.quantity, 0)} items
                                 </div>
@@ -1994,7 +2368,30 @@
                                             }
                                         </div>
 
-                                        {/* Upload Button */}
+                                        {/* Enhanced PDF Processing - Beta Feature */}
+                                        <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h4 className="text-sm font-medium text-purple-800 flex items-center">
+                                                    🧠 Enhanced PDF Processing
+                                                    <span className="ml-2 px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full">BETA</span>
+                                                </h4>
+                                            </div>
+                                            <p className="text-xs text-purple-600 mb-3">
+                                                Automatically detect items, prices, taxes, and vendors from your receipt PDF. 
+                                                Items will be matched with your inventory and pre-populated below.
+                                            </p>
+                                            <div className="flex justify-center">
+                                                <button
+                                                    onClick={generateEnhancedShipmentReport}
+                                                    disabled={!selectedPdfFile}
+                                                    className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-gray-300 transition-all duration-200 transform hover:scale-105"
+                                                >
+                                                    🔍 Smart PDF Analysis
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Traditional Upload Button */}
                                         <div className="mt-4 flex justify-between items-center">
                                             <button
                                                 onClick={() => setSelectedShipmentItems([])}
@@ -3415,6 +3812,11 @@
                 </div>
             );
         };
+
+        // Configure PDF.js worker for enhanced PDF processing
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        }
 
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>

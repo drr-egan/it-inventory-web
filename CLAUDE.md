@@ -213,6 +213,25 @@ SQLite API server provides REST endpoints at `http://localhost:3001`:
 
 Item fields supported: `name`, `asin`, `quantity`, `minThreshold`, `category`, `price`
 
+## Version Management
+
+The application uses git branching for production vs beta development:
+
+### Branches
+- **production**: Stable, tested version for daily use
+- **beta**: Development branch for testing new features
+
+### Branch Management Scripts
+- `python3 switch-to-production.py` - Switch to stable production version
+- `python3 switch-to-beta.py` - Switch to beta testing version  
+- `python3 version-info.py` - Show current version and server status
+
+### Workflow
+1. **Daily Use**: Stay on production branch for reliable operation
+2. **Feature Testing**: Switch to beta branch to test new features
+3. **Issue Found**: Immediately switch back to production, report issues
+4. **Feature Ready**: New features are merged from beta to production
+
 ## File Structure
 
 - `index.html` - Main application file with all React components
@@ -222,6 +241,9 @@ Item fields supported: `name`, `asin`, `quantity`, `minThreshold`, `category`, `
 - `inventory.db` - SQLite database file
 - `db.json` - Legacy JSON data file (for migration reference)
 - `cart-icon.png` - Application icon asset
+- `switch-to-production.py` - Switch to stable version script
+- `switch-to-beta.py` - Switch to testing version script  
+- `version-info.py` - Version and status information script
 
 ## Development Notes
 
