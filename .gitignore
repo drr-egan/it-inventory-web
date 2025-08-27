@@ -1,0 +1,25 @@
+# Database files
+*.db
+*.db-journal
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node modules (if any)
+node_modules/
+
+# Environment files
+.env
+.env.local

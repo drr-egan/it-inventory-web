@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Department ID Formatting</title>
+</head>
+<body>
+    <div id="output"></div>
+    <script>
+        // Replicate the formatting function
+        const formatDepartmentId = (deptId) => {
+            if (!deptId) return deptId;
+            // Format as x-xx-xxx-5770 (preserve original structure but ensure 5770 suffix)
+            const parts = deptId.toString().split('-');
+            if (parts.length >= 3) {
+                return `${parts[0]}-${parts[1]}-${parts[2]}-5770`;
+            }
+            return `${deptId}-5770`;
+        };
+
+        // Test various inputs
+        const testCases = [
+            '1-20-000',
+            '2-20-0600', 
+            '3-10-0100',
+            '1-40-000',
+            '',
+            null,
+            undefined,
+            '123',
+            '1-20',
+            '1-20-000-existing'
+        ];
+
+        let output = '<h2>Department ID Formatting Tests:</h2>';
+        testCases.forEach(testCase => {
+            try {
+                const result = formatDepartmentId(testCase);
+                output += `<p>Input: "${testCase}" → Output: "${result}"</p>`;
+            } catch (error) {
+                output += `<p>Input: "${testCase}" → ERROR: ${error.message}</p>`;
+            }
+        });
+
+        document.getElementById('output').innerHTML = output;
+    </script>
+</body>
+</html>

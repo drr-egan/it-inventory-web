@@ -1,0 +1,2058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Inventory Management</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/papaparse@5/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const App = () => {
+            // State management
+            const [activeTab, setActiveTab] = useState('shop');
+            const [items, setItems] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [checkoutHistory, setCheckoutHistory] = useState([]);
+            const [cart, setCart] = useState([]);
+            const [notifications, setNotifications] = useState([]);
+            const [categoryFilter, setCategoryFilter] = useState('All');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [barcodeInput, setBarcodeInput] = useState('');
+            const [adminBarcodeInput, setAdminBarcodeInput] = useState('');
+            const [showAdminQuantityModal, setShowAdminQuantityModal] = useState(false);
+            const [scannedItem, setScannedItem] = useState(null);
+            const [quantityUpdate, setQuantityUpdate] = useState('');
+            const [showCategoryManager, setShowCategoryManager] = useState(false);
+            const [newCategory, setNewCategory] = useState('');
+            const [editingItem, setEditingItem] = useState(null);
+            const [showBulkUpdate, setShowBulkUpdate] = useState(false);
+            const [selectedItems, setSelectedItems] = useState([]);
+            const [bulkUpdateCategory, setBulkUpdateCategory] = useState('');
+
+            // File upload states
+            const [selectedUserFile, setSelectedUserFile] = useState(null);
+            const [userUploadStatus, setUserUploadStatus] = useState('');
+            const [selectedItemFile, setSelectedItemFile] = useState(null);
+            const [itemUploadStatus, setItemUploadStatus] = useState('');
+            const [selectedHistoryFile, setSelectedHistoryFile] = useState(null);
+            const [historyUploadStatus, setHistoryUploadStatus] = useState('');
+
+            // Shipment processing states
+            const [selectedShipmentItems, setSelectedShipmentItems] = useState([]);
+            const [shipmentSearchQuery, setShipmentSearchQuery] = useState('');
+            const [showQuantityModal, setShowQuantityModal] = useState(false);
+            const [itemQuantities, setItemQuantities] = useState({});
+            const [itemPrices, setItemPrices] = useState({});
+            const [selectedPdfFile, setSelectedPdfFile] = useState(null);
+            const [shipmentTax, setShipmentTax] = useState(0);
+            const [shipmentFees, setShipmentFees] = useState(0);
+
+            // Sort configurations
+            const [itemSortConfig, setItemSortConfig] = useState({ key: 'name', direction: 'ascending' });
+            const [userSortConfig, setUserSortConfig] = useState({ key: 'lastName', direction: 'ascending' });
+            const [historySortConfig, setHistorySortConfig] = useState({ key: 'dateEntered', direction: 'descending' });
+
+            // API Base URL
+            const API_BASE = 'http://localhost:3001';
+
+            // Load data on component mount
+            useEffect(() => {
+                fetchItems();
+                fetchUsers();
+                fetchCheckoutHistory();
+            }, []);
+
+            // Generate notifications when items change
+            useEffect(() => {
+                const lowStockItems = items.filter(item => item.quantity <= item.minThreshold);
+                setNotifications(lowStockItems.map(item => ({
+                    id: item.id,
+                    message: `Low stock: ${item.name} (${item.quantity} remaining)`,
+                    type: 'warning'
+                })));
+            }, [items]);
+
+            // Fetch functions
+            const fetchItems = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/items`);
+                    const data = await response.json();
+                    setItems(data);
+                } catch (error) {
+                    console.error('Error fetching items:', error);
+                }
+            };
+
+            const fetchUsers = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/users`);
+                    const data = await response.json();
+                    setUsers(data);
+                } catch (error) {
+                    console.error('Error fetching users:', error);
+                }
+            };
+
+            const fetchCheckoutHistory = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/checkoutHistory`);
+                    const data = await response.json();
+                    setCheckoutHistory(data);
+                } catch (error) {
+                    console.error('Error fetching checkout history:', error);
+                }
+            };
+
+            // Cart functions
+            const addToCart = (item) => {
+                const existingItem = cart.find(cartItem => cartItem.id === item.id);
+                if (existingItem) {
+                    setCart(cart.map(cartItem =>
+                        cartItem.id === item.id
+                            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+                            : cartItem
+                    ));
+                } else {
+                    setCart([...cart, { ...item, quantity: 1 }]);
+                }
+            };
+
+            const handleBarcodeInput = (e) => {
+                const value = e.target.value;
+                setBarcodeInput(value);
+                
+                // Auto-process when Enter is pressed or when a complete barcode is detected
+                if (e.key === 'Enter' || value.endsWith('\n')) {
+                    processBarcodeInput(value.trim().replace(/\n/g, ''));
+                }
+            };
+
+            const processBarcodeInput = (barcodeValue) => {
+                if (!barcodeValue) return;
+                
+                // Find item by exact name match (case-insensitive)
+                const foundItem = items.find(item => 
+                    item.name.toLowerCase() === barcodeValue.toLowerCase()
+                );
+                
+                if (foundItem) {
+                    if (foundItem.quantity > 0) {
+                        addToCart(foundItem);
+                        setBarcodeInput(''); // Clear input after successful add
+                        // Show success feedback
+                        const originalBg = document.getElementById('barcode-input')?.style.backgroundColor;
+                        if (document.getElementById('barcode-input')) {
+                            document.getElementById('barcode-input').style.backgroundColor = '#dcfce7';
+                            setTimeout(() => {
+                                document.getElementById('barcode-input').style.backgroundColor = originalBg || '';
+                            }, 500);
+                        }
+                    } else {
+                        alert(`"${foundItem.name}" is out of stock`);
+                        setBarcodeInput('');
+                    }
+                } else {
+                    alert(`Item "${barcodeValue}" not found`);
+                    setBarcodeInput('');
+                }
+            };
+
+            const handleManualBarcodeSubmit = () => {
+                processBarcodeInput(barcodeInput);
+            };
+
+            // Admin barcode functions
+            const handleAdminBarcodeInput = (e) => {
+                const value = e.target.value;
+                setAdminBarcodeInput(value);
+                
+                // Auto-process when Enter is pressed or when a complete barcode is detected
+                if (e.key === 'Enter' || value.endsWith('\n')) {
+                    processAdminBarcodeInput(value.trim().replace(/\n/g, ''));
+                }
+            };
+
+            const processAdminBarcodeInput = (barcodeValue) => {
+                if (!barcodeValue) return;
+                
+                // Find item by exact name match (case-insensitive)
+                const foundItem = items.find(item => 
+                    item.name.toLowerCase() === barcodeValue.toLowerCase()
+                );
+                
+                if (foundItem) {
+                    setScannedItem(foundItem);
+                    setQuantityUpdate('');
+                    setShowAdminQuantityModal(true);
+                    setAdminBarcodeInput(''); // Clear barcode input
+                } else {
+                    alert(`Item "${barcodeValue}" not found`);
+                    setAdminBarcodeInput('');
+                }
+            };
+
+            const handleManualAdminBarcodeSubmit = () => {
+                processAdminBarcodeInput(adminBarcodeInput);
+            };
+
+            const updateItemQuantity = async () => {
+                if (!scannedItem || quantityUpdate === '') {
+                    alert('Please enter a quantity');
+                    return;
+                }
+
+                const newQuantity = parseInt(quantityUpdate);
+                if (isNaN(newQuantity) || newQuantity < 0) {
+                    alert('Please enter a valid quantity (0 or greater)');
+                    return;
+                }
+
+                try {
+                    await fetch(`${API_BASE}/items/${scannedItem.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ quantity: newQuantity })
+                    });
+
+                    // Update local state
+                    setItems(items.map(item => 
+                        item.id === scannedItem.id 
+                            ? { ...item, quantity: newQuantity }
+                            : item
+                    ));
+
+                    // Close modal and reset states
+                    setShowAdminQuantityModal(false);
+                    setScannedItem(null);
+                    setQuantityUpdate('');
+                    
+                    // Refocus barcode input for rapid scanning
+                    setTimeout(() => {
+                        document.getElementById('admin-barcode-input')?.focus();
+                    }, 100);
+
+                } catch (error) {
+                    console.error('Error updating item quantity:', error);
+                    alert('Error updating item quantity');
+                }
+            };
+
+            const cancelQuantityUpdate = () => {
+                setShowAdminQuantityModal(false);
+                setScannedItem(null);
+                setQuantityUpdate('');
+                // Refocus barcode input
+                setTimeout(() => {
+                    document.getElementById('admin-barcode-input')?.focus();
+                }, 100);
+            };
+
+            const removeFromCart = (itemId) => {
+                setCart(cart.filter(item => item.id !== itemId));
+            };
+
+            const updateCartQuantity = (itemId, quantity) => {
+                if (quantity <= 0) {
+                    removeFromCart(itemId);
+                } else {
+                    setCart(cart.map(item =>
+                        item.id === itemId ? { ...item, quantity } : item
+                    ));
+                }
+            };
+
+            // Checkout function
+            const handleCheckout = async (user) => {
+                try {
+                    // Update item quantities
+                    for (const cartItem of cart) {
+                        const item = items.find(i => i.id === cartItem.id);
+                        if (item) {
+                            await fetch(`${API_BASE}/items/${item.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    quantity: item.quantity - cartItem.quantity
+                                })
+                            });
+                        }
+                    }
+
+                    // Add to checkout history
+                    for (const cartItem of cart) {
+                        await fetch(`${API_BASE}/checkoutHistory`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                                itemName: cartItem.name,
+                                userName: `${user.firstName} ${user.lastName}`,
+                                departmentId: user.cost_code || user.costCode,
+                                quantity: cartItem.quantity,
+                                dateEntered: new Date().toISOString()
+                            })
+                        });
+                    }
+
+                    // Clear cart and refresh data
+                    setCart([]);
+                    fetchItems();
+                    fetchCheckoutHistory();
+                    alert('Checkout completed successfully!');
+                } catch (error) {
+                    console.error('Error during checkout:', error);
+                    alert('Error during checkout. Please try again.');
+                }
+            };
+
+            // CSV upload handlers
+            const handleUserCsvProcess = () => {
+                if (!selectedUserFile) return;
+
+                Papa.parse(selectedUserFile, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        try {
+                            setUserUploadStatus('Processing...');
+                            
+                            for (const row of results.data) {
+                                if (row.FirstName && row.LastName && row.CostCode) {
+                                    await fetch(`${API_BASE}/users`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                                            firstName: row.FirstName,
+                                            lastName: row.LastName,
+                                            costCode: row.CostCode
+                                        })
+                                    });
+                                }
+                            }
+
+                            fetchUsers();
+                            setUserUploadStatus(`Successfully uploaded ${results.data.length} users`);
+                            setSelectedUserFile(null);
+                        } catch (error) {
+                            setUserUploadStatus('Error uploading users');
+                            console.error('Error uploading users:', error);
+                        }
+                    }
+                });
+            };
+
+            const handleItemCsvProcess = () => {
+                if (!selectedItemFile) return;
+
+                Papa.parse(selectedItemFile, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        try {
+                            setItemUploadStatus('Processing...');
+                            
+                            for (const row of results.data) {
+                                if (row.Item && row['Stock Quantity']) {
+                                    await fetch(`${API_BASE}/items`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                                            name: row.Item,
+                                            quantity: parseInt(row['Stock Quantity']) || 0,
+                                            minThreshold: 5,
+                                            asin: row.ASIN || '',
+                                            category: row.Category || 'Uncategorized'
+                                        })
+                                    });
+                                }
+                            }
+
+                            fetchItems();
+                            setItemUploadStatus(`Successfully uploaded ${results.data.length} items`);
+                            setSelectedItemFile(null);
+                        } catch (error) {
+                            setItemUploadStatus('Error uploading items');
+                            console.error('Error uploading items:', error);
+                        }
+                    }
+                });
+            };
+
+            const handleHistoryCsvProcess = () => {
+                if (!selectedHistoryFile) return;
+
+                Papa.parse(selectedHistoryFile, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        try {
+                            setHistoryUploadStatus('Processing...');
+                            
+                            for (const row of results.data) {
+                                if (row.ItemName && row.UserName && row.DepartmentId) {
+                                    await fetch(`${API_BASE}/checkoutHistory`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                                            itemName: row.ItemName,
+                                            userName: row.UserName,
+                                            departmentId: row.DepartmentId,
+                                            jobNum: row.JobNum || '',
+                                            quantity: 1,
+                                            dateEntered: new Date().toISOString()
+                                        })
+                                    });
+                                }
+                            }
+
+                            fetchCheckoutHistory();
+                            setHistoryUploadStatus(`Successfully uploaded ${results.data.length} records`);
+                            setSelectedHistoryFile(null);
+                        } catch (error) {
+                            setHistoryUploadStatus('Error uploading history');
+                            console.error('Error uploading history:', error);
+                        }
+                    }
+                });
+            };
+
+            // Sorting functions
+            const sortData = (data, config) => {
+                return [...data].sort((a, b) => {
+                    const aValue = a[config.key];
+                    const bValue = b[config.key];
+                    
+                    if (aValue < bValue) {
+                        return config.direction === 'ascending' ? -1 : 1;
+                    }
+                    if (aValue > bValue) {
+                        return config.direction === 'ascending' ? 1 : -1;
+                    }
+                    return 0;
+                });
+            };
+
+            const handleSort = (key, setConfig, config) => {
+                const direction = config.key === key && config.direction === 'ascending' ? 'descending' : 'ascending';
+                setConfig({ key, direction });
+            };
+
+            // Get unique categories
+            const categories = ['All', ...new Set(items.map(item => item.category))];
+
+            // Get unique item names for shipment processing
+            const allItemNames = [...new Set([
+                ...items.map(item => item.name),
+                ...checkoutHistory.map(entry => entry.itemName)
+            ])].filter(name => name && name.trim()).sort();
+
+            // Filter and search items (exclude placeholder items from display)
+            const filteredItems = items.filter(item => {
+                // Skip placeholder items
+                if (item.name && item.name.startsWith('_CATEGORY_PLACEHOLDER_')) {
+                    return false;
+                }
+                
+                // Category filter
+                const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
+                
+                // Search filter
+                const matchesSearch = searchQuery === '' || 
+                    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (item.asin && item.asin.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    item.category.toLowerCase().includes(searchQuery.toLowerCase());
+                
+                return matchesCategory && matchesSearch;
+            });
+
+            // Shipment processing functions
+            const toggleShipmentItemSelection = (itemName) => {
+                if (selectedShipmentItems.includes(itemName)) {
+                    setSelectedShipmentItems(selectedShipmentItems.filter(name => name !== itemName));
+                    // Remove from quantities and prices if deselected
+                    const newQuantities = { ...itemQuantities };
+                    const newPrices = { ...itemPrices };
+                    delete newQuantities[itemName];
+                    delete newPrices[itemName];
+                    setItemQuantities(newQuantities);
+                    setItemPrices(newPrices);
+                } else {
+                    setSelectedShipmentItems([...selectedShipmentItems, itemName]);
+                }
+            };
+
+            const handleUploadShipmentPdf = () => {
+                if (selectedShipmentItems.length === 0) {
+                    alert('Please select items first');
+                    return;
+                }
+                setShowQuantityModal(true);
+            };
+
+            const updateItemQuantity = (itemName, quantity) => {
+                setItemQuantities({
+                    ...itemQuantities,
+                    [itemName]: parseInt(quantity) || 0
+                });
+            };
+
+            const updateItemPrice = (itemName, price) => {
+                setItemPrices({
+                    ...itemPrices,
+                    [itemName]: parseFloat(price) || 0
+                });
+            };
+
+            const generateShipmentReport = async () => {
+                if (!selectedPdfFile || selectedShipmentItems.length === 0) {
+                    alert('Please select a PDF file and items');
+                    return;
+                }
+
+                // Validate quantities and prices
+                const missingData = selectedShipmentItems.filter(item => 
+                    !itemQuantities[item] || !itemPrices[item] || itemQuantities[item] <= 0 || itemPrices[item] <= 0
+                );
+                if (missingData.length > 0) {
+                    alert(`Please enter valid quantities and prices for: ${missingData.join(', ')}`);
+                    return;
+                }
+
+                try {
+                    const shipmentData = {};
+                    const allAllocatedItems = []; // Track items to be removed from checkout history
+                    const individualCheckouts = []; // Track individual checkouts for the report
+                    
+                    // Calculate total items for tax and fees distribution
+                    const totalItems = selectedShipmentItems.reduce((sum, itemName) => sum + itemQuantities[itemName], 0);
+                    const taxPerItem = totalItems > 0 ? shipmentTax / totalItems : 0;
+                    const feesPerItem = totalItems > 0 ? shipmentFees / totalItems : 0;
+                    
+                    // Process each selected item
+                    selectedShipmentItems.forEach(itemName => {
+                        const quantity = itemQuantities[itemName];
+                        const price = itemPrices[itemName];
+                        
+                        // Find matching checkout history entries (only unprocessed ones)
+                        const matches = checkoutHistory.filter(entry => 
+                            entry.itemName.toLowerCase() === itemName.toLowerCase()
+                        );
+                        
+                        const costCodeGroups = {};
+                        const itemsToAllocate = [];
+                        
+                        if (matches.length > 0) {
+                            // Take only the quantity we have from oldest checkouts first
+                            const availableMatches = matches.slice(0, quantity);
+                            allAllocatedItems.push(...availableMatches);
+                            itemsToAllocate.push(...availableMatches);
+                            
+                            // Group by cost code for cost allocation
+                            availableMatches.forEach(match => {
+                                const costCode = match.departmentId;
+                                if (!costCodeGroups[costCode]) {
+                                    costCodeGroups[costCode] = {
+                                        items: [],
+                                        count: 0
+                                    };
+                                }
+                                costCodeGroups[costCode].items.push(match);
+                                costCodeGroups[costCode].count++;
+                                
+                                // Add to individual checkouts list
+                                individualCheckouts.push({
+                                    item: itemName,
+                                    user: match.userName,
+                                    costCode: match.departmentId,
+                                    matchId: match.id
+                                });
+                            });
+                        }
+                        
+                        // Handle remaining quantity (items without checkout history)
+                        const remainingQuantity = quantity - (matches.length > 0 ? Math.min(matches.length, quantity) : 0);
+                        if (remainingQuantity > 0) {
+                            // Allocate remaining items to IT Stock
+                            const itStockCostCode = '1-20-000-5770';
+                            if (!costCodeGroups[itStockCostCode]) {
+                                costCodeGroups[itStockCostCode] = {
+                                    items: [],
+                                    count: 0
+                                };
+                            }
+                            costCodeGroups[itStockCostCode].count += remainingQuantity;
+                            
+                            // Add to individual checkouts list
+                            for (let i = 0; i < remainingQuantity; i++) {
+                                individualCheckouts.push({
+                                    item: itemName,
+                                    user: 'IT Stock',
+                                    costCode: itStockCostCode,
+                                    matchId: null // No match ID for IT stock items
+                                });
+                            }
+                        }
+                        
+                        shipmentData[itemName] = {
+                            quantity,
+                            price,
+                            totalCost: quantity * price,
+                            costCodeGroups,
+                            allocatedItems: itemsToAllocate
+                        };
+                    });
+
+                    // Generate PDF report
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    
+                    // Title and header
+                    doc.setFontSize(16);
+                    doc.text('Shipment Cost Allocation Report', 20, 20);
+                    doc.setFontSize(10);
+                    doc.text(`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 20, 30);
+                    
+                    let yPos = 40;
+                    if (shipmentTax > 0 || shipmentFees > 0) {
+                        doc.text(`Tax ($${shipmentTax.toFixed(2)}) and Fees ($${shipmentFees.toFixed(2)}) distributed evenly per item`, 20, yPos);
+                        yPos += 10;
+                    }
+                    yPos += 10;
+                    let grandTotal = 0;
+
+                    // Cost Allocation Summary Table
+                    doc.setFontSize(14);
+                    doc.text('Cost Allocation Summary', 20, yPos);
+                    yPos += 15;
+
+                    // Table headers
+                    doc.setFontSize(10);
+                    doc.text('Item', 20, yPos);
+                    doc.text('Qty', 70, yPos);
+                    doc.text('Cost Code', 90, yPos);
+                    doc.text('Units', 130, yPos);
+                    doc.text('Unit Price', 150, yPos);
+                    doc.text('Total Cost', 175, yPos);
+                    
+                    // Draw header line
+                    doc.line(20, yPos + 2, 200, yPos + 2);
+                    yPos += 10;
+
+                    Object.entries(shipmentData).forEach(([itemName, data]) => {
+                        let itemSubTotal = 0;
+                        
+                        Object.entries(data.costCodeGroups).forEach(([costCode, group]) => {
+                            if (yPos > 270) {
+                                doc.addPage();
+                                yPos = 20;
+                            }
+                            
+                            const baseCostPerUnit = data.price;
+                            const totalCostPerUnit = baseCostPerUnit + taxPerItem + feesPerItem;
+                            const costForGroup = group.count * totalCostPerUnit;
+                            itemSubTotal += costForGroup;
+                            
+                            doc.setFontSize(9);
+                            doc.text(itemName, 20, yPos);
+                            doc.text(group.count.toString(), 70, yPos);
+                            doc.text(costCode, 90, yPos);
+                            doc.text(group.count.toString(), 130, yPos);
+                            doc.text(`$${totalCostPerUnit.toFixed(2)}`, 150, yPos);
+                            doc.text(`$${costForGroup.toFixed(2)}`, 175, yPos);
+                            yPos += 8;
+                        });
+                        
+                        grandTotal += itemSubTotal;
+                    });
+
+                    // Grand total and breakdown
+                    doc.line(150, yPos, 200, yPos);
+                    yPos += 5;
+                    
+                    // Calculate totals
+                    const subtotalWithoutTaxFees = grandTotal - (shipmentTax + shipmentFees);
+                    
+                    doc.setFontSize(10);
+                    doc.text(`Subtotal (Items): $${subtotalWithoutTaxFees.toFixed(2)}`, 150, yPos);
+                    yPos += 10;
+                    if (shipmentTax > 0) {
+                        doc.text(`Tax: $${shipmentTax.toFixed(2)}`, 150, yPos);
+                        yPos += 10;
+                    }
+                    if (shipmentFees > 0) {
+                        doc.text(`Fees: $${shipmentFees.toFixed(2)}`, 150, yPos);
+                        yPos += 10;
+                    }
+                    doc.line(150, yPos - 2, 200, yPos - 2);
+                    doc.setFontSize(12);
+                    doc.text(`Grand Total: $${grandTotal.toFixed(2)}`, 150, yPos + 5);
+                    yPos += 25;
+
+                    // Individual Checkouts Table
+                    if (yPos > 200) {
+                        doc.addPage();
+                        yPos = 20;
+                    }
+                    
+                    doc.setFontSize(14);
+                    doc.text('Individual Checkout Details', 20, yPos);
+                    yPos += 15;
+
+                    // Table headers
+                    doc.setFontSize(10);
+                    doc.text('Item', 20, yPos);
+                    doc.text('User', 80, yPos);
+                    doc.text('Cost Code', 140, yPos);
+                    
+                    doc.line(20, yPos + 2, 200, yPos + 2);
+                    yPos += 10;
+
+                    individualCheckouts.forEach(checkout => {
+                        if (yPos > 270) {
+                            doc.addPage();
+                            yPos = 20;
+                        }
+                        
+                        doc.setFontSize(9);
+                        doc.text(checkout.item, 20, yPos);
+                        doc.text(checkout.user, 80, yPos);
+                        doc.text(checkout.costCode, 140, yPos);
+                        yPos += 8;
+                    });
+                    
+                    // Save the PDF
+                    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                    doc.save(`shipment-allocation-${timestamp}.pdf`);
+                    
+                    // Remove allocated items from checkout history
+                    for (const item of allAllocatedItems) {
+                        await fetch(`${API_BASE}/checkoutHistory/${item.id}`, {
+                            method: 'DELETE'
+                        });
+                    }
+                    
+                    // Refresh checkout history
+                    await fetchCheckoutHistory();
+                    
+                    // Reset states
+                    setSelectedShipmentItems([]);
+                    setItemQuantities({});
+                    setItemPrices({});
+                    setShowQuantityModal(false);
+                    setSelectedPdfFile(null);
+                    setShipmentTax(0);
+                    setShipmentFees(0);
+                    
+                    alert(`Shipment report generated successfully! ${allAllocatedItems.length} checkout entries processed and removed.`);
+                    
+                } catch (error) {
+                    console.error('Error generating shipment report:', error);
+                    alert('Error generating shipment report');
+                }
+            };
+
+            // Category management functions
+            const addCategory = async () => {
+                const categoryName = newCategory.trim();
+                if (categoryName && !categories.includes(categoryName)) {
+                    // Create a placeholder item with the new category to make it available
+                    try {
+                        const response = await fetch(`${API_BASE}/items`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: `_CATEGORY_PLACEHOLDER_${categoryName}`,
+                                quantity: 0,
+                                category: categoryName,
+                                asin: '',
+                                minThreshold: 0
+                            })
+                        });
+
+                        if (response.ok) {
+                            await fetchItems(); // Refresh to get new category
+                            setNewCategory('');
+                            setShowCategoryManager(false);
+                            alert(`Category "${categoryName}" added successfully! You can now assign it to items.`);
+                        } else {
+                            alert('Error adding category');
+                        }
+                    } catch (error) {
+                        console.error('Error adding category:', error);
+                        alert('Error adding category');
+                    }
+                }
+            };
+
+            // Item editing functions
+            const startEditingItem = (item) => {
+                setEditingItem({...item});
+            };
+
+            const cancelEditingItem = () => {
+                setEditingItem(null);
+            };
+
+            const saveItemChanges = async () => {
+                if (!editingItem) return;
+
+                try {
+                    const response = await fetch(`${API_BASE}/items/${editingItem.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: editingItem.name,
+                            category: editingItem.category,
+                            asin: editingItem.asin,
+                            quantity: editingItem.quantity,
+                            minThreshold: editingItem.minThreshold
+                        })
+                    });
+
+                    if (response.ok) {
+                        fetchItems();
+                        setEditingItem(null);
+                        alert('Item updated successfully!');
+                    } else {
+                        alert('Error updating item');
+                    }
+                } catch (error) {
+                    console.error('Error updating item:', error);
+                    alert('Error updating item');
+                }
+            };
+
+            const deleteItem = async (itemId) => {
+                if (!confirm('Are you sure you want to delete this item?')) return;
+
+                try {
+                    const response = await fetch(`${API_BASE}/items/${itemId}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        fetchItems();
+                        alert('Item deleted successfully!');
+                    } else {
+                        alert('Error deleting item');
+                    }
+                } catch (error) {
+                    console.error('Error deleting item:', error);
+                    alert('Error deleting item');
+                }
+            };
+
+            // Bulk update functions
+            const toggleItemSelection = (itemId) => {
+                if (selectedItems.includes(itemId)) {
+                    setSelectedItems(selectedItems.filter(id => id !== itemId));
+                } else {
+                    setSelectedItems([...selectedItems, itemId]);
+                }
+            };
+
+            const selectAllItems = () => {
+                if (selectedItems.length === filteredItems.length) {
+                    setSelectedItems([]);
+                } else {
+                    setSelectedItems(filteredItems.map(item => item.id));
+                }
+            };
+
+            const bulkUpdateCategories = async () => {
+                if (selectedItems.length === 0 || !bulkUpdateCategory) {
+                    alert('Please select items and choose a category');
+                    return;
+                }
+
+                if (!confirm(`Update ${selectedItems.length} items to category "${bulkUpdateCategory}"?`)) {
+                    return;
+                }
+
+                try {
+                    const updatePromises = selectedItems.map(itemId => 
+                        fetch(`${API_BASE}/items/${itemId}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ category: bulkUpdateCategory })
+                        })
+                    );
+
+                    await Promise.all(updatePromises);
+                    
+                    fetchItems();
+                    setSelectedItems([]);
+                    setBulkUpdateCategory('');
+                    alert(`Successfully updated ${selectedItems.length} items!`);
+                } catch (error) {
+                    console.error('Error bulk updating items:', error);
+                    alert('Error updating items');
+                }
+            };
+
+            const cancelBulkUpdate = () => {
+                setSelectedItems([]);
+                setBulkUpdateCategory('');
+                setShowBulkUpdate(false);
+            };
+
+            // Export functions
+            const exportInventory = () => {
+                const csvContent = "data:text/csv;charset=utf-8," + 
+                    [['Item', 'Stock', 'Category', 'ASIN'].join(','),
+                    ...items.map(item => [item.name, item.quantity, item.category || '', item.asin || ''].join(','))
+                    ].join('\n');
+                const link = document.createElement("a");
+                link.setAttribute("href", encodeURI(csvContent));
+                link.setAttribute("download", "inventory_export.csv");
+                link.click();
+            };
+
+            const exportUsers = () => {
+                const csvContent = "data:text/csv;charset=utf-8," + 
+                    [['FirstName', 'LastName', 'CostCode'].join(','),
+                    ...users.map(user => [user.firstName, user.lastName, user.cost_code || user.costCode].join(','))
+                    ].join('\n');
+                const link = document.createElement("a");
+                link.setAttribute("href", encodeURI(csvContent));
+                link.setAttribute("download", "users_export.csv");
+                link.click();
+            };
+
+            // Navigation
+            const tabs = [
+                { id: 'shop', name: 'Shop', icon: '🛍️' },
+                { id: 'cart', name: 'Cart', icon: '🛒' },
+                { id: 'process', name: 'Process Shipment', icon: '📦' },
+                { id: 'users', name: 'Users', icon: '👥' },
+                { id: 'items', name: 'Items Admin', icon: '📋' },
+                { id: 'history', name: 'Checkout History', icon: '📊' },
+                { id: 'notifications', name: 'Notifications', icon: '🔔' }
+            ];
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    {/* Header */}
+                    <header className="bg-white shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center py-6">
+                                <h1 className="text-3xl font-bold text-gray-900">IT Inventory Management</h1>
+                                <div className="text-sm text-gray-500">
+                                    Cart: {cart.reduce((sum, item) => sum + item.quantity, 0)} items
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Navigation */}
+                    <nav className="bg-white border-b border-gray-200">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex space-x-8">
+                                {tabs.map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                                    >
+                                        {tab.icon} {tab.name}
+                                        {tab.id === 'cart' && cart.length > 0 && (
+                                            <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                                {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                                            </span>
+                                        )}
+                                        {tab.id === 'notifications' && notifications.length > 0 && (
+                                            <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                                                {notifications.length}
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Main Content */}
+                    <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                        {/* Shop Tab */}
+                        {activeTab === 'shop' && (
+                            <div className="px-4 py-6 sm:px-0">
+                                <div className="mb-6 space-y-4">
+                                    {/* Barcode Scanning Section */}
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="flex items-center mb-3">
+                                            <span className="text-2xl mr-2">📷</span>
+                                            <h3 className="text-lg font-medium text-blue-900">Barcode Scanner</h3>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <input
+                                                    id="barcode-input"
+                                                    type="text"
+                                                    value={barcodeInput}
+                                                    onChange={(e) => setBarcodeInput(e.target.value)}
+                                                    onKeyDown={handleBarcodeInput}
+                                                    placeholder="Scan barcode or type item name..."
+                                                    className="block w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={handleManualBarcodeSubmit}
+                                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
+                                            >
+                                                Add to Cart
+                                            </button>
+                                        </div>
+                                        <p className="text-sm text-blue-700 mt-2">
+                                            💡 Tip: Position cursor in the input field and scan the barcode, or type the exact item name and press Enter
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Search Items:
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            placeholder="Search by name, ASIN, or category..."
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Filter by Category:
+                                        </label>
+                                        <select
+                                            value={categoryFilter}
+                                            onChange={(e) => setCategoryFilter(e.target.value)}
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                            {categories.map(category => (
+                                                <option key={category} value={category}>{category}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                        Showing {filteredItems.length} of {items.length} items
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {sortData(filteredItems, itemSortConfig).map(item => (
+                                        <div key={item.id} className="bg-white overflow-hidden shadow rounded-lg">
+                                            <div className="p-6">
+                                                <h3 className="text-lg font-medium text-gray-900 mb-2">{item.name}</h3>
+                                                <p className="text-sm text-gray-500 mb-2">Category: {item.category}</p>
+                                                <p className="text-sm text-gray-500 mb-2">Stock: {item.quantity}</p>
+                                                {item.asin && (
+                                                    <p className="text-sm text-gray-500 mb-4">ASIN: {item.asin}</p>
+                                                )}
+                                                <button
+                                                    onClick={() => addToCart(item)}
+                                                    disabled={item.quantity === 0}
+                                                    className={`w-full px-4 py-2 rounded-md font-medium ${item.quantity === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                                                >
+                                                    {item.quantity === 0 ? 'Out of Stock' : 'Add to Cart'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Cart Tab */}
+                        {activeTab === 'cart' && (
+                            <div className="px-4 py-6 sm:px-0">
+                                {cart.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <h3 className="text-lg font-medium text-gray-900 mb-2">Your cart is empty</h3>
+                                        <p className="text-gray-500">Add items from the shop to get started.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                                            <ul className="divide-y divide-gray-200">
+                                                {cart.map(item => (
+                                                    <li key={item.id} className="px-6 py-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex-1">
+                                                                <h3 className="text-lg font-medium text-gray-900">{item.name}</h3>
+                                                                <p className="text-sm text-gray-500">Category: {item.category}</p>
+                                                            </div>
+                                                            <div className="flex items-center space-x-4">
+                                                                <div className="flex items-center space-x-2">
+                                                                    <button
+                                                                        onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
+                                                                        className="text-gray-500 hover:text-gray-700"
+                                                                    >
+                                                                        -
+                                                                    </button>
+                                                                    <span className="px-3 py-1 bg-gray-100 rounded">{item.quantity}</span>
+                                                                    <button
+                                                                        onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
+                                                                        className="text-gray-500 hover:text-gray-700"
+                                                                    >
+                                                                        +
+                                                                    </button>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => removeFromCart(item.id)}
+                                                                    className="text-red-600 hover:text-red-800"
+                                                                >
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+
+                                        <div className="bg-white shadow sm:rounded-lg">
+                                            <div className="px-6 py-4">
+                                                <h3 className="text-lg font-medium text-gray-900 mb-4">Select User for Checkout</h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {users.map(user => (
+                                                        <button
+                                                            key={user.id}
+                                                            onClick={() => handleCheckout(user)}
+                                                            className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left"
+                                                        >
+                                                            <div className="font-medium">{user.firstName} {user.lastName}</div>
+                                                            <div className="text-sm text-gray-500">Cost Code: {user.cost_code || user.costCode}</div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Process Shipment Tab */}
+                        {activeTab === 'process' && (
+                            <div className="px-4 py-6 sm:px-0 space-y-6">
+                                {/* Instructions */}
+                                <div className="bg-blue-50 border border-blue-200 shadow sm:rounded-lg">
+                                    <div className="px-6 py-4">
+                                        <h3 className="text-lg font-medium text-blue-800 mb-2">Shipment Processing</h3>
+                                        <p className="text-sm text-blue-600">
+                                            Select items that arrived in your shipment, then upload the receipt PDF. 
+                                            The system will generate a cost allocation report based on checkout history.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Item Selection */}
+                                <div className="bg-white shadow sm:rounded-lg">
+                                    <div className="px-6 py-4">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-lg font-medium text-gray-900">Select Shipment Items</h3>
+                                            <div className="text-sm text-gray-500">
+                                                {selectedShipmentItems.length} items selected
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Search */}
+                                        <div className="mb-4">
+                                            <input
+                                                type="text"
+                                                value={shipmentSearchQuery}
+                                                onChange={(e) => setShipmentSearchQuery(e.target.value)}
+                                                placeholder="Search items..."
+                                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        {/* Compact Item List */}
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-96 overflow-y-auto border rounded-lg p-4">
+                                            {allItemNames
+                                                .filter(name => 
+                                                    shipmentSearchQuery === '' || 
+                                                    name.toLowerCase().includes(shipmentSearchQuery.toLowerCase())
+                                                )
+                                                .map(itemName => (
+                                                    <div
+                                                        key={itemName}
+                                                        onClick={() => toggleShipmentItemSelection(itemName)}
+                                                        className={`p-2 rounded-lg cursor-pointer transition-all text-sm border ${selectedShipmentItems.includes(itemName) ? 'bg-green-100 border-green-500 text-green-800 font-medium' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+                                                    >
+                                                        {itemName}
+                                                    </div>
+                                                ))
+                                            }
+                                        </div>
+
+                                        {/* Upload Button */}
+                                        <div className="mt-4 flex justify-between items-center">
+                                            <button
+                                                onClick={() => setSelectedShipmentItems([])}
+                                                className="text-sm text-gray-600 hover:text-gray-800"
+                                            >
+                                                Clear Selection
+                                            </button>
+                                            <button
+                                                onClick={handleUploadShipmentPdf}
+                                                disabled={selectedShipmentItems.length === 0}
+                                                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg disabled:bg-gray-300"
+                                            >
+                                                Upload Shipment PDF ({selectedShipmentItems.length} items)
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Users Tab */}
+                        {activeTab === 'users' && (
+                            <div className="px-4 py-6 sm:px-0 space-y-6">
+                                <div className="bg-white shadow sm:rounded-lg">
+                                        <div className="px-6 py-4">
+                                            <h3 className="text-lg font-medium text-gray-900 mb-4">Upload Users CSV</h3>
+                                            <p className="text-sm text-gray-600 mb-4">
+                                                CSV should have columns: FirstName, LastName, CostCode
+                                            </p>
+                                            <input
+                                                type="file"
+                                                accept=".csv"
+                                                onChange={(e) => setSelectedUserFile(e.target.files[0])}
+                                                className="mb-4"
+                                            />
+                                            <div className="flex space-x-4">
+                                                <button
+                                                    onClick={handleUserCsvProcess}
+                                                    disabled={!selectedUserFile}
+                                                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-300"
+                                                >
+                                                    Upload Users CSV
+                                                </button>
+                                                <button
+                                                    onClick={exportUsers}
+                                                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg"
+                                                >
+                                                    Export Users
+                                                </button>
+                                            </div>
+                                            {userUploadStatus && (
+                                                <p className="mt-4 text-center font-semibold text-gray-700">{userUploadStatus}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                                    <div className="px-6 py-4 border-b border-gray-200">
+                                        <h3 className="text-lg font-medium text-gray-900">Users List</h3>
+                                    </div>
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th 
+                                                    onClick={() => handleSort('firstName', setUserSortConfig, userSortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    First Name {userSortConfig.key === 'firstName' && (userSortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th 
+                                                    onClick={() => handleSort('lastName', setUserSortConfig, userSortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Last Name {userSortConfig.key === 'lastName' && (userSortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th 
+                                                    onClick={() => handleSort('cost_code', setUserSortConfig, userSortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Cost Code {userSortConfig.key === 'cost_code' && (userSortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {sortData(users, userSortConfig).map(user => (
+                                                <tr key={user.id}>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.firstName}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.lastName}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.cost_code || user.costCode}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Items Admin Tab */}
+                        {activeTab === 'items' && (
+                            <div className="px-4 py-6 sm:px-0 space-y-6">
+                                {/* Barcode Scanning Section */}
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                    <div className="flex items-center mb-3">
+                                        <span className="text-2xl mr-2">📊</span>
+                                        <h3 className="text-lg font-medium text-green-900">Inventory Update Scanner</h3>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <input
+                                                id="admin-barcode-input"
+                                                type="text"
+                                                value={adminBarcodeInput}
+                                                onChange={(e) => setAdminBarcodeInput(e.target.value)}
+                                                onKeyDown={handleAdminBarcodeInput}
+                                                placeholder="Scan barcode or type item name to update quantity..."
+                                                className="block w-full px-3 py-2 border border-green-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 bg-white"
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={handleManualAdminBarcodeSubmit}
+                                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 whitespace-nowrap"
+                                        >
+                                            Update Quantity
+                                        </button>
+                                    </div>
+                                    <p className="text-sm text-green-700 mt-2">
+                                        💡 Tip: Scan item barcode to quickly update inventory quantities. Perfect for receiving shipments!
+                                    </p>
+                                </div>
+
+                                <div className="bg-white shadow sm:rounded-lg">
+                                    <div className="px-6 py-4">
+                                        <h3 className="text-lg font-medium text-gray-900 mb-4">Upload Items CSV</h3>
+                                        <p className="text-sm text-gray-600 mb-4">
+                                            CSV should have columns: Item, Stock Quantity, ASIN (optional), Category (optional)
+                                        </p>
+                                        <input
+                                            type="file"
+                                            accept=".csv"
+                                            onChange={(e) => setSelectedItemFile(e.target.files[0])}
+                                            className="mb-4"
+                                        />
+                                        <div className="flex space-x-4">
+                                            <button
+                                                onClick={handleItemCsvProcess}
+                                                disabled={!selectedItemFile}
+                                                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-300"
+                                            >
+                                                Upload Items CSV
+                                            </button>
+                                            <button
+                                                onClick={exportInventory}
+                                                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg"
+                                            >
+                                                Export Inventory
+                                            </button>
+                                            <button
+                                                onClick={() => setShowCategoryManager(true)}
+                                                className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg"
+                                            >
+                                                Manage Categories
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setShowBulkUpdate(!showBulkUpdate);
+                                                    if (showBulkUpdate) {
+                                                        // Reset selections when exiting bulk mode
+                                                        setSelectedItems([]);
+                                                        setBulkUpdateCategory('');
+                                                    }
+                                                }}
+                                                className={`font-bold py-2 px-4 rounded-lg ${showBulkUpdate ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
+                                            >
+                                                {showBulkUpdate ? 'Exit Bulk Mode' : 'Bulk Update'}
+                                            </button>
+                                        </div>
+                                        {itemUploadStatus && (
+                                            <p className="mt-4 text-center font-semibold text-gray-700">{itemUploadStatus}</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Search and Filter */}
+                                <div className="bg-white shadow sm:rounded-lg">
+                                    <div className="px-6 py-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Search Items:
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    placeholder="Search by name, ASIN, or category..."
+                                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Filter by Category:
+                                                </label>
+                                                <select
+                                                    value={categoryFilter}
+                                                    onChange={(e) => setCategoryFilter(e.target.value)}
+                                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                >
+                                                    {categories.map(category => (
+                                                        <option key={category} value={category}>{category}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                            Showing {filteredItems.length} of {items.length} items
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Bulk Update Control Panel */}
+                                {showBulkUpdate && (
+                                    <div className="bg-orange-50 border border-orange-200 shadow sm:rounded-lg">
+                                        <div className="px-6 py-4">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="text-lg font-medium text-orange-800">Bulk Update Mode</h3>
+                                                    <p className="text-sm text-orange-600">
+                                                        {selectedItems.length} items selected. Check boxes in the table below to select items for bulk category update.
+                                                    </p>
+                                                </div>
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        onClick={selectAllItems}
+                                                        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded text-sm"
+                                                    >
+                                                        {selectedItems.length === filteredItems.length ? 'Deselect All' : 'Select All'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (selectedItems.length === 0) {
+                                                                cancelBulkUpdate();
+                                                            } else if (bulkUpdateCategory) {
+                                                                bulkUpdateCategories();
+                                                            } else {
+                                                                alert('Please select a category first');
+                                                            }
+                                                        }}
+                                                        disabled={selectedItems.length === 0}
+                                                        className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded text-sm disabled:bg-gray-300"
+                                                    >
+                                                        {selectedItems.length === 0 ? 'Select Items' : 'Apply Category'}
+                                                    </button>
+                                                    <button
+                                                        onClick={cancelBulkUpdate}
+                                                        className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded text-sm"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {selectedItems.length > 0 && (
+                                                <div className="mt-3 flex items-end space-x-4">
+                                                    <div className="flex-1">
+                                                        <label className="block text-sm font-medium text-orange-700 mb-1">
+                                                            Apply Category to {selectedItems.length} selected items:
+                                                        </label>
+                                                        <select
+                                                            value={bulkUpdateCategory}
+                                                            onChange={(e) => setBulkUpdateCategory(e.target.value)}
+                                                            className="block w-full px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                                                        >
+                                                            <option value="">Select a category...</option>
+                                                            {categories.filter(cat => cat !== 'All').map(category => (
+                                                                <option key={category} value={category}>{category}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <button
+                                                        onClick={bulkUpdateCategories}
+                                                        disabled={!bulkUpdateCategory}
+                                                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg disabled:bg-gray-300 whitespace-nowrap"
+                                                    >
+                                                        Update Now
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                                    <div className="px-6 py-4 border-b border-gray-200">
+                                        <h3 className="text-lg font-medium text-gray-900">Items List</h3>
+                                    </div>
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                {showBulkUpdate && (
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
+                                                            onChange={selectAllItems}
+                                                            className="rounded"
+                                                        />
+                                                    </th>
+                                                )}
+                                                <th 
+                                                    onClick={() => handleSort('name', setItemSortConfig, itemSortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Name {itemSortConfig.key === 'name' && (itemSortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th 
+                                                    onClick={() => handleSort('quantity', setItemSortConfig, itemSortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Stock {itemSortConfig.key === 'quantity' && (itemSortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th 
+                                                    onClick={() => handleSort('category', setItemSortConfig, itemSortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Category {itemSortConfig.key === 'category' && (itemSortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    ASIN
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    Actions
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {sortData(filteredItems, itemSortConfig).map(item => (
+                                                <tr key={item.id}>
+                                                    {showBulkUpdate && (
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedItems.includes(item.id)}
+                                                                onChange={() => toggleItemSelection(item.id)}
+                                                                className="rounded"
+                                                            />
+                                                        </td>
+                                                    )}
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.quantity <= (item.minThreshold || 5) ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                                            {item.quantity}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.category}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.asin}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                        <div className="flex space-x-2">
+                                                            <button
+                                                                onClick={() => startEditingItem(item)}
+                                                                className="text-blue-600 hover:text-blue-900"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => deleteItem(item.id)}
+                                                                className="text-red-600 hover:text-red-900"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Checkout History Tab */}
+                        {activeTab === 'history' && (
+                            <div className="px-4 py-6 sm:px-0 space-y-6">
+                                <div className="bg-white shadow sm:rounded-lg">
+                                    <div className="px-6 py-4">
+                                        <h3 className="text-lg font-medium text-gray-900 mb-4">Upload History CSV</h3>
+                                        <p className="text-sm text-gray-600 mb-4">
+                                            CSV should have columns: ItemName, UserName, DepartmentId, JobNum (optional)
+                                        </p>
+                                        <input
+                                            type="file"
+                                            accept=".csv"
+                                            onChange={(e) => setSelectedHistoryFile(e.target.files[0])}
+                                            className="mb-4"
+                                        />
+                                        <button
+                                            onClick={handleHistoryCsvProcess}
+                                            disabled={!selectedHistoryFile}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-300"
+                                        >
+                                            Upload History CSV
+                                        </button>
+                                        {historyUploadStatus && (
+                                            <p className="mt-4 text-center font-semibold text-gray-700">{historyUploadStatus}</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                                    <div className="px-6 py-4 border-b border-gray-200">
+                                        <h3 className="text-lg font-medium text-gray-900">Checkout History</h3>
+                                    </div>
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th 
+                                                    onClick={() => handleSort('itemName', setHistorySortConfig, historySortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Item {historySortConfig.key === 'itemName' && (historySortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th 
+                                                    onClick={() => handleSort('userName', setHistorySortConfig, historySortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    User {historySortConfig.key === 'userName' && (historySortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th 
+                                                    onClick={() => handleSort('departmentId', setHistorySortConfig, historySortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Department {historySortConfig.key === 'departmentId' && (historySortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                                <th 
+                                                    onClick={() => handleSort('dateEntered', setHistorySortConfig, historySortConfig)}
+                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    Date {historySortConfig.key === 'dateEntered' && (historySortConfig.direction === 'ascending' ? '↑' : '↓')}
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {sortData(checkoutHistory, historySortConfig).map(record => (
+                                                <tr key={record.id}>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.itemName}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.userName}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.departmentId}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        {new Date(record.dateEntered).toLocaleDateString()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Notifications Tab */}
+                        {activeTab === 'notifications' && (
+                            <div className="px-4 py-6 sm:px-0">
+                                <div className="bg-white shadow sm:rounded-lg">
+                                    <div className="px-6 py-4">
+                                        <h3 className="text-lg font-medium text-gray-900 mb-4">Low Stock Notifications</h3>
+                                        {notifications.length === 0 ? (
+                                            <p className="text-gray-500">No low stock items at this time.</p>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {notifications.map(notification => (
+                                                    <div key={notification.id} className="flex items-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                                        <div className="flex-shrink-0">
+                                                            <span className="text-yellow-600">⚠️</span>
+                                                        </div>
+                                                        <div className="ml-3">
+                                                            <p className="text-sm font-medium text-yellow-800">
+                                                                {notification.message}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* Category Manager Modal */}
+                    {showCategoryManager && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                                <div className="mt-3">
+                                    <h3 className="text-lg font-medium text-gray-900 mb-4">Manage Categories</h3>
+                                    
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Current Categories:
+                                        </label>
+                                        <div className="max-h-40 overflow-y-auto border rounded p-2">
+                                            {categories.filter(cat => cat !== 'All').map(category => (
+                                                <div key={category} className="py-1 px-2 text-sm">{category}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Add New Category:
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={newCategory}
+                                            onChange={(e) => setNewCategory(e.target.value)}
+                                            placeholder="Enter category name..."
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            onKeyPress={(e) => e.key === 'Enter' && addCategory()}
+                                        />
+                                    </div>
+
+                                    <div className="flex justify-end space-x-4">
+                                        <button
+                                            onClick={() => {
+                                                setShowCategoryManager(false);
+                                                setNewCategory('');
+                                            }}
+                                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                                        >
+                                            Close
+                                        </button>
+                                        <button
+                                            onClick={addCategory}
+                                            disabled={!newCategory.trim()}
+                                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+                                        >
+                                            Add Category
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Item Edit Modal */}
+                    {editingItem && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                                <div className="mt-3">
+                                    <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Item</h3>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Item Name:
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={editingItem.name}
+                                                onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Category:
+                                            </label>
+                                            <div className="space-y-2">
+                                                <select
+                                                    value={editingItem.category}
+                                                    onChange={(e) => setEditingItem({...editingItem, category: e.target.value})}
+                                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                >
+                                                    {categories.filter(cat => cat !== 'All').map(category => (
+                                                        <option key={category} value={category}>{category}</option>
+                                                    ))}
+                                                </select>
+                                                <div className="text-xs text-gray-500">
+                                                    Or type a new category:
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Enter new category name..."
+                                                    onChange={(e) => {
+                                                        if (e.target.value) {
+                                                            setEditingItem({...editingItem, category: e.target.value});
+                                                        }
+                                                    }}
+                                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                ASIN:
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={editingItem.asin || ''}
+                                                onChange={(e) => setEditingItem({...editingItem, asin: e.target.value})}
+                                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Stock Quantity:
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={editingItem.quantity}
+                                                onChange={(e) => setEditingItem({...editingItem, quantity: parseInt(e.target.value) || 0})}
+                                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Low Stock Threshold:
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={editingItem.minThreshold || 5}
+                                                onChange={(e) => setEditingItem({...editingItem, minThreshold: parseInt(e.target.value) || 5})}
+                                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end space-x-4 mt-6">
+                                        <button
+                                            onClick={cancelEditingItem}
+                                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={saveItemChanges}
+                                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                        >
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Quantity Input Modal */}
+                    {showQuantityModal && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                            <div className="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+                                <div className="mt-3">
+                                        <h3 className="text-lg font-medium text-gray-900 mb-4">Enter Shipment Quantities and Prices</h3>
+                                        
+                                        <div className="mb-4">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Upload Shipment PDF:
+                                            </label>
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={(e) => setSelectedPdfFile(e.target.files[0])}
+                                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                            />
+                                        </div>
+
+                                        <div className="mb-4 grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Tax Amount:
+                                                </label>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-2 text-gray-500">$</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={shipmentTax || ''}
+                                                        onChange={(e) => setShipmentTax(parseFloat(e.target.value) || 0)}
+                                                        className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Fees Amount:
+                                                </label>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-2 text-gray-500">$</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={shipmentFees || ''}
+                                                        onChange={(e) => setShipmentFees(parseFloat(e.target.value) || 0)}
+                                                        className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3 max-h-96 overflow-y-auto border rounded-lg p-4">
+                                            {selectedShipmentItems.map(itemName => (
+                                                <div key={itemName} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                                                    <div className="font-medium text-gray-900 flex-1 min-w-0 pr-4">
+                                                        <div className="truncate">{itemName}</div>
+                                                    </div>
+                                                    <div className="flex items-center space-x-3 flex-shrink-0">
+                                                        <div className="flex items-center space-x-1">
+                                                            <label className="text-sm text-gray-600 whitespace-nowrap">Qty:</label>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                value={itemQuantities[itemName] || ''}
+                                                                onChange={(e) => updateItemQuantity(itemName, e.target.value)}
+                                                                className="w-20 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                                placeholder="0"
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center space-x-1">
+                                                            <label className="text-sm text-gray-600 whitespace-nowrap">Price:</label>
+                                                            <div className="relative">
+                                                                <span className="absolute left-2 top-1 text-gray-500">$</span>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    step="0.01"
+                                                                    value={itemPrices[itemName] || ''}
+                                                                    onChange={(e) => updateItemPrice(itemName, e.target.value)}
+                                                                    className="w-24 pl-6 pr-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="flex justify-end space-x-4 mt-6">
+                                            <button
+                                                onClick={() => {
+                                                    setShowQuantityModal(false);
+                                                    setItemQuantities({});
+                                                    setItemPrices({});
+                                                    setSelectedPdfFile(null);
+                                                    setShipmentTax(0);
+                                                    setShipmentFees(0);
+                                                }}
+                                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={generateShipmentReport}
+                                                disabled={!selectedPdfFile || 
+                                                         Object.keys(itemQuantities).length === 0 ||
+                                                         selectedShipmentItems.some(item => !itemQuantities[item] || !itemPrices[item] || itemQuantities[item] <= 0 || itemPrices[item] <= 0)}
+                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
+                                            >
+                                                Generate Cost Allocation Report
+                                            </button>
+                                        </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Admin Quantity Update Modal */}
+                    {showAdminQuantityModal && scannedItem && (
+                        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                            <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+                                <div className="mt-3">
+                                    <div className="flex items-center mb-4">
+                                        <span className="text-2xl mr-2">📦</span>
+                                        <h3 className="text-lg font-medium text-gray-900">Update Inventory</h3>
+                                    </div>
+                                    
+                                    <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                                        <div className="font-medium text-gray-900 mb-1">{scannedItem.name}</div>
+                                        <div className="text-sm text-gray-600">
+                                            Current Stock: <span className="font-medium">{scannedItem.quantity}</span>
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                            Category: <span className="font-medium">{scannedItem.category}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            New Quantity:
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={quantityUpdate}
+                                            onChange={(e) => setQuantityUpdate(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    updateItemQuantity();
+                                                } else if (e.key === 'Escape') {
+                                                    cancelQuantityUpdate();
+                                                }
+                                            }}
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 text-lg text-center"
+                                            placeholder="Enter new quantity..."
+                                            autoFocus
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Press Enter to update, Escape to cancel
+                                        </p>
+                                    </div>
+
+                                    <div className="flex justify-end space-x-3">
+                                        <button
+                                            onClick={cancelQuantityUpdate}
+                                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={updateItemQuantity}
+                                            disabled={quantityUpdate === '' || isNaN(quantityUpdate)}
+                                            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300"
+                                        >
+                                            Update Quantity
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Simple test component to check if React is working
+        const TestApp = () => {
+            return (
+                <div style={{ padding: '20px', fontSize: '24px', color: 'blue' }}>
+                    React is working! Current time: {new Date().toLocaleTimeString()}
+                </div>
+            );
+        };
+
+        console.log('About to render TestApp');
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<TestApp />);
+    </script>
+</body>
+</html>

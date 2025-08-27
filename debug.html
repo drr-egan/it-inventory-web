@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React Debug Test</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <div id="debug-info">
+        <h3>Debug Info:</h3>
+        <p id="react-version"></p>
+        <p id="reactdom-version"></p>
+        <p id="babel-version"></p>
+    </div>
+
+    <script>
+        // Check versions
+        document.getElementById('react-version').textContent = `React version: ${React.version}`;
+        document.getElementById('reactdom-version').textContent = `ReactDOM: ${typeof ReactDOM}`;
+        document.getElementById('babel-version').textContent = `Babel: ${typeof Babel}`;
+        
+        console.log('React:', React);
+        console.log('ReactDOM:', ReactDOM);
+        console.log('Babel:', typeof Babel);
+    </script>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        const TestComponent = () => {
+            const [count, setCount] = useState(0);
+            
+            return (
+                <div style={{ padding: '20px', border: '1px solid #ccc', margin: '20px' }}>
+                    <h1>React Test Component</h1>
+                    <p>Count: {count}</p>
+                    <button onClick={() => setCount(count + 1)}>Increment</button>
+                    <p>Time: {new Date().toLocaleTimeString()}</p>
+                </div>
+            );
+        };
+
+        console.log('About to create root and render');
+        
+        try {
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<TestComponent />);
+            console.log('Successfully rendered TestComponent');
+        } catch (error) {
+            console.error('Error rendering TestComponent:', error);
+            // Fallback to legacy render
+            try {
+                console.log('Trying legacy ReactDOM.render');
+                ReactDOM.render(<TestComponent />, document.getElementById('root'));
+                console.log('Successfully rendered with legacy render');
+            } catch (legacyError) {
+                console.error('Legacy render also failed:', legacyError);
+            }
+        }
+    </script>
+</body>
+</html>
