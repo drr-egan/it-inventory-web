@@ -265,64 +265,6 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 cursor.execute('SELECT * FROM items WHERE id = ?', (resource_id,))
                 result = cursor.fetchone()
             
-            elif resource == 'users':
-                # Build update query dynamically for users
-                updates = []
-                values = []
-                
-                for field in ['firstName', 'lastName', 'costCode']:
-                    if field in data:
-                        if field == 'costCode':
-                            # Handle both costCode and cost_code field names
-                            updates.append('cost_code = ?')
-                        else:
-                            updates.append(f'{field} = ?')
-                        values.append(data[field])
-                
-                if not updates:
-                    self.send_error(400, 'No valid fields to update')
-                    return
-                
-                values.append(resource_id)
-                query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-                
-                cursor.execute(query, values)
-                conn.commit()
-                
-                if cursor.rowcount == 0:
-                    self.send_error(404, 'User not found')
-                    return
-                
-                cursor.execute('SELECT * FROM users WHERE id = ?', (resource_id,))
-                result = cursor.fetchone()
-            
-            elif resource == 'checkoutHistory':
-                # Build update query dynamically for checkout history
-                updates = []
-                values = []
-                
-                for field in ['itemName', 'userName', 'departmentId', 'jobNumber', 'notes']:
-                    if field in data:
-                        updates.append(f'{field} = ?')
-                        values.append(data[field])
-                
-                if not updates:
-                    self.send_error(400, 'No valid fields to update')
-                    return
-                
-                values.append(resource_id)
-                query = f"UPDATE checkoutHistory SET {', '.join(updates)} WHERE id = ?"
-                
-                cursor.execute(query, values)
-                conn.commit()
-                
-                if cursor.rowcount == 0:
-                    self.send_error(404, 'Checkout record not found')
-                    return
-                
-                cursor.execute('SELECT * FROM checkoutHistory WHERE id = ?', (resource_id,))
-                result = cursor.fetchone()
-            
             else:
                 self.send_error(404, 'Resource not found')
                 return

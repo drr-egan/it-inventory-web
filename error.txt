@@ -1,27 +1,90 @@
 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools react-dom.development.js:29905:19
 cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in production, install it as a PostCSS plugin or use the Tailwind CLI: https://tailwindcss.com/docs/installation cdn.tailwindcss.com:64:1711
-You are using the in-browser Babel transformer. Be sure to precompile your scripts for production - https://babeljs.io/docs/setup/ babel.min.js:3:3069275
-Uncaught SyntaxError: /Inline Babel script: Identifier 'updateItemQuantity' has already been declared. (517:18)
+You are using the in-browser Babel transformer. Be sure to precompile your scripts for production - https://babeljs.io/docs/setup/ babel.min.js:3:3064882
+Uncaught SyntaxError: /Inline Babel script: Expected corresponding JSX closing tag for <div>. (4158:20)
 
-  515 |             };
-  516 |
-> 517 |             const updateItemQuantity = (itemName, quantity) => {
-      |                   ^
-  518 |                 setItemQuantities({
-  519 |                     ...itemQuantities,
-  520 |                     [itemName]: parseInt(quantity) || 0
+  4156 |                             </div>
+  4157 |                         )}
+> 4158 |                     </main>
+       |                     ^
+  4159 |
+  4160 |                     {/* Category Manager Modal */}
+  4161 |                     {showCategoryManager && (
     e https://unpkg.com/@babel/standalone/babel.min.js:3
     raise https://unpkg.com/@babel/standalone/babel.min.js:3
-    checkRedeclarationInScope https://unpkg.com/@babel/standalone/babel.min.js:3
-    declareName https://unpkg.com/@babel/standalone/babel.min.js:3
-    declareName https://unpkg.com/@babel/standalone/babel.min.js:3
-    declareNameFromIdentifier https://unpkg.com/@babel/standalone/babel.min.js:3
-    checkIdentifier https://unpkg.com/@babel/standalone/babel.min.js:3
-    checkLVal https://unpkg.com/@babel/standalone/babel.min.js:3
-    parseVarId https://unpkg.com/@babel/standalone/babel.min.js:3
-    parseVarId https://unpkg.com/@babel/standalone/babel.min.js:3
-    parseVar https://unpkg.com/@babel/standalone/babel.min.js:3
-    parseVarStatement https://unpkg.com/@babel/standalone/babel.min.js:3
+    jsxParseElementAt https://unpkg.com/@babel/standalone/babel.min.js:3
+    jsxParseElement https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprAtom https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprSubscripts https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseUpdate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnary https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnaryOrPrivate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOps https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeConditional https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    n https://unpkg.com/@babel/standalone/babel.min.js:3
+    tryParse https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    qv https://unpkg.com/@babel/standalone/babel.min.js:3
+    allowInAnd https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssignAllowIn https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssignAllowInOrVoidPattern https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseParenAndDistinguishExpression https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseParenAndDistinguishExpression https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprAtom https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprAtom https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprSubscripts https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseUpdate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnary https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnaryOrPrivate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOpBaseRightExpr https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOpRightExpr https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOp https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOp https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOps https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeConditional https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExpressionBase https://unpkg.com/@babel/standalone/babel.min.js:3
+    qv https://unpkg.com/@babel/standalone/babel.min.js:3
+    allowInAnd https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExpression https://unpkg.com/@babel/standalone/babel.min.js:3
+    jsxParseExpressionContainer https://unpkg.com/@babel/standalone/babel.min.js:3
+    jsxParseElementAt https://unpkg.com/@babel/standalone/babel.min.js:3
+    jsxParseElementAt https://unpkg.com/@babel/standalone/babel.min.js:3
+    jsxParseElement https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprAtom https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprSubscripts https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseUpdate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnary https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnaryOrPrivate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOps https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeConditional https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    n https://unpkg.com/@babel/standalone/babel.min.js:3
+    tryParse https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    qv https://unpkg.com/@babel/standalone/babel.min.js:3
+    allowInAnd https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssignAllowIn https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssignAllowInOrVoidPattern https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseParenAndDistinguishExpression https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseParenAndDistinguishExpression https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprAtom https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprAtom https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprSubscripts https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseUpdate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnary https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeUnaryOrPrivate https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExprOps https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeConditional https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExpressionBase https://unpkg.com/@babel/standalone/babel.min.js:3
+    qv https://unpkg.com/@babel/standalone/babel.min.js:3
+    allowInAnd https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseExpression https://unpkg.com/@babel/standalone/babel.min.js:3
+    parseReturnStatement https://unpkg.com/@babel/standalone/babel.min.js:3
     parseStatementContent https://unpkg.com/@babel/standalone/babel.min.js:3
     parseStatementLike https://unpkg.com/@babel/standalone/babel.min.js:3
     parseStatementLike https://unpkg.com/@babel/standalone/babel.min.js:3
@@ -46,7 +109,7 @@ Uncaught SyntaxError: /Inline Babel script: Identifier 'updateItemQuantity' has 
     parseMaybeConditional https://unpkg.com/@babel/standalone/babel.min.js:3
     parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
     parseMaybeAssign https://unpkg.com/@babel/standalone/babel.min.js:3
-    Mv https://unpkg.com/@babel/standalone/babel.min.js:3
+    qv https://unpkg.com/@babel/standalone/babel.min.js:3
     allowInAnd https://unpkg.com/@babel/standalone/babel.min.js:3
     parseMaybeAssignAllowIn https://unpkg.com/@babel/standalone/babel.min.js:3
     parseVar https://unpkg.com/@babel/standalone/babel.min.js:3
@@ -61,7 +124,7 @@ Uncaught SyntaxError: /Inline Babel script: Identifier 'updateItemQuantity' has 
     parseTopLevel https://unpkg.com/@babel/standalone/babel.min.js:3
     parseTopLevel https://unpkg.com/@babel/standalone/babel.min.js:3
     parse https://unpkg.com/@babel/standalone/babel.min.js:3
-    eR https://unpkg.com/@babel/standalone/babel.min.js:3
+    nR https://unpkg.com/@babel/standalone/babel.min.js:3
     t https://unpkg.com/@babel/standalone/babel.min.js:3
     s https://unpkg.com/@babel/standalone/babel.min.js:3
     s https://unpkg.com/@babel/standalone/babel.min.js:3
@@ -71,18 +134,11 @@ Uncaught SyntaxError: /Inline Babel script: Identifier 'updateItemQuantity' has 
     s https://unpkg.com/@babel/standalone/babel.min.js:3
     s https://unpkg.com/@babel/standalone/babel.min.js:3
     s https://unpkg.com/@babel/standalone/babel.min.js:3
-    gF https://unpkg.com/@babel/standalone/babel.min.js:3
+    lF https://unpkg.com/@babel/standalone/babel.min.js:3
     sync https://unpkg.com/@babel/standalone/babel.min.js:3
-    qV https://unpkg.com/@babel/standalone/babel.min.js:3
-    kEe https://unpkg.com/@babel/standalone/babel.min.js:3
-    text https://unpkg.com/@babel/standalone/babel.min.js:3
-    hEe https://unpkg.com/@babel/standalone/babel.min.js:3
-    n https://unpkg.com/@babel/standalone/babel.min.js:3
-    xEe https://unpkg.com/@babel/standalone/babel.min.js:3
-    NEe https://unpkg.com/@babel/standalone/babel.min.js:3
-    NEe https://unpkg.com/@babel/standalone/babel.min.js:3
-    OEe https://unpkg.com/@babel/standalone/babel.min.js:3
-babel.min.js:3:258680
+    PV https://unpkg.com/@babel/standalone/babel.min.js:3
+    tEe https://unpkg.com/@babel/standalone/babel.min.js:3
+babel.min.js:3:258605
 Source map error: Error: NetworkError when attempting to fetch resource.
 Resource URL: https://unpkg.com/@babel/standalone/babel.min.js
 Source Map URL: babel.min.js.map

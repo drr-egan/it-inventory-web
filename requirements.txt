@@ -1,0 +1,3 @@
+# IT Inventory App - Python Dependencies
+# This app uses only standard Python libraries
+# No additional packages required for basic functionality

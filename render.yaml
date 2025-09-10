@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: it-inventory-beta
+    env: python
+    region: oregon
+    buildCommand: echo "No build needed - using standard Python libraries"
+    startCommand: python3 web-server.py
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: ENVIRONMENT 
+        value: production
+    disk:
+      name: inventory-data
+      mountPath: /app/data
+      sizeGB: 1
