@@ -38,8 +38,12 @@ class InventoryAPIHandler(http.server.BaseHTTPRequestHandler):
         return "inventory.db"
     
     def init_database(self):
-        """Initialize database with basic tables if they don't exist"""
+        """Initialize database with basic tables and sample data if they don't exist"""
         try:
+            # Ensure database file exists
+            if not os.path.exists(self.db_path):
+                print(f"Creating new database at {self.db_path}")
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
@@ -59,31 +63,78 @@ class InventoryAPIHandler(http.server.BaseHTTPRequestHandler):
             # Create users table if not exists
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    cost_code TEXT DEFAULT '',
                     firstName TEXT NOT NULL,
-                    lastName TEXT NOT NULL,
-                    cost_code TEXT NOT NULL
+                    lastName TEXT NOT NULL
                 )
             ''')
             
             # Create checkout history table if not exists
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS checkoutHistory (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    itemName TEXT NOT NULL,
-                    userName TEXT NOT NULL,
-                    departmentId TEXT,
-                    jobNumber TEXT,
-                    notes TEXT,
-                    dateEntered DATETIME DEFAULT CURRENT_TIMESTAMP
+                    id TEXT PRIMARY KEY,
+                    item TEXT DEFAULT '',
+                    user TEXT DEFAULT '',
+                    costCode TEXT DEFAULT '',
+                    dateEntered TEXT DEFAULT '',
+                    jobNumber TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    isUsed INTEGER DEFAULT 0,
+                    isComplete INTEGER DEFAULT 0,
+                    itemName TEXT DEFAULT '',
+                    userName TEXT DEFAULT '',
+                    departmentId TEXT DEFAULT '',
+                    quantity INTEGER DEFAULT 1,
+                    checkedOutBy TEXT DEFAULT 'System'
                 )
             ''')
             
+            # Add sample data if tables are empty
+            cursor.execute('SELECT COUNT(*) FROM items')
+            item_count = cursor.fetchone()[0]
+            
+            if item_count == 0:
+                print("Adding sample inventory data...")
+                sample_items = [
+                    ('item001', 'Dell Monitor 24"', 'B07CVL2D2T', 15, 5, 'Electronics', 299.99),
+                    ('item002', 'USB-C Hub', 'B08HR6DSLT', 25, 10, 'Accessories', 49.99),
+                    ('item003', 'Wireless Mouse', 'B07FKMDJQZ', 30, 15, 'Accessories', 29.99),
+                    ('item004', 'Ethernet Cable 6ft', 'B00N2VIALK', 50, 20, 'Cables', 12.99),
+                    ('item005', 'Laptop Stand', 'B075GCG36Z', 8, 3, 'Accessories', 79.99)
+                ]
+                
+                cursor.executemany('''
+                    INSERT INTO items (id, name, asin, quantity, minThreshold, category, price)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', sample_items)
+            
+            cursor.execute('SELECT COUNT(*) FROM users')
+            user_count = cursor.fetchone()[0]
+            
+            if user_count == 0:
+                print("Adding sample user data...")
+                sample_users = [
+                    ('user001', 'John Doe', 'IT-001', 'John', 'Doe'),
+                    ('user002', 'Jane Smith', 'IT-002', 'Jane', 'Smith'),
+                    ('user003', 'Mike Wilson', 'HR-001', 'Mike', 'Wilson'),
+                    ('user004', 'Sarah Johnson', 'ACC-001', 'Sarah', 'Johnson')
+                ]
+                
+                cursor.executemany('''
+                    INSERT INTO users (id, name, cost_code, firstName, lastName)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', sample_users)
+            
             conn.commit()
             conn.close()
+            print(f"✅ Database initialized successfully at {self.db_path}")
             
         except Exception as e:
-            print(f"Database initialization error: {e}")
+            print(f"❌ Database initialization error: {e}")
+            import traceback
+            traceback.print_exc()
     
     def send_cors_response(self, status_code, data=None):
         """Send response with CORS headers"""
