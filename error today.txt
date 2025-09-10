@@ -1,0 +1,28 @@
+react-dom.development.js:29905 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+(index):64 cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in production, install it as a PostCSS plugin or use the Tailwind CLI: https://tailwindcss.com/docs/installation
+(anonymous) @ (index):64
+transformScriptTags.ts:253 You are using the in-browser Babel transformer. Be sure to precompile your scripts for production - https://babeljs.io/docs/setup/
+(anonymous) @ transformScriptTags.ts:253
+react-dom.development.js:73 Warning: ReactDOM.render is no longer supported in React 18. Use createRoot instead. Until you switch to the new API, your app will behave as if it's running React 17. Learn more: https://reactjs.org/link/switch-to-createroot
+printWarning @ react-dom.development.js:73
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 0 total items
+Inline Babel script:136 🔄 Refreshing items from database...
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 0 total items
+Inline Babel script:139 📦 Fetched items: 110 items
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 110 total items
+Inline Babel script:141 ✅ Items state updated
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 110 total items
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 110 total items
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 110 total items
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 110 total items
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 110 total items
+(index):1 Access to fetch at 'http://172.22.71.200:3001/users/1757015989567ct7g3m88o' from origin 'http://172.22.71.200:8080' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+:3001/users/1757015989567ct7g3m88o:1  Failed to load resource: net::ERR_FAILED
+Inline Babel script:521 Error fixing cost codes: TypeError: Failed to fetch
+    at <anonymous>:1031:20
+    at Generator.<anonymous> (<anonymous>:15:1660)
+    at Generator.next (<anonymous>:16:255)
+    at asyncGeneratorStep (<anonymous>:17:70)
+    at _next (<anonymous>:18:163)
+(anonymous) @ Inline Babel script:521
+Inline Babel script:1158 🔄 Computing bulkInventoryItems from 110 total items
