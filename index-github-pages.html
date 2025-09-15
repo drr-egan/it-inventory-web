@@ -7656,12 +7656,35 @@
             );
         };
 
-        ReactDOM.render(
-            <ErrorBoundary>
-                <App />
-            </ErrorBoundary>, 
-            document.getElementById('root')
-        );
+        // Initialize GitHub Pages adapter before rendering
+        if (window.githubPagesAdapter) {
+            window.githubPagesAdapter.initialize().then(() => {
+                console.log('✅ GitHub Pages adapter initialized, rendering app...');
+                ReactDOM.render(
+                    <ErrorBoundary>
+                        <App />
+                    </ErrorBoundary>,
+                    document.getElementById('root')
+                );
+            }).catch((error) => {
+                console.error('❌ Failed to initialize GitHub Pages adapter:', error);
+                // Render anyway with empty data
+                ReactDOM.render(
+                    <ErrorBoundary>
+                        <App />
+                    </ErrorBoundary>,
+                    document.getElementById('root')
+                );
+            });
+        } else {
+            // Fallback if adapter not loaded
+            ReactDOM.render(
+                <ErrorBoundary>
+                    <App />
+                </ErrorBoundary>,
+                document.getElementById('root')
+            );
+        }
     </script>
 </body>
 </html>
