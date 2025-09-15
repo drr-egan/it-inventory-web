@@ -1,0 +1,12 @@
+#!/bin/bash
+echo "Testing external access to IT Inventory App..."
+echo "Run this command from another device on the network:"
+echo ""
+echo "curl -s http://172.22.71.200:8080/ | head -10"
+echo ""
+echo "Or open in browser: http://172.22.71.200:8080"
+echo ""
+echo "If it fails, the issue is likely:"
+echo "1. Local firewall blocking connections"
+echo "2. WiFi AP isolation enabled" 
+echo "3. Router firewall settings"

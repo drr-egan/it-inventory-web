@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple React Test</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function SimpleApp() {
+            const [items, setItems] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            // API Base URL
+            const API_BASE = window.location.hostname === 'localhost' 
+                ? 'http://localhost:3001' 
+                : `http://${window.location.hostname}:3001`;
+
+            useEffect(() => {
+                console.log('Loading items from:', `${API_BASE}/items`);
+                
+                fetch(`${API_BASE}/items`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Items loaded:', data.length);
+                        setItems(data);
+                        setLoading(false);
+                    })
+                    .catch(err => {
+                        console.error('Error loading items:', err);
+                        setError(err.message);
+                        setLoading(false);
+                    });
+            }, []);
+
+            if (loading) return <div className="p-4">Loading...</div>;
+            if (error) return <div className="p-4 text-red-500">Error: {error}</div>;
+
+            return (
+                <div className="p-4">
+                    <h1 className="text-2xl font-bold mb-4">Simple React Test</h1>
+                    <p className="mb-4">✅ React is working!</p>
+                    <p className="mb-4">✅ Babel is working!</p>
+                    <p className="mb-4 text-blue-500 font-bold">✅ Tailwind CSS is working!</p>
+                    <p className="mb-4">📊 Loaded {items.length} items from database</p>
+                    
+                    <div className="mt-4">
+                        <h2 className="text-lg font-semibold mb-2">Connection Info:</h2>
+                        <ul className="text-sm">
+                            <li><strong>URL:</strong> {window.location.href}</li>
+                            <li><strong>API URL:</strong> {API_BASE}</li>
+                            <li><strong>Items Count:</strong> {items.length}</li>
+                        </ul>
+                    </div>
+
+                    {items.length > 0 && (
+                        <div className="mt-4">
+                            <h2 className="text-lg font-semibold mb-2">Sample Items:</h2>
+                            <ul className="text-sm">
+                                {items.slice(0, 5).map(item => (
+                                    <li key={item.id}>{item.name} (Qty: {item.quantity})</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Try both render methods for compatibility
+        const rootElement = document.getElementById('root');
+        
+        if (ReactDOM.createRoot) {
+            // React 18 method
+            const root = ReactDOM.createRoot(rootElement);
+            root.render(<SimpleApp />);
+        } else {
+            // React 17 method
+            ReactDOM.render(<SimpleApp />, rootElement);
+        }
+    </script>
+</body>
+</html>

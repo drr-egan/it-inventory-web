@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "📱 Mobile Hotspot Bridge Solution"
+echo ""
+echo "Quick temporary solution:"
+echo "1. Enable mobile hotspot on your phone"
+echo "2. Connect this server to the mobile hotspot"
+echo "3. Connect WiFi users to the same hotspot"
+echo "4. Everyone accesses via the hotspot network IP"
+echo ""
+echo "Pros: Quick setup, bypasses router isolation"
+echo "Cons: Uses mobile data, temporary solution"

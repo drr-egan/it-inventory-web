@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>External Access Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-item { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+    </style>
+</head>
+<body>
+    <h1>External Access Diagnostic Test</h1>
+    
+    <div id="results">
+        <div class="test-item">
+            <strong>Basic HTML/CSS Loading:</strong> 
+            <span id="basic-test">✅ Working</span>
+        </div>
+        
+        <div class="test-item">
+            <strong>Tailwind CSS CDN:</strong> 
+            <span id="tailwind-test" class="text-red-500 font-bold">❌ Not Working</span>
+        </div>
+        
+        <div class="test-item">
+            <strong>API Server Connection:</strong> 
+            <span id="api-test">⏳ Testing...</span>
+        </div>
+        
+        <div class="test-item">
+            <strong>JavaScript Execution:</strong> 
+            <span id="js-test">⏳ Testing...</span>
+        </div>
+    </div>
+
+    <div class="test-item">
+        <strong>Connection Info:</strong>
+        <div id="connection-info"></div>
+    </div>
+
+    <script>
+        // Test JavaScript execution
+        document.getElementById('js-test').textContent = '✅ Working';
+        document.getElementById('js-test').className = 'success';
+        
+        // Test Tailwind CSS
+        const tailwindTest = document.getElementById('tailwind-test');
+        const computedStyle = window.getComputedStyle(tailwindTest);
+        if (computedStyle.color === 'rgb(239, 68, 68)' && computedStyle.fontWeight === '700') {
+            tailwindTest.textContent = '✅ Working';
+            tailwindTest.className = 'success';
+        }
+        
+        // Display connection info
+        const connectionInfo = document.getElementById('connection-info');
+        connectionInfo.innerHTML = `
+            <p><strong>URL:</strong> ${window.location.href}</p>
+            <p><strong>Protocol:</strong> ${window.location.protocol}</p>
+            <p><strong>Host:</strong> ${window.location.host}</p>
+            <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+        `;
+        
+        // Test API connection
+        const apiTest = document.getElementById('api-test');
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3001/items' 
+            : `http://${window.location.hostname}:3001/items`;
+            
+        fetch(API_URL)
+            .then(response => {
+                if (response.ok) {
+                    apiTest.textContent = '✅ Working';
+                    apiTest.className = 'success';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            })
+            .catch(error => {
+                apiTest.textContent = `❌ Failed: ${error.message}`;
+                apiTest.className = 'error';
+            });
+    </script>
+</body>
+</html>

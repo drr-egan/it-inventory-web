@@ -24,7 +24,7 @@ API_PORT = WEB_PORT + 1  # Use PORT+1 for API to avoid conflicts
 
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory="beta", **kwargs)
+        super().__init__(*args, directory=".", **kwargs)
     
     def end_headers(self):
         # Add security headers for production
@@ -49,9 +49,9 @@ def start_web_server():
     """Start the web server for beta frontend"""
     print(f"🚀 Starting IT Inventory Beta on port {WEB_PORT}...")
     
-    # Ensure beta directory exists
-    if not os.path.exists("beta"):
-        print("❌ Beta directory not found!")
+    # Ensure index.html exists
+    if not os.path.exists("index.html"):
+        print("❌ index.html not found!")
         sys.exit(1)
     
     try:
