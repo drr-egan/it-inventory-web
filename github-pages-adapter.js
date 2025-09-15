@@ -39,35 +39,134 @@ class GitHubPagesDataAdapter {
     async loadInitialData() {
         try {
             console.log('📥 Loading initial data from JSON files...');
-            
+
             // Load items
             const itemsResponse = await fetch('./data/items.json');
             if (itemsResponse.ok) {
-                this.data.items = await itemsResponse.json();
+                const itemsData = await itemsResponse.json();
+                this.data.items = Array.isArray(itemsData) && itemsData.length > 0 ? itemsData : this.getDefaultItems();
+                console.log(`✅ Loaded ${this.data.items.length} items`);
+            } else {
+                this.data.items = this.getDefaultItems();
+                console.log('⚠️ Could not load items.json, using default items');
             }
-            
-            // Load users  
+
+            // Load users
             const usersResponse = await fetch('./data/users.json');
             if (usersResponse.ok) {
-                this.data.users = await usersResponse.json();
+                const usersData = await usersResponse.json();
+                this.data.users = Array.isArray(usersData) && usersData.length > 0 ? usersData : this.getDefaultUsers();
+                console.log(`✅ Loaded ${this.data.users.length} users`);
+            } else {
+                this.data.users = this.getDefaultUsers();
+                console.log('⚠️ Could not load users.json, using default users');
             }
-            
+
             // Load checkout history
             const historyResponse = await fetch('./data/checkoutHistory.json');
             if (historyResponse.ok) {
-                this.data.checkoutHistory = await historyResponse.json();
+                const historyData = await historyResponse.json();
+                this.data.checkoutHistory = Array.isArray(historyData) ? historyData : [];
+                console.log(`✅ Loaded ${this.data.checkoutHistory.length} checkout records`);
+            } else {
+                this.data.checkoutHistory = [];
+                console.log('⚠️ Could not load checkoutHistory.json, using empty array');
             }
-            
+
             // Save to localStorage
             this.saveToLocalStorage();
             console.log('✅ Initial data loaded and saved to localStorage');
-            
+
         } catch (error) {
-            console.warn('⚠️ Could not load initial data files, using empty arrays:', error);
-            this.data.items = [];
-            this.data.users = [];
+            console.warn('⚠️ Could not load initial data files, using defaults:', error);
+            this.data.items = this.getDefaultItems();
+            this.data.users = this.getDefaultUsers();
             this.data.checkoutHistory = [];
+            this.saveToLocalStorage();
         }
+    }
+
+    getDefaultItems() {
+        return [
+            {
+                "id": "item001",
+                "name": "Dell Monitor 24\"",
+                "asin": "B07CVL2D2T",
+                "quantity": 15,
+                "minThreshold": 5,
+                "category": "Electronics",
+                "price": 299.99
+            },
+            {
+                "id": "item002",
+                "name": "USB-C Hub",
+                "asin": "B08HR6DSLT",
+                "quantity": 25,
+                "minThreshold": 10,
+                "category": "Accessories",
+                "price": 49.99
+            },
+            {
+                "id": "item003",
+                "name": "Wireless Mouse",
+                "asin": "B07FKMDJQZ",
+                "quantity": 30,
+                "minThreshold": 15,
+                "category": "Accessories",
+                "price": 29.99
+            },
+            {
+                "id": "item004",
+                "name": "Ethernet Cable 6ft",
+                "asin": "B00N2VIALK",
+                "quantity": 50,
+                "minThreshold": 20,
+                "category": "Cables",
+                "price": 12.99
+            },
+            {
+                "id": "item005",
+                "name": "Laptop Stand",
+                "asin": "B075GCG36Z",
+                "quantity": 8,
+                "minThreshold": 3,
+                "category": "Accessories",
+                "price": 79.99
+            }
+        ];
+    }
+
+    getDefaultUsers() {
+        return [
+            {
+                "id": "user001",
+                "name": "John Doe",
+                "cost_code": "IT-001-5770",
+                "firstName": "John",
+                "lastName": "Doe"
+            },
+            {
+                "id": "user002",
+                "name": "Jane Smith",
+                "cost_code": "IT-002-5770",
+                "firstName": "Jane",
+                "lastName": "Smith"
+            },
+            {
+                "id": "user003",
+                "name": "Mike Wilson",
+                "cost_code": "HR-001-5770",
+                "firstName": "Mike",
+                "lastName": "Wilson"
+            },
+            {
+                "id": "user004",
+                "name": "Sarah Johnson",
+                "cost_code": "ACC-001-5770",
+                "firstName": "Sarah",
+                "lastName": "Johnson"
+            }
+        ];
     }
     
     saveToLocalStorage() {

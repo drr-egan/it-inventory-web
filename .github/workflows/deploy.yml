@@ -33,22 +33,43 @@ jobs:
         run: |
           # Copy GitHub Pages version as main index.html
           cp index-github-pages.html index.html
-          
-          # Ensure data directory exists with proper files
-          mkdir -p data
-          
-          # Create placeholder data files if they don't exist
-          [ ! -f data/items.json ] && echo "[]" > data/items.json
-          [ ! -f data/users.json ] && echo "[]" > data/users.json  
-          [ ! -f data/checkoutHistory.json ] && echo "[]" > data/checkoutHistory.json
-          
+
+          # Verify data directory and files exist from repository
+          echo "=== Checking repository data files ==="
+          ls -la data/ || echo "Data directory not found"
+
+          # Show content of data files to verify they have data
+          echo "=== Data file contents preview ==="
+          if [ -f data/items.json ]; then
+            echo "items.json first 5 lines:"
+            head -5 data/items.json
+            echo "items.json size: $(wc -c < data/items.json) bytes"
+          else
+            echo "Creating empty items.json"
+            mkdir -p data && echo "[]" > data/items.json
+          fi
+
+          if [ -f data/users.json ]; then
+            echo "users.json size: $(wc -c < data/users.json) bytes"
+          else
+            echo "Creating empty users.json"
+            mkdir -p data && echo "[]" > data/users.json
+          fi
+
+          if [ -f data/checkoutHistory.json ]; then
+            echo "checkoutHistory.json size: $(wc -c < data/checkoutHistory.json) bytes"
+          else
+            echo "Creating empty checkoutHistory.json"
+            mkdir -p data && echo "[]" > data/checkoutHistory.json
+          fi
+
           # Copy cart icon if it exists
           [ -f cart-icon.png ] && cp cart-icon.png . || echo "Cart icon not found, app will use fallback"
-          
-          # List files being deployed
-          echo "Files being deployed:"
+
+          # List final deployment files
+          echo "=== Final deployment structure ==="
           ls -la
-          echo "Data files:"
+          echo "=== Data directory final state ==="
           ls -la data/
         
       - name: Upload artifact
