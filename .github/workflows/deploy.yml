@@ -34,43 +34,49 @@ jobs:
           # Copy GitHub Pages version as main index.html
           cp index-github-pages.html index.html
 
-          # Verify data directory and files exist from repository
-          echo "=== Checking repository data files ==="
-          ls -la data/ || echo "Data directory not found"
+          # Ensure data directory exists
+          mkdir -p data
 
-          # Show content of data files to verify they have data
-          echo "=== Data file contents preview ==="
-          if [ -f data/items.json ]; then
-            echo "items.json first 5 lines:"
-            head -5 data/items.json
-            echo "items.json size: $(wc -c < data/items.json) bytes"
-          else
-            echo "Creating empty items.json"
-            mkdir -p data && echo "[]" > data/items.json
-          fi
+          # Verify data files exist and show their sizes
+          echo "=== Data File Status ==="
+          for file in items.json users.json checkoutHistory.json; do
+            if [ -f "data/$file" ]; then
+              size=$(wc -c < "data/$file")
+              lines=$(wc -l < "data/$file")
+              echo "✅ data/$file: $size bytes, $lines lines"
 
-          if [ -f data/users.json ]; then
-            echo "users.json size: $(wc -c < data/users.json) bytes"
-          else
-            echo "Creating empty users.json"
-            mkdir -p data && echo "[]" > data/users.json
-          fi
+              # Show first line to verify content
+              echo "   Preview: $(head -1 "data/$file" | cut -c1-80)..."
+            else
+              echo "❌ data/$file not found - creating empty file"
+              echo "[]" > "data/$file"
+            fi
+          done
 
-          if [ -f data/checkoutHistory.json ]; then
-            echo "checkoutHistory.json size: $(wc -c < data/checkoutHistory.json) bytes"
-          else
-            echo "Creating empty checkoutHistory.json"
-            mkdir -p data && echo "[]" > data/checkoutHistory.json
-          fi
+          # Verify JSON files are valid
+          echo "=== JSON Validation ==="
+          for file in data/*.json; do
+            if python3 -m json.tool "$file" >/dev/null 2>&1; then
+              echo "✅ $file is valid JSON"
+            else
+              echo "❌ $file has invalid JSON - replacing with empty array"
+              echo "[]" > "$file"
+            fi
+          done
 
           # Copy cart icon if it exists
           [ -f cart-icon.png ] && cp cart-icon.png . || echo "Cart icon not found, app will use fallback"
 
-          # List final deployment files
-          echo "=== Final deployment structure ==="
-          ls -la
-          echo "=== Data directory final state ==="
+          # Show final deployment structure
+          echo "=== Final Deployment Files ==="
+          echo "Main files:"
+          ls -la index.html github-pages-adapter.js checkout.png 2>/dev/null || true
+          echo "Data files:"
           ls -la data/
+
+          # Show total data size
+          total_size=$(du -sb data/ | cut -f1)
+          echo "Total data directory size: $total_size bytes"
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

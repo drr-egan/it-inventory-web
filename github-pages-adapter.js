@@ -38,90 +38,81 @@ class GitHubPagesDataAdapter {
     
     async loadInitialData() {
         try {
-            console.log('📥 Loading initial data...');
+            console.log('📥 Loading initial data from JSON files...');
 
-            // Try to load embedded data first (more reliable for GitHub Pages)
-            if (window.EMBEDDED_INVENTORY_DATA) {
-                console.log('✅ Using embedded inventory data');
-                this.data.items = window.EMBEDDED_INVENTORY_DATA.items || [];
-                this.data.users = window.EMBEDDED_INVENTORY_DATA.users || [];
-                this.data.checkoutHistory = window.EMBEDDED_INVENTORY_DATA.checkoutHistory || [];
+            // Load data from JSON files with better error handling
+            const loadPromises = [
+                this.loadDataFile('./data/items.json', 'items'),
+                this.loadDataFile('./data/users.json', 'users'),
+                this.loadDataFile('./data/checkoutHistory.json', 'checkoutHistory')
+            ];
 
-                console.log(`✅ Loaded ${this.data.items.length} items from embedded data`);
-                console.log(`✅ Loaded ${this.data.users.length} users from embedded data`);
-                console.log(`✅ Loaded ${this.data.checkoutHistory.length} checkout records from embedded data`);
-
-                // Debug: Show actual data structures
-                if (this.data.users.length > 0) {
-                    console.log('📋 Sample user:', this.data.users[0]);
-                }
-                if (this.data.checkoutHistory.length > 0) {
-                    console.log('📋 Sample checkout record:', this.data.checkoutHistory[0]);
-                }
-
-                this.saveToLocalStorage();
-                console.log('✅ Embedded data loaded and saved to localStorage');
-                return;
-            }
-
-            // Fallback: Try to load from JSON files
-            console.log('⚠️ No embedded data found, trying JSON files...');
-
-            // Load items
-            try {
-                const itemsResponse = await fetch('./data/items.json');
-                if (itemsResponse.ok) {
-                    const itemsData = await itemsResponse.json();
-                    this.data.items = Array.isArray(itemsData) && itemsData.length > 0 ? itemsData : this.getDefaultItems();
-                    console.log(`✅ Loaded ${this.data.items.length} items from JSON`);
-                } else {
-                    throw new Error(`HTTP ${itemsResponse.status}`);
-                }
-            } catch (error) {
-                console.warn('⚠️ Could not load items.json:', error);
-                this.data.items = this.getDefaultItems();
-            }
-
-            // Load users
-            try {
-                const usersResponse = await fetch('./data/users.json');
-                if (usersResponse.ok) {
-                    const usersData = await usersResponse.json();
-                    this.data.users = Array.isArray(usersData) && usersData.length > 0 ? usersData : this.getDefaultUsers();
-                    console.log(`✅ Loaded ${this.data.users.length} users from JSON`);
-                } else {
-                    throw new Error(`HTTP ${usersResponse.status}`);
-                }
-            } catch (error) {
-                console.warn('⚠️ Could not load users.json:', error);
-                this.data.users = this.getDefaultUsers();
-            }
-
-            // Load checkout history
-            try {
-                const historyResponse = await fetch('./data/checkoutHistory.json');
-                if (historyResponse.ok) {
-                    const historyData = await historyResponse.json();
-                    this.data.checkoutHistory = Array.isArray(historyData) ? historyData : [];
-                    console.log(`✅ Loaded ${this.data.checkoutHistory.length} checkout records from JSON`);
-                } else {
-                    throw new Error(`HTTP ${historyResponse.status}`);
-                }
-            } catch (error) {
-                console.warn('⚠️ Could not load checkoutHistory.json:', error);
-                this.data.checkoutHistory = [];
-            }
+            await Promise.all(loadPromises);
 
             // Save to localStorage
             this.saveToLocalStorage();
-            console.log('✅ Fallback data loaded and saved to localStorage');
+            console.log('✅ All data loaded and saved to localStorage');
 
         } catch (error) {
-            console.error('❌ Failed to load any data, using defaults:', error);
-            this.data.items = this.getDefaultItems();
-            this.data.users = this.getDefaultUsers();
-            this.data.checkoutHistory = [];
-            this.saveToLocalStorage();
+            console.error('❌ Failed to load data:', error);
+            this.loadDefaults();
+        }
+    }
+
+    async loadDataFile(url, dataType) {
+        try {
+            console.log(`📥 Loading ${dataType}...`);
+
+            const response = await fetch(url, {
+                cache: 'default',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} for ${url}`);
+            }
+
+            const data = await response.json();
+
+            if (!Array.isArray(data)) {
+                throw new Error(`Invalid data format for ${dataType}`);
+            }
+
+            this.data[dataType] = data;
+            console.log(`✅ Loaded ${data.length} ${dataType} records`);
+
+            // Log sample for debugging
+            if (data.length > 0) {
+                console.log(`📋 Sample ${dataType}:`, data[0]);
+            }
+
+        } catch (error) {
+            console.warn(`⚠️ Could not load ${dataType}:`, error);
+            this.loadDefaultsFor(dataType);
+        }
+    }
+
+    loadDefaults() {
+        console.log('📦 Loading default data...');
+        this.data.items = this.getDefaultItems();
+        this.data.users = this.getDefaultUsers();
+        this.data.checkoutHistory = [];
+        this.saveToLocalStorage();
+    }
+
+    loadDefaultsFor(dataType) {
+        switch(dataType) {
+            case 'items':
+                this.data.items = this.getDefaultItems();
+                break;
+            case 'users':
+                this.data.users = this.getDefaultUsers();
+                break;
+            case 'checkoutHistory':
+                this.data.checkoutHistory = [];
+                break;
         }
     }
 
