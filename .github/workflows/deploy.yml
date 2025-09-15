@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+        
+      - name: Prepare Files
+        run: |
+          # Copy GitHub Pages version as main index.html
+          cp index-github-pages.html index.html
+          
+          # Ensure data directory exists with proper files
+          mkdir -p data
+          
+          # Create placeholder data files if they don't exist
+          [ ! -f data/items.json ] && echo "[]" > data/items.json
+          [ ! -f data/users.json ] && echo "[]" > data/users.json  
+          [ ! -f data/checkoutHistory.json ] && echo "[]" > data/checkoutHistory.json
+          
+          # Copy cart icon if it exists
+          [ -f cart-icon.png ] && cp cart-icon.png . || echo "Cart icon not found, app will use fallback"
+          
+          # List files being deployed
+          echo "Files being deployed:"
+          ls -la
+          echo "Data files:"
+          ls -la data/
+        
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+          
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
