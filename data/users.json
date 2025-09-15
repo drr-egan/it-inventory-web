@@ -2,29 +2,106 @@
   {
     "id": "user001",
     "name": "John Doe",
-    "cost_code": "IT-001-5770",
+    "cost_code": "2-20-060-5770",
     "firstName": "John",
     "lastName": "Doe"
   },
   {
     "id": "user002",
     "name": "Jane Smith",
-    "cost_code": "IT-002-5770",
+    "cost_code": "1-10-200-5770",
     "firstName": "Jane",
     "lastName": "Smith"
   },
   {
     "id": "user003",
     "name": "Mike Wilson",
-    "cost_code": "HR-001-5770",
+    "cost_code": "3-10-100-5770",
     "firstName": "Mike",
     "lastName": "Wilson"
   },
   {
     "id": "user004",
     "name": "Sarah Johnson",
-    "cost_code": "ACC-001-5770",
+    "cost_code": "2-20-080-5770",
     "firstName": "Sarah",
     "lastName": "Johnson"
+  },
+  {
+    "id": "user005",
+    "name": "Robert Brown",
+    "cost_code": "1-10-150-5770",
+    "firstName": "Robert",
+    "lastName": "Brown"
+  },
+  {
+    "id": "user006",
+    "name": "Emily Davis",
+    "cost_code": "2-20-090-5770",
+    "firstName": "Emily",
+    "lastName": "Davis"
+  },
+  {
+    "id": "user007",
+    "name": "Michael Garcia",
+    "cost_code": "3-10-120-5770",
+    "firstName": "Michael",
+    "lastName": "Garcia"
+  },
+  {
+    "id": "user008",
+    "name": "Lisa Martinez",
+    "cost_code": "1-10-180-5770",
+    "firstName": "Lisa",
+    "lastName": "Martinez"
+  },
+  {
+    "id": "user009",
+    "name": "David Anderson",
+    "cost_code": "2-20-070-5770",
+    "firstName": "David",
+    "lastName": "Anderson"
+  },
+  {
+    "id": "user010",
+    "name": "Jennifer Taylor",
+    "cost_code": "3-10-110-5770",
+    "firstName": "Jennifer",
+    "lastName": "Taylor"
+  },
+  {
+    "id": "user011",
+    "name": "Christopher Lee",
+    "cost_code": "1-10-160-5770",
+    "firstName": "Christopher",
+    "lastName": "Lee"
+  },
+  {
+    "id": "user012",
+    "name": "Amanda White",
+    "cost_code": "2-20-100-5770",
+    "firstName": "Amanda",
+    "lastName": "White"
+  },
+  {
+    "id": "user013",
+    "name": "James Thompson",
+    "cost_code": "3-10-130-5770",
+    "firstName": "James",
+    "lastName": "Thompson"
+  },
+  {
+    "id": "user014",
+    "name": "Michelle Harris",
+    "cost_code": "1-10-170-5770",
+    "firstName": "Michelle",
+    "lastName": "Harris"
+  },
+  {
+    "id": "user015",
+    "name": "Kevin Clark",
+    "cost_code": "2-20-110-5770",
+    "firstName": "Kevin",
+    "lastName": "Clark"
   }
 ]

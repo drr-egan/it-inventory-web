@@ -1,29 +1,92 @@
 [
   {
     "id": "history001",
-    "itemName": "Dell Monitor 27\"",
+    "itemName": "Monitor - Dell 27\"",
     "userName": "John Doe",
-    "departmentId": "IT-001-5770",
+    "departmentId": "2-20-060-5770",
     "jobNumber": "JOB-2024-001",
     "quantity": 1,
     "dateEntered": "2024-09-01T10:00:00Z"
   },
   {
     "id": "history002",
-    "itemName": "Logitech Mouse",
+    "itemName": "Mouse - Logitech M650 Bluetooth",
     "userName": "Jane Smith",
-    "departmentId": "IT-002-5770",
+    "departmentId": "1-10-200-5770",
     "jobNumber": "JOB-2024-002",
     "quantity": 1,
     "dateEntered": "2024-09-02T14:30:00Z"
   },
   {
     "id": "history003",
-    "itemName": "USB-C Hub",
+    "itemName": "Adapter - USB C to USB A",
     "userName": "Mike Wilson",
-    "departmentId": "HR-001-5770",
+    "departmentId": "3-10-100-5770",
     "jobNumber": "",
     "quantity": 2,
     "dateEntered": "2024-09-03T09:15:00Z"
+  },
+  {
+    "id": "history004",
+    "itemName": "Cable - HDMI 6ft",
+    "userName": "Sarah Johnson",
+    "departmentId": "2-20-080-5770",
+    "jobNumber": "JOB-2024-003",
+    "quantity": 3,
+    "dateEntered": "2024-09-04T11:20:00Z"
+  },
+  {
+    "id": "history005",
+    "itemName": "Headphones - Soundcore Earbuds P2",
+    "userName": "Robert Brown",
+    "departmentId": "1-10-150-5770",
+    "jobNumber": "JOB-2024-004",
+    "quantity": 1,
+    "dateEntered": "2024-09-05T13:45:00Z"
+  },
+  {
+    "id": "history006",
+    "itemName": "Charger - Dual Port Wall",
+    "userName": "Emily Davis",
+    "departmentId": "2-20-090-5770",
+    "jobNumber": "",
+    "quantity": 2,
+    "dateEntered": "2024-09-06T08:30:00Z"
+  },
+  {
+    "id": "history007",
+    "itemName": "Flash Drive - 64GB",
+    "userName": "Michael Garcia",
+    "departmentId": "3-10-120-5770",
+    "jobNumber": "JOB-2024-005",
+    "quantity": 1,
+    "dateEntered": "2024-09-07T16:15:00Z"
+  },
+  {
+    "id": "history008",
+    "itemName": "Case - iPhone 16 Clip Case",
+    "userName": "Lisa Martinez",
+    "departmentId": "1-10-180-5770",
+    "jobNumber": "JOB-2024-006",
+    "quantity": 1,
+    "dateEntered": "2024-09-08T12:00:00Z"
+  },
+  {
+    "id": "history009",
+    "itemName": "Keyboard and Mouse - Dell Combo",
+    "userName": "David Anderson",
+    "departmentId": "2-20-070-5770",
+    "jobNumber": "",
+    "quantity": 1,
+    "dateEntered": "2024-09-09T10:45:00Z"
+  },
+  {
+    "id": "history010",
+    "itemName": "Cable - Ethernet 6 or 7ft",
+    "userName": "Jennifer Taylor",
+    "departmentId": "3-10-110-5770",
+    "jobNumber": "JOB-2024-007",
+    "quantity": 5,
+    "dateEntered": "2024-09-10T14:20:00Z"
   }
 ]

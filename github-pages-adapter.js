@@ -51,6 +51,14 @@ class GitHubPagesDataAdapter {
                 console.log(`✅ Loaded ${this.data.users.length} users from embedded data`);
                 console.log(`✅ Loaded ${this.data.checkoutHistory.length} checkout records from embedded data`);
 
+                // Debug: Show actual data structures
+                if (this.data.users.length > 0) {
+                    console.log('📋 Sample user:', this.data.users[0]);
+                }
+                if (this.data.checkoutHistory.length > 0) {
+                    console.log('📋 Sample checkout record:', this.data.checkoutHistory[0]);
+                }
+
                 this.saveToLocalStorage();
                 console.log('✅ Embedded data loaded and saved to localStorage');
                 return;
