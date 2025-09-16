@@ -185,6 +185,158 @@
             50% { opacity: 0.7; transform: scale(0.95); }
         }
 
+        /* Material You Modal/Popup */
+        .md-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 16px;
+            animation: md-fade-in 0.3s ease;
+        }
+
+        .md-modal {
+            background-color: var(--md-sys-color-surface-container-high);
+            border-radius: var(--md-sys-shape-corner-extra-large);
+            box-shadow: var(--md-elevation-5);
+            max-width: 560px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            animation: md-scale-in 0.3s ease;
+        }
+
+        .md-modal-header {
+            padding: 24px 24px 16px 24px;
+            border-bottom: 1px solid var(--md-sys-color-outline-variant);
+        }
+
+        .md-modal-title {
+            font: var(--md-sys-typescale-headline-medium);
+            color: var(--md-sys-color-on-surface);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .md-modal-body {
+            padding: 16px 24px;
+        }
+
+        .md-modal-actions {
+            padding: 16px 24px 24px 24px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .md-modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: transparent;
+            border: none;
+            padding: 8px;
+            border-radius: var(--md-sys-shape-corner-full);
+            cursor: pointer;
+            color: var(--md-sys-color-on-surface-variant);
+            transition: all 0.2s ease;
+        }
+
+        .md-modal-close:hover {
+            background-color: var(--md-sys-color-surface-container-highest);
+            color: var(--md-sys-color-on-surface);
+        }
+
+        .md-button {
+            padding: 10px 24px;
+            border-radius: var(--md-sys-shape-corner-full);
+            border: none;
+            font: var(--md-sys-typescale-label-large);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .md-button.primary {
+            background-color: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+        }
+
+        .md-button.primary:hover {
+            background-color: color-mix(in srgb, var(--md-sys-color-primary) 92%, black);
+            box-shadow: var(--md-elevation-1);
+        }
+
+        .md-button.secondary {
+            background-color: var(--md-sys-color-surface-container-highest);
+            color: var(--md-sys-color-on-surface);
+            border: 1px solid var(--md-sys-color-outline);
+        }
+
+        .md-button.secondary:hover {
+            background-color: var(--md-sys-color-surface-container-high);
+        }
+
+        .md-button.error {
+            background-color: var(--md-sys-color-error-container);
+            color: var(--md-sys-color-error);
+        }
+
+        .md-button.error:hover {
+            background-color: color-mix(in srgb, var(--md-sys-color-error-container) 92%, var(--md-sys-color-error));
+        }
+
+        .md-low-stock-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background-color: var(--md-sys-color-warning-container);
+            border-radius: var(--md-sys-shape-corner-small);
+            margin: 8px 0;
+        }
+
+        .md-low-stock-item-name {
+            font: var(--md-sys-typescale-body-medium);
+            color: var(--md-sys-color-on-surface);
+            font-weight: 500;
+        }
+
+        .md-low-stock-item-quantity {
+            font: var(--md-sys-typescale-body-medium);
+            color: var(--md-sys-color-warning);
+            font-weight: 600;
+        }
+
+        @keyframes md-fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes md-scale-in {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
         /* Material Design Ripple Effect */
         .mat-ripple {
             position: relative;
@@ -1622,6 +1774,10 @@
             const [connectionStatus, setConnectionStatus] = useState('connecting');
             const [notifications, setNotifications] = useState([]);
             const [notificationsDismissed, setNotificationsDismissed] = useState(false);
+            const [showLowStockPopup, setShowLowStockPopup] = useState(false);
+            const [lowStockAlwaysHidden, setLowStockAlwaysHidden] = useState(() => {
+                return localStorage.getItem('lowStockAlwaysHidden') === 'true';
+            });
 
             // Form states for Add New Item
             const [newItemForm, setNewItemForm] = useState({
@@ -1835,8 +1991,9 @@
                     message: `Low stock: ${item.name} (${item.quantity} remaining)`
                 })));
 
-                // Reset dismissed state when new low stock items are detected
-                if (lowStockItems.length > 0) {
+                // Show popup if there are low stock items and not permanently hidden
+                if (lowStockItems.length > 0 && !lowStockAlwaysHidden) {
+                    setShowLowStockPopup(true);
                     setNotificationsDismissed(false);
                 }
             };
@@ -1847,6 +2004,23 @@
             };
 
             const dismissNotifications = () => {
+                setNotificationsDismissed(true);
+            };
+
+            // Popup handlers
+            const handlePopupViewInventory = () => {
+                setActiveTab('inventory');
+                setShowLowStockPopup(false);
+            };
+
+            const handlePopupDismiss = () => {
+                setShowLowStockPopup(false);
+            };
+
+            const handlePopupAlwaysHide = () => {
+                setLowStockAlwaysHidden(true);
+                localStorage.setItem('lowStockAlwaysHidden', 'true');
+                setShowLowStockPopup(false);
                 setNotificationsDismissed(true);
             };
 
@@ -2320,37 +2494,6 @@
                         </div>
                     </div>
 
-                    {/* Low Stock Notifications */}
-                    {notifications.length > 0 && !notificationsDismissed && (
-                        <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-400 p-4 relative">
-                            <div className="flex items-start">
-                                <span className="material-icons text-amber-400 mr-3">warning</span>
-                                <div
-                                    className="flex-1 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-800/20 -m-2 p-2 rounded transition-colors"
-                                    onClick={handleNotificationClick}
-                                    title="Click to view low stock items in Inventory"
-                                >
-                                    <p className="text-amber-700 dark:text-amber-300 font-medium">
-                                        Low Stock Alert: {notifications.length} item(s) need attention
-                                    </p>
-                                    <div className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-                                        {notifications.slice(0, 3).map(notif => notif.message).join(' • ')}
-                                        {notifications.length > 3 && ` • +${notifications.length - 3} more`}
-                                    </div>
-                                    <div className="text-xs text-amber-500 dark:text-amber-500 mt-1 font-medium">
-                                        Click to view in Inventory →
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={dismissNotifications}
-                                    className="ml-2 p-1 hover:bg-amber-200 dark:hover:bg-amber-700 rounded-full transition-colors"
-                                    title="Dismiss notification"
-                                >
-                                    <span className="material-icons text-amber-600 dark:text-amber-400 text-lg">close</span>
-                                </button>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Material You Navigation */}
                     <nav className="md-navigation-bar md-elevation-2" style={{
@@ -3303,6 +3446,76 @@
                     >
                         <span className="material-icons">add_shopping_cart</span>
                     </button>
+
+                    {/* Low Stock Popup Modal */}
+                    {showLowStockPopup && notifications.length > 0 && (
+                        <div className="md-modal-overlay" onClick={handlePopupDismiss}>
+                            <div className="md-modal" onClick={(e) => e.stopPropagation()}>
+                                <button className="md-modal-close" onClick={handlePopupDismiss}>
+                                    <span className="material-icons">close</span>
+                                </button>
+
+                                <div className="md-modal-header">
+                                    <h2 className="md-modal-title">
+                                        <span className="material-icons" style={{ color: 'var(--md-sys-color-warning)' }}>
+                                            warning
+                                        </span>
+                                        Low Stock Alert
+                                    </h2>
+                                </div>
+
+                                <div className="md-modal-body">
+                                    <p style={{
+                                        color: 'var(--md-sys-color-on-surface-variant)',
+                                        marginBottom: '16px',
+                                        font: 'var(--md-sys-typescale-body-large)'
+                                    }}>
+                                        {notifications.length} item{notifications.length > 1 ? 's' : ''} {notifications.length > 1 ? 'need' : 'needs'} immediate attention due to low stock levels.
+                                    </p>
+
+                                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                        {notifications.slice(0, 5).map((notif, index) => {
+                                            const item = items.find(i => i.id === notif.id);
+                                            return (
+                                                <div key={notif.id} className="md-low-stock-item">
+                                                    <div className="md-low-stock-item-name">
+                                                        {item?.name || 'Unknown Item'}
+                                                    </div>
+                                                    <div className="md-low-stock-item-quantity">
+                                                        {item?.quantity || 0} remaining
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {notifications.length > 5 && (
+                                            <p style={{
+                                                color: 'var(--md-sys-color-on-surface-variant)',
+                                                textAlign: 'center',
+                                                margin: '12px 0',
+                                                font: 'var(--md-sys-typescale-body-medium)'
+                                            }}>
+                                                ... and {notifications.length - 5} more items
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="md-modal-actions">
+                                    <button className="md-button error" onClick={handlePopupAlwaysHide}>
+                                        <span className="material-icons">visibility_off</span>
+                                        Don't show again
+                                    </button>
+                                    <button className="md-button secondary" onClick={handlePopupDismiss}>
+                                        Dismiss
+                                    </button>
+                                    <button className="md-button primary" onClick={handlePopupViewInventory}>
+                                        <span className="material-icons">inventory_2</span>
+                                        View Inventory
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Snackbar */}
                     <MaterialSnackbar snackbar={snackbar} />
