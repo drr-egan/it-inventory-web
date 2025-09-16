@@ -1501,20 +1501,29 @@
                             const itemsResponse = await fetch('./data/items.json');
                             if (itemsResponse.ok) {
                                 const itemsData = await itemsResponse.json();
-                                const batch = db.batch();
+                                console.log(`Preparing to load ${itemsData.length} items to Firebase`);
 
-                                itemsData.forEach(item => {
-                                    const docRef = db.collection('items').doc(item.id);
-                                    batch.set(docRef, {
-                                        ...item,
-                                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                                        createdBy: 'auto-migration'
+                                // Process in batches due to Firestore 500 doc limit
+                                const batchSize = 400;
+                                for (let i = 0; i < itemsData.length; i += batchSize) {
+                                    const batch = db.batch();
+                                    const itemsBatch = itemsData.slice(i, i + batchSize);
+
+                                    itemsBatch.forEach(item => {
+                                        const docRef = db.collection('items').doc(item.id);
+                                        batch.set(docRef, {
+                                            ...item,
+                                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                            createdBy: 'auto-migration'
+                                        });
                                     });
-                                });
 
-                                await batch.commit();
-                                showSnackbar(`Loaded ${itemsData.length} items`, 'success');
+                                    await batch.commit();
+                                    showSnackbar(`Loaded ${Math.min(i + batchSize, itemsData.length)} / ${itemsData.length} items`, 'info');
+                                }
+
+                                showSnackbar(`Successfully loaded all ${itemsData.length} items`, 'success');
                             }
                         }
 
@@ -1609,21 +1618,23 @@
                                     const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                                     setItems(itemsData);
                                     checkLowStock(itemsData);
+                                    console.log(`Loaded ${itemsData.length} items from Firebase`);
                                 });
 
                             const usersUnsubscribe = db.collection('users')
-                                .limit(100)
                                 .onSnapshot((snapshot) => {
                                     const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                                     setUsers(usersData);
+                                    console.log(`Loaded ${usersData.length} users from Firebase`);
                                 });
 
                             const historyUnsubscribe = db.collection('checkoutHistory')
                                 .orderBy('dateEntered', 'desc')
-                                .limit(50)
+                                .limit(500)
                                 .onSnapshot((snapshot) => {
                                     const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                                     setCheckoutHistory(historyData);
+                                    console.log(`Loaded ${historyData.length} checkout records from Firebase`);
                                 });
 
                             setConnectionStatus('connected');
@@ -1807,6 +1818,91 @@
                     showSnackbar(`Export failed: ${error.message}`, 'error');
                 } finally {
                     setCsvOperations(prev => ({ ...prev, exportingUsers: false }));
+                }
+            };
+
+            // Manual data refresh function for troubleshooting
+            const refreshDataFromFiles = async () => {
+                try {
+                    showSnackbar('Starting manual data refresh...', 'info');
+
+                    // Force reload all data regardless of current state
+                    const [itemsResponse, usersResponse, historyResponse] = await Promise.all([
+                        fetch('./data/items.json'),
+                        fetch('./data/users.json'),
+                        fetch('./data/checkoutHistory.json')
+                    ]);
+
+                    if (itemsResponse.ok) {
+                        const itemsData = await itemsResponse.json();
+                        console.log(`Refreshing ${itemsData.length} items in Firebase`);
+
+                        // Clear existing items first
+                        const existingItems = await db.collection('items').get();
+                        if (!existingItems.empty) {
+                            const deleteBatch = db.batch();
+                            existingItems.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                            await deleteBatch.commit();
+                        }
+
+                        // Add all items in batches
+                        const batchSize = 400;
+                        for (let i = 0; i < itemsData.length; i += batchSize) {
+                            const batch = db.batch();
+                            const itemsBatch = itemsData.slice(i, i + batchSize);
+
+                            itemsBatch.forEach(item => {
+                                const docRef = db.collection('items').doc(item.id);
+                                batch.set(docRef, {
+                                    ...item,
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                    createdBy: 'manual-refresh'
+                                });
+                            });
+
+                            await batch.commit();
+                            showSnackbar(`Refreshed ${Math.min(i + batchSize, itemsData.length)} / ${itemsData.length} items`, 'info');
+                        }
+                    }
+
+                    if (usersResponse.ok) {
+                        const usersData = await usersResponse.json();
+                        console.log(`Refreshing ${usersData.length} users in Firebase`);
+
+                        // Clear existing users first
+                        const existingUsers = await db.collection('users').get();
+                        if (!existingUsers.empty) {
+                            const deleteBatch = db.batch();
+                            existingUsers.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                            await deleteBatch.commit();
+                        }
+
+                        // Add all users in batches
+                        const batchSize = 400;
+                        for (let i = 0; i < usersData.length; i += batchSize) {
+                            const batch = db.batch();
+                            const usersBatch = usersData.slice(i, i + batchSize);
+
+                            usersBatch.forEach(user => {
+                                const docRef = db.collection('users').doc(user.id);
+                                batch.set(docRef, {
+                                    ...user,
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    createdBy: 'manual-refresh',
+                                    active: true
+                                });
+                            });
+
+                            await batch.commit();
+                            showSnackbar(`Refreshed ${Math.min(i + batchSize, usersData.length)} / ${usersData.length} users`, 'info');
+                        }
+                    }
+
+                    showSnackbar('Manual data refresh completed successfully!', 'success');
+                } catch (error) {
+                    console.error('Manual refresh error:', error);
+                    showSnackbar(`Manual refresh failed: ${error.message}`, 'error');
                 }
             };
 
@@ -2730,6 +2826,15 @@
                                                     >
                                                         <span className="material-icons mr-2">restore</span>
                                                         Reset All Quantities to Zero
+                                                    </MaterialButton>
+                                                    <MaterialButton
+                                                        onClick={refreshDataFromFiles}
+                                                        variant="contained"
+                                                        color="primary"
+                                                        className="w-full"
+                                                    >
+                                                        <span className="material-icons mr-2">refresh</span>
+                                                        Force Refresh All Data from Files
                                                     </MaterialButton>
                                                 </div>
                                             </div>
