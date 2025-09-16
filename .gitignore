@@ -23,3 +23,17 @@ node_modules/
 # Environment files
 .env
 .env.local
+
+# Python virtual environments
+firebase-env/
+venv/
+env/
+.venv/
+
+# Large backup files
+*.tar.gz
+*.zip
+
+# SQLite files that cause deployment issues
+*.db-shm
+*.db-wal
