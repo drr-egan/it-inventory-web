@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Inventory Management - Firebase Material</title>
+
+    <!-- GitHub Pages Compatible CSP -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval'
+            https://unpkg.com
+            https://cdn.tailwindcss.com
+            https://cdnjs.cloudflare.com
+            https://www.gstatic.com
+            https://fonts.googleapis.com;
+        style-src 'self' 'unsafe-inline'
+            https://cdn.tailwindcss.com
+            https://fonts.googleapis.com;
+        img-src 'self' data: blob:;
+        font-src 'self' data:
+            https://fonts.gstatic.com;
+        connect-src 'self'
+            https://*.firebaseio.com
+            https://*.googleapis.com
+            https://*.gstatic.com
+            https://firestore.googleapis.com;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+        frame-ancestors 'none';
+    ">
+
+    <!-- Material Design CSS -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase SDK - Compatible with GitHub Pages -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Firebase Configuration - Your actual config -->
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCBOBb7mJPoI7cwubp12xnmjglLkuWYWYI",
+            authDomain: "it-inventory-eaebc.firebaseapp.com",
+            projectId: "it-inventory-eaebc",
+            storageBucket: "it-inventory-eaebc.firebasestorage.app",
+            messagingSenderId: "1081021280207",
+            appId: "1:1081021280207:web:9619a96bff1692493aecba",
+            measurementId: "G-NCD75FKBK4"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        // Initialize services
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // Enable offline persistence
+        db.enablePersistence().catch((err) => {
+            if (err.code == 'failed-precondition') {
+                console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
+            } else if (err.code == 'unimplemented') {
+                console.warn('The current browser does not support offline persistence');
+            }
+        });
+
+        console.log('🔥 Firebase initialized with offline persistence for GitHub Pages');
+    </script>
+
+    <style>
+        /* Material Design Custom Styles */
+        * {
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        /* Material Design Shadows */
+        .mat-elevation-1 { box-shadow: 0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12); }
+        .mat-elevation-2 { box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12); }
+        .mat-elevation-4 { box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12); }
+        .mat-elevation-8 { box-shadow: 0px 5px 5px -3px rgba(0,0,0,0.2), 0px 8px 10px 1px rgba(0,0,0,0.14), 0px 3px 14px 2px rgba(0,0,0,0.12); }
+
+        /* Material Design Input Fields */
+        .mat-input {
+            position: relative;
+        }
+
+        .mat-input input, .mat-input select, .mat-input textarea {
+            width: 100%;
+            padding: 16px 12px 8px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: transparent;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .mat-input input:focus, .mat-input select:focus, .mat-input textarea:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+        }
+
+        .mat-input label {
+            position: absolute;
+            left: 12px;
+            top: 16px;
+            color: #757575;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            pointer-events: none;
+            background: white;
+            padding: 0 4px;
+        }
+
+        .mat-input input:focus + label,
+        .mat-input input:not(:placeholder-shown) + label,
+        .mat-input select:focus + label,
+        .mat-input textarea:focus + label,
+        .mat-input textarea:not(:placeholder-shown) + label {
+            top: -6px;
+            font-size: 12px;
+            color: #1976d2;
+        }
+
+        /* Material Design FAB */
+        .mat-fab {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+
+        .mat-fab:hover {
+            transform: scale(1.1);
+        }
+
+        /* Material Design Tabs */
+        .mat-tab-nav {
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .mat-tab {
+            position: relative;
+            padding: 16px 24px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
+        }
+
+        .mat-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #1976d2;
+            transition: all 0.2s ease;
+        }
+
+        /* Material Design Cards */
+        .mat-card {
+            border-radius: 4px;
+            background: white;
+            transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+
+        .mat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Material Design Snackbar */
+        .mat-snackbar {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #323232;
+            color: white;
+            padding: 14px 24px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateX(-50%) translateY(100%); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+
+        /* Dark Mode Material Design */
+        .dark .mat-card { background: #424242; }
+        .dark .mat-input input,
+        .dark .mat-input select,
+        .dark .mat-input textarea {
+            background: #424242;
+            border-color: #616161;
+            color: white;
+        }
+        .dark .mat-input label {
+            background: #424242;
+            color: #bdbdbd;
+        }
+        .dark .mat-tab-nav { border-bottom-color: #616161; }
+
+        /* Loading animations */
+        .mat-spinner {
+            animation: mat-spinner-rotate 2s linear infinite;
+        }
+
+        @keyframes mat-spinner-rotate {
+            0% { transform: rotate(0); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* GitHub Pages optimization */
+        .github-pages-indicator {
+            background: linear-gradient(45deg, #4CAF50, #2196F3);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Material Design Hook for Snackbar
+        const useSnackbar = () => {
+            const [snackbar, setSnackbar] = useState(null);
+
+            const showSnackbar = (message, type = 'info', duration = 4000) => {
+                setSnackbar({ message, type });
+                setTimeout(() => setSnackbar(null), duration);
+            };
+
+            return { snackbar, showSnackbar };
+        };
+
+        // Material Design Hook for Theme
+        const useTheme = () => {
+            const [isDarkMode, setIsDarkMode] = useState(() => {
+                const saved = localStorage.getItem('darkMode');
+                return saved ? JSON.parse(saved) : false;
+            });
+
+            useEffect(() => {
+                localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
+                if (isDarkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }, [isDarkMode]);
+
+            return { isDarkMode, toggleDarkMode: () => setIsDarkMode(!isDarkMode) };
+        };
+
+        // Material Design Input Component
+        const MaterialInput = ({ label, type = 'text', value, onChange, placeholder = ' ', ...props }) => {
+            return (
+                <div className="mat-input">
+                    <input
+                        type={type}
+                        value={value}
+                        onChange={onChange}
+                        placeholder={placeholder}
+                        {...props}
+                    />
+                    <label>{label}</label>
+                </div>
+            );
+        };
+
+        // Material Design Button Component
+        const MaterialButton = ({ children, variant = 'contained', color = 'primary', onClick, disabled, className = '', ...props }) => {
+            const baseClasses = 'inline-flex items-center justify-center px-6 py-3 font-medium text-sm rounded transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
+
+            const variantClasses = {
+                contained: {
+                    primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 mat-elevation-2',
+                    secondary: 'bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500 mat-elevation-2',
+                    success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500 mat-elevation-2',
+                    error: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 mat-elevation-2'
+                },
+                outlined: {
+                    primary: 'border border-blue-600 text-blue-600 hover:bg-blue-50 focus:ring-blue-500',
+                    secondary: 'border border-gray-600 text-gray-600 hover:bg-gray-50 focus:ring-gray-500',
+                    success: 'border border-green-600 text-green-600 hover:bg-green-50 focus:ring-green-500',
+                    error: 'border border-red-600 text-red-600 hover:bg-red-50 focus:ring-red-500'
+                },
+                text: {
+                    primary: 'text-blue-600 hover:bg-blue-50 focus:ring-blue-500',
+                    secondary: 'text-gray-600 hover:bg-gray-50 focus:ring-gray-500',
+                    success: 'text-green-600 hover:bg-green-50 focus:ring-green-500',
+                    error: 'text-red-600 hover:bg-red-50 focus:ring-red-500'
+                }
+            };
+
+            const buttonClasses = `${baseClasses} ${variantClasses[variant][color]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`;
+
+            return (
+                <button
+                    className={buttonClasses}
+                    onClick={onClick}
+                    disabled={disabled}
+                    {...props}
+                >
+                    {children}
+                </button>
+            );
+        };
+
+        // Material Design Card Component
+        const MaterialCard = ({ children, elevation = 1, className = '', ...props }) => {
+            return (
+                <div className={`mat-card mat-elevation-${elevation} p-6 ${className}`} {...props}>
+                    {children}
+                </div>
+            );
+        };
+
+        // Error Boundary
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+
+            static getDerivedStateFromError(error) {
+                return { hasError: true };
+            }
+
+            componentDidCatch(error, errorInfo) {
+                console.error('🚨 Application Error:', error);
+                this.setState({ error });
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                            <MaterialCard elevation={8} className="max-w-md">
+                                <div className="flex items-center text-red-600 mb-4">
+                                    <span className="material-icons mr-2">error</span>
+                                    <h1 className="text-xl font-bold">Application Error</h1>
+                                </div>
+                                <p className="text-gray-700 dark:text-gray-300 mb-4">
+                                    {this.state.error?.message || 'An unexpected error occurred'}
+                                </p>
+                                <MaterialButton
+                                    onClick={() => window.location.reload()}
+                                    variant="contained"
+                                    color="primary"
+                                    className="w-full"
+                                >
+                                    <span className="material-icons mr-2">refresh</span>
+                                    Refresh Page
+                                </MaterialButton>
+                            </MaterialCard>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // Authentication Component with Material Design
+        const AuthComponent = () => {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const { showSnackbar } = useSnackbar();
+
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((user) => {
+                    setUser(user);
+                    setLoading(false);
+                });
+                return unsubscribe;
+            }, []);
+
+            const handleSignIn = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+
+                try {
+                    await auth.signInWithEmailAndPassword(email, password);
+                    showSnackbar('Welcome back!', 'success');
+                } catch (error) {
+                    setError(error.message);
+                    showSnackbar(error.message, 'error');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                        <div className="text-center">
+                            <div className="mat-spinner w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                            <p className="text-gray-600 dark:text-gray-400">Loading Firebase...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!user) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+                        <MaterialCard elevation={8} className="w-full max-w-md">
+                            <div className="text-center mb-8">
+                                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full mb-4">
+                                    <span className="material-icons text-2xl text-blue-600 dark:text-blue-400">inventory</span>
+                                </div>
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">IT Inventory</h2>
+                                <p className="text-gray-600 dark:text-gray-400 mb-2">Material Design × Firebase</p>
+                                <div className="github-pages-indicator">
+                                    Hosted on GitHub Pages
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleSignIn} className="space-y-6">
+                                <MaterialInput
+                                    label="Email Address"
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+
+                                <MaterialInput
+                                    label="Password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                />
+
+                                {error && (
+                                    <div className="flex items-center text-red-600 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded">
+                                        <span className="material-icons mr-2 text-sm">error</span>
+                                        {error}
+                                    </div>
+                                )}
+
+                                <MaterialButton
+                                    type="submit"
+                                    variant="contained"
+                                    color="primary"
+                                    disabled={loading}
+                                    className="w-full"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                            Signing in...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-icons mr-2">login</span>
+                                            Sign In
+                                        </>
+                                    )}
+                                </MaterialButton>
+                            </form>
+                        </MaterialCard>
+                    </div>
+                );
+            }
+
+            return (
+                <header className="bg-blue-600 dark:bg-blue-800 text-white mat-elevation-4">
+                    <div className="max-w-7xl mx-auto px-4">
+                        <div className="flex items-center justify-between h-16">
+                            <div className="flex items-center space-x-4">
+                                <span className="material-icons text-2xl">inventory</span>
+                                <div>
+                                    <h1 className="font-semibold">IT Inventory System</h1>
+                                    <div className="flex items-center space-x-2">
+                                        <div className="github-pages-indicator text-xs">
+                                            GitHub Pages + Firebase
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center space-x-4">
+                                <div className="flex items-center space-x-2 text-sm">
+                                    <span className="material-icons text-sm">account_circle</span>
+                                    <span>{user.email}</span>
+                                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                </div>
+
+                                <MaterialButton
+                                    onClick={() => auth.signOut()}
+                                    variant="text"
+                                    className="text-white hover:bg-blue-700 dark:hover:bg-blue-900"
+                                >
+                                    <span className="material-icons mr-1">logout</span>
+                                    Sign Out
+                                </MaterialButton>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            );
+        };
+
+        // Snackbar Component
+        const MaterialSnackbar = ({ snackbar }) => {
+            if (!snackbar) return null;
+
+            const iconMap = {
+                success: 'check_circle',
+                error: 'error',
+                warning: 'warning',
+                info: 'info'
+            };
+
+            return (
+                <div className="mat-snackbar flex items-center">
+                    <span className="material-icons mr-2 text-sm">
+                        {iconMap[snackbar.type] || 'info'}
+                    </span>
+                    {snackbar.message}
+                </div>
+            );
+        };
+
+        // Simplified Demo App for GitHub Pages
+        const GitHubPagesFirebaseApp = () => {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [items, setItems] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [connectionStatus, setConnectionStatus] = useState('connecting');
+
+            const { isDarkMode, toggleDarkMode } = useTheme();
+            const { snackbar, showSnackbar } = useSnackbar();
+
+            // Firebase connection and data loading
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                    setUser(user);
+                    setLoading(false);
+
+                    if (user) {
+                        try {
+                            setConnectionStatus('connecting');
+
+                            // Load data from Firebase
+                            const itemsSnapshot = await db.collection('items').limit(20).get();
+                            const usersSnapshot = await db.collection('users').limit(20).get();
+
+                            setItems(itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                            setUsers(usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+                            setConnectionStatus('connected');
+                            showSnackbar('Connected to Firebase!', 'success');
+
+                        } catch (error) {
+                            console.error('Firebase connection error:', error);
+                            setConnectionStatus('error');
+                            showSnackbar('Connection error: ' + error.message, 'error');
+                        }
+                    }
+                });
+
+                return unsubscribe;
+            }, []);
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                        <div className="text-center">
+                            <div className="mat-spinner w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                            <p className="text-gray-600 dark:text-gray-400">Loading GitHub Pages + Firebase...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!user) {
+                return (
+                    <>
+                        <AuthComponent />
+                        <MaterialSnackbar snackbar={snackbar} />
+                    </>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+                    <AuthComponent />
+
+                    {/* Connection Status */}
+                    <div className={`px-4 py-2 text-center text-sm transition-colors duration-300 ${
+                        connectionStatus === 'connected'
+                            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                            : connectionStatus === 'error'
+                            ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                            : 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300'
+                    }`}>
+                        <div className="flex items-center justify-center space-x-2">
+                            <span className="material-icons text-sm">
+                                {connectionStatus === 'connected' ? 'cloud_done' :
+                                 connectionStatus === 'error' ? 'cloud_off' : 'cloud_sync'}
+                            </span>
+                            <span>
+                                {connectionStatus === 'connected' ? 'Firebase Connected - Hybrid deployment active' :
+                                 connectionStatus === 'error' ? 'Firebase Connection Error' :
+                                 'Connecting to Firebase...'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Main Content */}
+                    <main className="max-w-7xl mx-auto p-6">
+                        <div className="text-center mb-8">
+                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+                                🎉 Hybrid Deployment Success!
+                            </h1>
+                            <p className="text-gray-600 dark:text-gray-400 mb-6">
+                                Your app is now running with GitHub Pages hosting + Firebase backend
+                            </p>
+
+                            <div className="flex justify-center space-x-4 mb-8">
+                                <MaterialButton
+                                    onClick={toggleDarkMode}
+                                    variant="outlined"
+                                    color="primary"
+                                >
+                                    <span className="material-icons mr-2">
+                                        {isDarkMode ? 'light_mode' : 'dark_mode'}
+                                    </span>
+                                    {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                                </MaterialButton>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Items Preview */}
+                            <MaterialCard elevation={2}>
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                    <span className="material-icons mr-2 text-blue-600">inventory_2</span>
+                                    Items from Firebase
+                                </h3>
+                                <div className="space-y-3">
+                                    {items.slice(0, 5).map(item => (
+                                        <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
+                                            <div>
+                                                <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
+                                                <div className="text-sm text-gray-600 dark:text-gray-400">{item.category}</div>
+                                            </div>
+                                            <div className="text-green-600 dark:text-green-400 font-medium">
+                                                {item.quantity}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                                    Showing 5 of {items.length} total items
+                                </div>
+                            </MaterialCard>
+
+                            {/* Users Preview */}
+                            <MaterialCard elevation={2}>
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                    <span className="material-icons mr-2 text-green-600">people</span>
+                                    Users from Firebase
+                                </h3>
+                                <div className="space-y-3">
+                                    {users.slice(0, 5).map(user => (
+                                        <div key={user.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
+                                            <div>
+                                                <div className="font-medium text-gray-900 dark:text-white">
+                                                    {user.name || `${user.firstName} ${user.lastName}`}
+                                                </div>
+                                                <div className="text-sm text-gray-600 dark:text-gray-400">{user.costCode || user.cost_code}</div>
+                                            </div>
+                                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                                    Showing 5 of {users.length}+ users (first 20 loaded)
+                                </div>
+                            </MaterialCard>
+                        </div>
+
+                        {/* Deployment Success Info */}
+                        <MaterialCard elevation={4} className="mt-8 !p-8">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                                <span className="material-icons mr-3 text-green-600">check_circle</span>
+                                Deployment Complete!
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 dark:text-white mb-2">✅ What's Working</h4>
+                                    <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                        <li>• GitHub Pages hosting (FREE)</li>
+                                        <li>• Firebase real-time database</li>
+                                        <li>• User authentication</li>
+                                        <li>• Material Design interface</li>
+                                        <li>• Dark/Light mode toggle</li>
+                                        <li>• Offline persistence</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 dark:text-white mb-2">🚀 Next Steps</h4>
+                                    <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                        <li>1. Replace this page with full app</li>
+                                        <li>2. Add all admin functionality</li>
+                                        <li>3. Deploy to GitHub Pages</li>
+                                        <li>4. Share URL with your team</li>
+                                        <li>5. Access from any device!</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </MaterialCard>
+                    </main>
+
+                    {/* Material Design FAB */}
+                    <button
+                        onClick={() => showSnackbar('Full app deployment coming next!', 'info')}
+                        className="mat-fab bg-blue-600 hover:bg-blue-700 text-white mat-elevation-8"
+                    >
+                        <span className="material-icons">rocket_launch</span>
+                    </button>
+
+                    {/* Snackbar */}
+                    <MaterialSnackbar snackbar={snackbar} />
+                </div>
+            );
+        };
+
+        // Render the GitHub Pages + Firebase hybrid app
+        ReactDOM.render(
+            <ErrorBoundary>
+                <GitHubPagesFirebaseApp />
+            </ErrorBoundary>,
+            document.getElementById('root')
+        );
+    </script>
+</body>
+</html>

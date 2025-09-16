@@ -20,33 +20,8 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Firebase Configuration (Embedded for GitHub Pages) -->
-    <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCBOBb7mJPoI7cwubp12xnmjglLkuWYWYI",
-            authDomain: "it-inventory-eaebc.firebaseapp.com",
-            projectId: "it-inventory-eaebc",
-            storageBucket: "it-inventory-eaebc.firebasestorage.app",
-            messagingSenderId: "1081021280207",
-            appId: "1:1081021280207:web:9619a96bff1692493aecba"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-
-        // Initialize Google Auth Provider
-        const googleProvider = new firebase.auth.GoogleAuthProvider();
-        googleProvider.addScope('email');
-        googleProvider.addScope('profile');
-
-        // Enable offline persistence
-        db.enablePersistence({synchronizeTabs: true}).catch((err) => {
-            console.warn('Firestore persistence not available:', err.code);
-        });
-    </script>
+    <!-- Firebase Configuration -->
+    <script src="./firebase-config.js"></script>
 
     <style>
         /* Material Design Custom Styles */
@@ -206,62 +181,20 @@
             to { transform: translateX(-50%) translateY(0); opacity: 1; }
         }
 
-        /* Enhanced Dark Mode Material Design */
-        .dark .mat-card {
-            background: #1f2937;
-            border: 1px solid #374151;
-        }
+        /* Dark Mode Material Design */
+        .dark .mat-card { background: #424242; }
         .dark .mat-input input,
         .dark .mat-input select,
         .dark .mat-input textarea {
-            background: #374151;
-            border-color: #4b5563;
-            color: #f9fafb;
-        }
-        .dark .mat-input input:focus,
-        .dark .mat-input select:focus,
-        .dark .mat-input textarea:focus {
-            background: #374151;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+            background: #424242;
+            border-color: #616161;
+            color: white;
         }
         .dark .mat-input label {
-            background: #1f2937;
-            color: #9ca3af;
+            background: #424242;
+            color: #bdbdbd;
         }
-        .dark .mat-input input:focus + label,
-        .dark .mat-input input:not(:placeholder-shown) + label,
-        .dark .mat-input select:focus + label,
-        .dark .mat-input textarea:focus + label,
-        .dark .mat-input textarea:not(:placeholder-shown) + label {
-            color: #3b82f6;
-            background: #1f2937;
-        }
-        .dark .mat-tab-nav { border-bottom-color: #4b5563; }
-
-        /* Dark mode enhancements */
-        .dark body { background: #111827; }
-        .dark .mat-snackbar {
-            background: #374151;
-            border: 1px solid #4b5563;
-        }
-
-        /* Mobile optimizations */
-        @media (max-width: 768px) {
-            .mat-tab {
-                padding: 12px 16px;
-                font-size: 14px;
-            }
-            .mat-card {
-                border-radius: 8px;
-            }
-            .mat-input input,
-            .mat-input select,
-            .mat-input textarea {
-                padding: 14px 10px 6px 10px;
-                font-size: 16px; /* Prevents zoom on iOS */
-            }
-        }
+        .dark .mat-tab-nav { border-bottom-color: #616161; }
 
         /* Custom scrollbar */
         ::-webkit-scrollbar {
@@ -456,7 +389,6 @@
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
-            const [showEmailForm, setShowEmailForm] = useState(false);
             const { showSnackbar } = useSnackbar();
 
             useEffect(() => {
@@ -483,29 +415,6 @@
                 }
             };
 
-            const handleGoogleSignIn = async () => {
-                setError('');
-                setLoading(true);
-
-                try {
-                    const result = await auth.signInWithPopup(googleProvider);
-                    const user = result.user;
-                    showSnackbar(`Welcome ${user.displayName || user.email}!`, 'success');
-                } catch (error) {
-                    console.error('Google Sign-In Error:', error);
-                    if (error.code === 'auth/popup-closed-by-user') {
-                        showSnackbar('Sign-in was cancelled', 'warning');
-                    } else if (error.code === 'auth/popup-blocked') {
-                        showSnackbar('Pop-up blocked. Please allow pop-ups for this site.', 'error');
-                    } else {
-                        setError(error.message);
-                        showSnackbar(`Google Sign-In failed: ${error.message}`, 'error');
-                    }
-                } finally {
-                    setLoading(false);
-                }
-            };
-
             if (loading) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -519,132 +428,61 @@
 
             if (!user) {
                 return (
-                    <div className="min-h-screen relative bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-indigo-900">
-                        {/* Email Sign-In Toggle - Small corner button */}
-                        <div className="absolute top-4 right-4 z-10">
-                            <MaterialButton
-                                onClick={() => setShowEmailForm(!showEmailForm)}
-                                variant="text"
-                                className="!p-2 !min-w-0 !text-xs opacity-60 hover:opacity-100 transition-opacity"
-                            >
-                                <span className="material-icons text-sm">alternate_email</span>
-                            </MaterialButton>
-                        </div>
-
-                        {/* Email Form Overlay */}
-                        {showEmailForm && (
-                            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-20 flex items-center justify-center p-4">
-                                <MaterialCard elevation={16} className="w-full max-w-sm relative">
-                                    <MaterialButton
-                                        onClick={() => setShowEmailForm(false)}
-                                        variant="text"
-                                        className="!absolute !top-2 !right-2 !p-2 !min-w-0"
-                                    >
-                                        <span className="material-icons text-sm">close</span>
-                                    </MaterialButton>
-
-                                    <h3 className="text-lg font-medium mb-4 dark:text-white">Email Sign-In</h3>
-
-                                    <form onSubmit={handleSignIn} className="space-y-4">
-                                        <MaterialInput
-                                            label="Email Address"
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            required
-                                        />
-
-                                        <MaterialInput
-                                            label="Password"
-                                            type="password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            required
-                                        />
-
-                                        {error && (
-                                            <div className="flex items-center text-red-600 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded">
-                                                <span className="material-icons mr-2 text-sm">error</span>
-                                                {error}
-                                            </div>
-                                        )}
-
-                                        <MaterialButton
-                                            type="submit"
-                                            variant="contained"
-                                            color="primary"
-                                            disabled={loading}
-                                            className="w-full"
-                                        >
-                                            {loading ? (
-                                                <>
-                                                    <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                                                    Signing in...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <span className="material-icons mr-2">login</span>
-                                                    Sign In
-                                                </>
-                                            )}
-                                        </MaterialButton>
-                                    </form>
-                                </MaterialCard>
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+                        <MaterialCard elevation={8} className="w-full max-w-md">
+                            <div className="text-center mb-8">
+                                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full mb-4">
+                                    <span className="material-icons text-2xl text-blue-600 dark:text-blue-400">inventory</span>
+                                </div>
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">IT Inventory</h2>
+                                <p className="text-gray-600 dark:text-gray-400">Sign in to access your inventory system</p>
                             </div>
-                        )}
 
-                        {/* Main Sign-In Interface - Google Only */}
-                        <div className="flex items-center justify-center min-h-screen p-4">
-                            <div className="text-center max-w-md">
-                                {/* Logo and Branding */}
-                                <div className="mb-12">
-                                    <div className="inline-flex items-center justify-center w-20 h-20 bg-white dark:bg-gray-800 rounded-3xl shadow-lg mb-6">
-                                        <span className="material-icons text-4xl text-blue-600 dark:text-blue-400">inventory</span>
+                            <form onSubmit={handleSignIn} className="space-y-6">
+                                <MaterialInput
+                                    label="Email Address"
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+
+                                <MaterialInput
+                                    label="Password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                />
+
+                                {error && (
+                                    <div className="flex items-center text-red-600 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded">
+                                        <span className="material-icons mr-2 text-sm">error</span>
+                                        {error}
                                     </div>
-                                    <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                                        IT Inventory
-                                    </h1>
-                                    <p className="text-gray-600 dark:text-gray-300 text-lg">
-                                        Enterprise Inventory Management
-                                    </p>
-                                    <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
-                                        Real-time tracking • Material Design • Firebase powered
-                                    </p>
-                                </div>
+                                )}
 
-                                {/* Primary Google Sign-In */}
-                                <div className="space-y-4">
-                                    <MaterialButton
-                                        onClick={handleGoogleSignIn}
-                                        variant="contained"
-                                        disabled={loading}
-                                        className="w-full !bg-white hover:!bg-gray-50 !text-gray-700 !border !border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 !py-4 !text-lg"
-                                    >
-                                        {loading ? (
-                                            <>
-                                                <div className="mat-spinner w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full mr-3"></div>
-                                                Signing in...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-6 h-6 mr-3" viewBox="0 0 24 24">
-                                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                                                </svg>
-                                                Continue with Google
-                                            </>
-                                        )}
-                                    </MaterialButton>
-
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-6">
-                                        Secure authentication powered by Google<br/>
-                                        Your data is protected and never shared
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                                <MaterialButton
+                                    type="submit"
+                                    variant="contained"
+                                    color="primary"
+                                    disabled={loading}
+                                    className="w-full"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                            Signing in...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-icons mr-2">login</span>
+                                            Sign In
+                                        </>
+                                    )}
+                                </MaterialButton>
+                            </form>
+                        </MaterialCard>
                     </div>
                 );
             }
@@ -947,21 +785,11 @@
                 setIsScanning(true);
 
                 try {
-                    // Enhanced search: exact match first, then partial matches
-                    let item = items.find(i =>
+                    const item = items.find(i =>
+                        i.name.toLowerCase().includes(itemIdentifier.toLowerCase()) ||
                         i.asin === itemIdentifier ||
                         i.id === itemIdentifier
                     );
-
-                    // If no exact match, try partial name search
-                    if (!item) {
-                        const searchLower = itemIdentifier.toLowerCase().trim();
-                        item = items.find(i =>
-                            i.name.toLowerCase() === searchLower ||
-                            i.name.toLowerCase().includes(searchLower) ||
-                            (i.category && i.category.toLowerCase().includes(searchLower))
-                        );
-                    }
 
                     if (!item) {
                         showSnackbar(`Item not found: ${itemIdentifier}`, 'error');
@@ -1003,14 +831,7 @@
             };
 
             const handleKeyPress = (e) => {
-                if (e.key === 'Enter' && scanInput.trim() && !isScanning) {
-                    e.preventDefault();
-                    handleItemScanned(scanInput.trim());
-                }
-            };
-
-            const handleScanClick = () => {
-                if (scanInput.trim()) {
+                if (e.key === 'Enter' && scanInput.trim()) {
                     handleItemScanned(scanInput.trim());
                 }
             };
@@ -1059,13 +880,12 @@
                     <div className="space-y-4">
                         <MaterialInput
                             ref={inputRef}
-                            label="Scan barcode or type item name/ASIN"
+                            label="Scan or type item name"
                             value={scanInput}
                             onChange={(e) => setScanInput(e.target.value)}
-                            onKeyDown={handleKeyPress}
+                            onKeyPress={handleKeyPress}
                             disabled={isScanning}
                             autoFocus
-                            placeholder="Enter item name, ASIN, or scan barcode..."
                         />
 
                         <div className="flex space-x-3">
@@ -1080,7 +900,7 @@
                                 Voice Search
                             </MaterialButton>
                             <MaterialButton
-                                onClick={handleScanClick}
+                                onClick={() => handleItemScanned(scanInput.trim())}
                                 disabled={isScanning || !scanInput.trim()}
                                 variant="contained"
                                 color="primary"
@@ -1181,34 +1001,6 @@
             const [connectionStatus, setConnectionStatus] = useState('connecting');
             const [notifications, setNotifications] = useState([]);
 
-            // Form states for Add New Item
-            const [newItemForm, setNewItemForm] = useState({
-                name: '',
-                price: '',
-                quantity: '',
-                asin: '',
-                category: ''
-            });
-            const [isCreatingItem, setIsCreatingItem] = useState(false);
-
-            // Form states for Add New User
-            const [newUserForm, setNewUserForm] = useState({
-                firstName: '',
-                lastName: '',
-                costCode: '',
-                email: '',
-                department: ''
-            });
-            const [isCreatingUser, setIsCreatingUser] = useState(false);
-
-            // CSV and bulk operation states
-            const [csvOperations, setCsvOperations] = useState({
-                importingItems: false,
-                importingUsers: false,
-                exportingItems: false,
-                exportingUsers: false
-            });
-
             const { isDarkMode, toggleDarkMode } = useTheme();
             const { snackbar, showSnackbar } = useSnackbar();
 
@@ -1298,314 +1090,6 @@
                 setCart([]);
             };
 
-            // Handle creating new item
-            const handleCreateItem = async (e) => {
-                e.preventDefault();
-                if (!newItemForm.name.trim()) {
-                    showSnackbar('Item name is required', 'error');
-                    return;
-                }
-
-                setIsCreatingItem(true);
-                try {
-                    const itemData = {
-                        name: newItemForm.name.trim(),
-                        price: parseFloat(newItemForm.price) || 0,
-                        quantity: parseInt(newItemForm.quantity) || 0,
-                        asin: newItemForm.asin.trim(),
-                        category: newItemForm.category.trim() || 'Uncategorized',
-                        minThreshold: 5,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                        createdBy: auth.currentUser?.email || 'unknown'
-                    };
-
-                    await db.collection('items').add(itemData);
-
-                    // Reset form
-                    setNewItemForm({
-                        name: '',
-                        price: '',
-                        quantity: '',
-                        asin: '',
-                        category: ''
-                    });
-
-                    showSnackbar(`Item "${itemData.name}" created successfully!`, 'success');
-                } catch (error) {
-                    console.error('Error creating item:', error);
-                    showSnackbar(`Failed to create item: ${error.message}`, 'error');
-                } finally {
-                    setIsCreatingItem(false);
-                }
-            };
-
-            // Handle creating new user
-            const handleCreateUser = async (e) => {
-                e.preventDefault();
-                if (!newUserForm.firstName.trim() || !newUserForm.lastName.trim()) {
-                    showSnackbar('First name and last name are required', 'error');
-                    return;
-                }
-
-                setIsCreatingUser(true);
-                try {
-                    const userData = {
-                        firstName: newUserForm.firstName.trim(),
-                        lastName: newUserForm.lastName.trim(),
-                        name: `${newUserForm.firstName.trim()} ${newUserForm.lastName.trim()}`,
-                        costCode: newUserForm.costCode.trim() || `${Date.now()}-5770`,
-                        email: newUserForm.email.trim(),
-                        department: newUserForm.department.trim(),
-                        status: 'active',
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        createdBy: auth.currentUser?.email || 'unknown'
-                    };
-
-                    await db.collection('users').add(userData);
-
-                    // Reset form
-                    setNewUserForm({
-                        firstName: '',
-                        lastName: '',
-                        costCode: '',
-                        email: '',
-                        department: ''
-                    });
-
-                    showSnackbar(`User "${userData.name}" created successfully!`, 'success');
-                } catch (error) {
-                    console.error('Error creating user:', error);
-                    showSnackbar(`Failed to create user: ${error.message}`, 'error');
-                } finally {
-                    setIsCreatingUser(false);
-                }
-            };
-
-            // CSV Export Functions
-            const exportItemsToCSV = async () => {
-                setCsvOperations(prev => ({ ...prev, exportingItems: true }));
-                try {
-                    const csvHeader = 'Item Name,Category,Quantity,Price,ASIN,Min Threshold\n';
-                    const csvRows = items.map(item =>
-                        `"${(item.name || '').replace(/"/g, '""')}","${(item.category || '').replace(/"/g, '""')}",${item.quantity || 0},${item.price || 0},"${(item.asin || '').replace(/"/g, '""')}",${item.minThreshold || 5}`
-                    ).join('\n');
-
-                    const csvContent = csvHeader + csvRows;
-                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `inventory-items-${new Date().toISOString().split('T')[0]}.csv`;
-                    link.click();
-
-                    showSnackbar(`Exported ${items.length} items to CSV`, 'success');
-                } catch (error) {
-                    showSnackbar(`Export failed: ${error.message}`, 'error');
-                } finally {
-                    setCsvOperations(prev => ({ ...prev, exportingItems: false }));
-                }
-            };
-
-            const exportUsersToCSV = async () => {
-                setCsvOperations(prev => ({ ...prev, exportingUsers: true }));
-                try {
-                    const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Email,Department,Status\n';
-                    const csvRows = users.map(user =>
-                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.email || '').replace(/"/g, '""')}","${(user.department || '').replace(/"/g, '""')}","${user.status || 'active'}"`
-                    ).join('\n');
-
-                    const csvContent = csvHeader + csvRows;
-                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `inventory-users-${new Date().toISOString().split('T')[0]}.csv`;
-                    link.click();
-
-                    showSnackbar(`Exported ${users.length} users to CSV`, 'success');
-                } catch (error) {
-                    showSnackbar(`Export failed: ${error.message}`, 'error');
-                } finally {
-                    setCsvOperations(prev => ({ ...prev, exportingUsers: false }));
-                }
-            };
-
-            // CSV Import Functions
-            const handleItemsImport = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                setCsvOperations(prev => ({ ...prev, importingItems: true }));
-                const reader = new FileReader();
-
-                reader.onload = async (e) => {
-                    try {
-                        const csv = e.target.result;
-                        const lines = csv.split('\n');
-                        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-
-                        let successCount = 0;
-                        let errorCount = 0;
-
-                        for (let i = 1; i < lines.length; i++) {
-                            if (!lines[i].trim()) continue;
-
-                            try {
-                                const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
-                                const item = {};
-
-                                headers.forEach((header, index) => {
-                                    switch(header.toLowerCase()) {
-                                        case 'item name':
-                                        case 'name':
-                                            item.name = values[index];
-                                            break;
-                                        case 'category':
-                                            item.category = values[index] || 'Uncategorized';
-                                            break;
-                                        case 'quantity':
-                                            item.quantity = parseInt(values[index]) || 0;
-                                            break;
-                                        case 'price':
-                                            item.price = parseFloat(values[index]) || 0;
-                                            break;
-                                        case 'asin':
-                                            item.asin = values[index];
-                                            break;
-                                        case 'min threshold':
-                                            item.minThreshold = parseInt(values[index]) || 5;
-                                            break;
-                                    }
-                                });
-
-                                if (!item.name) {
-                                    errorCount++;
-                                    continue;
-                                }
-
-                                item.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                                item.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-                                item.createdBy = auth.currentUser?.email || 'csv-import';
-
-                                await db.collection('items').add(item);
-                                successCount++;
-                            } catch (itemError) {
-                                errorCount++;
-                                console.error('Error importing item:', itemError);
-                            }
-                        }
-
-                        showSnackbar(`Import completed: ${successCount} items added, ${errorCount} errors`, successCount > 0 ? 'success' : 'warning');
-                    } catch (error) {
-                        showSnackbar(`Import failed: ${error.message}`, 'error');
-                    } finally {
-                        setCsvOperations(prev => ({ ...prev, importingItems: false }));
-                        event.target.value = ''; // Reset file input
-                    }
-                };
-
-                reader.readAsText(file);
-            };
-
-            const handleUsersImport = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                setCsvOperations(prev => ({ ...prev, importingUsers: true }));
-                const reader = new FileReader();
-
-                reader.onload = async (e) => {
-                    try {
-                        const csv = e.target.result;
-                        const lines = csv.split('\n');
-                        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-
-                        let successCount = 0;
-                        let errorCount = 0;
-
-                        for (let i = 1; i < lines.length; i++) {
-                            if (!lines[i].trim()) continue;
-
-                            try {
-                                const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
-                                const user = {};
-
-                                headers.forEach((header, index) => {
-                                    switch(header.toLowerCase()) {
-                                        case 'first name':
-                                        case 'firstname':
-                                            user.firstName = values[index];
-                                            break;
-                                        case 'last name':
-                                        case 'lastname':
-                                            user.lastName = values[index];
-                                            break;
-                                        case 'cost code':
-                                        case 'costcode':
-                                            user.costCode = values[index];
-                                            break;
-                                        case 'email':
-                                            user.email = values[index];
-                                            break;
-                                        case 'department':
-                                            user.department = values[index];
-                                            break;
-                                    }
-                                });
-
-                                if (!user.firstName || !user.lastName) {
-                                    errorCount++;
-                                    continue;
-                                }
-
-                                user.name = `${user.firstName} ${user.lastName}`;
-                                user.status = 'active';
-                                user.costCode = user.costCode || `${Date.now()}-${Math.floor(Math.random() * 1000)}-5770`;
-                                user.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                                user.createdBy = auth.currentUser?.email || 'csv-import';
-
-                                await db.collection('users').add(user);
-                                successCount++;
-                            } catch (userError) {
-                                errorCount++;
-                                console.error('Error importing user:', userError);
-                            }
-                        }
-
-                        showSnackbar(`Import completed: ${successCount} users added, ${errorCount} errors`, successCount > 0 ? 'success' : 'warning');
-                    } catch (error) {
-                        showSnackbar(`Import failed: ${error.message}`, 'error');
-                    } finally {
-                        setCsvOperations(prev => ({ ...prev, importingUsers: false }));
-                        event.target.value = ''; // Reset file input
-                    }
-                };
-
-                reader.readAsText(file);
-            };
-
-            // Bulk Operations
-            const handleResetAllQuantities = async () => {
-                if (!confirm('Are you sure you want to reset ALL item quantities to zero? This cannot be undone.')) {
-                    return;
-                }
-
-                try {
-                    const batch = db.batch();
-                    items.forEach(item => {
-                        const itemRef = db.collection('items').doc(item.id);
-                        batch.update(itemRef, {
-                            quantity: 0,
-                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                    });
-
-                    await batch.commit();
-                    showSnackbar(`Reset quantities for ${items.length} items`, 'success');
-                } catch (error) {
-                    showSnackbar(`Bulk reset failed: ${error.message}`, 'error');
-                }
-            };
-
             if (loading) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -1632,7 +1116,6 @@
                 { id: 'inventory', name: 'Inventory', icon: 'inventory_2', count: items.length },
                 { id: 'users', name: 'Users', icon: 'people', count: users.length },
                 { id: 'admin', name: 'Admin', icon: 'admin_panel_settings' },
-                { id: 'shipment', name: 'Process Shipment', icon: 'local_shipping' },
                 { id: 'history', name: 'History', icon: 'history', count: checkoutHistory.length }
             ];
 
@@ -1682,8 +1165,7 @@
                     {/* Material Design Navigation */}
                     <nav className="bg-white dark:bg-gray-800 mat-elevation-2 transition-colors duration-300">
                         <div className="max-w-7xl mx-auto">
-                            {/* Desktop Navigation */}
-                            <div className="hidden lg:flex justify-between items-center">
+                            <div className="flex justify-between items-center">
                                 <div className="flex mat-tab-nav">
                                     {tabs.map(tab => (
                                         <button
@@ -1727,66 +1209,15 @@
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Mobile Navigation */}
-                            <div className="lg:hidden">
-                                {/* Mobile Header */}
-                                <div className="flex justify-between items-center p-4">
-                                    <h2 className="font-semibold text-gray-900 dark:text-white">
-                                        {tabs.find(t => t.id === activeTab)?.name || 'IT Inventory'}
-                                    </h2>
-                                    <div className="flex items-center space-x-2">
-                                        <MaterialButton
-                                            onClick={toggleDarkMode}
-                                            variant="text"
-                                            className="!p-2 !min-w-0"
-                                        >
-                                            <span className="material-icons text-sm">
-                                                {isDarkMode ? 'light_mode' : 'dark_mode'}
-                                            </span>
-                                        </MaterialButton>
-                                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                    </div>
-                                </div>
-
-                                {/* Mobile Tab Scrollable */}
-                                <div className="overflow-x-auto">
-                                    <div className="flex space-x-1 px-4 pb-2">
-                                        {tabs.map(tab => (
-                                            <button
-                                                key={tab.id}
-                                                onClick={() => setActiveTab(tab.id)}
-                                                className={`flex-shrink-0 flex items-center space-x-1 px-3 py-2 rounded-full text-sm transition-all ${
-                                                    activeTab === tab.id
-                                                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400'
-                                                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                                }`}
-                                            >
-                                                <span className="material-icons text-sm">{tab.icon}</span>
-                                                <span className="font-medium whitespace-nowrap">{tab.name}</span>
-                                                {tab.count !== undefined && tab.count > 0 && (
-                                                    <div className={`px-2 py-1 text-xs rounded-full ${
-                                                        tab.id === 'shop'
-                                                            ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200'
-                                                            : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
-                                                    }`}>
-                                                        {tab.count}
-                                                    </div>
-                                                )}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </nav>
 
                     {/* Main Content */}
-                    <main className="max-w-7xl mx-auto p-3 sm:p-6">
+                    <main className="max-w-7xl mx-auto p-6">
                         {activeTab === 'shop' && (
-                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 {/* Shop Items */}
-                                <div className="xl:col-span-2 space-y-4 lg:space-y-6 order-2 xl:order-1">
+                                <div className="lg:col-span-2 space-y-6">
                                     {/* Barcode Scanner */}
                                     <MaterialBarcodeScanner
                                         items={items}
@@ -1801,9 +1232,9 @@
                                             <span className="material-icons mr-2">storefront</span>
                                             Shop Items
                                         </h2>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                             {items.slice(0, 24).map(item => (
-                                                <MaterialCard key={item.id} elevation={1} className="!p-3 lg:!p-4 hover:mat-elevation-4">
+                                                <MaterialCard key={item.id} elevation={1} className="!p-4 hover:mat-elevation-4">
                                                     <div className="flex justify-between items-start mb-3">
                                                         <h3 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">
                                                             {item.name}
@@ -1853,20 +1284,18 @@
                                     </div>
                                 </div>
 
-                                {/* Shopping Cart - Mobile First, Desktop Sticky */}
-                                <div className="order-1 xl:order-2">
-                                    <div className="xl:sticky xl:top-6">
-                                        <MaterialShoppingCart
-                                            cart={cart}
-                                            addToCart={addToCart}
-                                            removeFromCart={removeFromCart}
-                                            clearCart={clearCart}
-                                            users={users}
-                                            onCheckout={() => {
-                                                showSnackbar('Checkout completed successfully!', 'success');
-                                            }}
-                                        />
-                                    </div>
+                                {/* Shopping Cart */}
+                                <div>
+                                    <MaterialShoppingCart
+                                        cart={cart}
+                                        addToCart={addToCart}
+                                        removeFromCart={removeFromCart}
+                                        clearCart={clearCart}
+                                        users={users}
+                                        onCheckout={() => {
+                                            showSnackbar('Checkout completed successfully!', 'success');
+                                        }}
+                                    />
                                 </div>
                             </div>
                         )}
@@ -2055,81 +1484,37 @@
                                     Administration
                                 </h2>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     {/* Add New Item */}
                                     <MaterialCard elevation={2}>
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
                                             <span className="material-icons mr-2 text-blue-600">add_box</span>
                                             Add New Item
                                         </h3>
-                                        <form onSubmit={handleCreateItem} className="space-y-4">
-                                            <MaterialInput
-                                                label="Item Name"
-                                                value={newItemForm.name}
-                                                onChange={(e) => setNewItemForm(prev => ({ ...prev, name: e.target.value }))}
-                                                required
-                                            />
+                                        <div className="space-y-4">
+                                            <MaterialInput label="Item Name" />
                                             <div className="grid grid-cols-2 gap-4">
-                                                <MaterialInput
-                                                    label="Price"
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={newItemForm.price}
-                                                    onChange={(e) => setNewItemForm(prev => ({ ...prev, price: e.target.value }))}
-                                                    placeholder="0.00"
-                                                />
-                                                <MaterialInput
-                                                    label="Quantity"
-                                                    type="number"
-                                                    value={newItemForm.quantity}
-                                                    onChange={(e) => setNewItemForm(prev => ({ ...prev, quantity: e.target.value }))}
-                                                    placeholder="0"
-                                                />
+                                                <MaterialInput label="Price" type="number" />
+                                                <MaterialInput label="Quantity" type="number" />
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
-                                                <MaterialInput
-                                                    label="ASIN"
-                                                    value={newItemForm.asin}
-                                                    onChange={(e) => setNewItemForm(prev => ({ ...prev, asin: e.target.value }))}
-                                                    placeholder="Optional product identifier"
-                                                />
+                                                <MaterialInput label="ASIN" />
                                                 <div className="mat-input">
-                                                    <select
-                                                        value={newItemForm.category}
-                                                        onChange={(e) => setNewItemForm(prev => ({ ...prev, category: e.target.value }))}
-                                                    >
+                                                    <select>
                                                         <option value="">Choose category...</option>
                                                         <option value="Electronics">Electronics</option>
                                                         <option value="Accessories">Accessories</option>
                                                         <option value="Cables">Cables</option>
                                                         <option value="Office">Office</option>
-                                                        <option value="Hardware">Hardware</option>
-                                                        <option value="Software">Software</option>
-                                                        <option value="Supplies">Supplies</option>
                                                     </select>
                                                     <label>Category</label>
                                                 </div>
                                             </div>
-                                            <MaterialButton
-                                                type="submit"
-                                                variant="contained"
-                                                color="primary"
-                                                className="w-full"
-                                                disabled={isCreatingItem}
-                                            >
-                                                {isCreatingItem ? (
-                                                    <>
-                                                        <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                                                        Creating...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <span className="material-icons mr-2">add</span>
-                                                        Create Item
-                                                    </>
-                                                )}
+                                            <MaterialButton variant="contained" color="primary" className="w-full">
+                                                <span className="material-icons mr-2">add</span>
+                                                Create Item
                                             </MaterialButton>
-                                        </form>
+                                        </div>
                                     </MaterialCard>
 
                                     {/* Add New User */}
@@ -2138,60 +1523,19 @@
                                             <span className="material-icons mr-2 text-green-600">person_add</span>
                                             Add New User
                                         </h3>
-                                        <form onSubmit={handleCreateUser} className="space-y-4">
+                                        <div className="space-y-4">
                                             <div className="grid grid-cols-2 gap-4">
-                                                <MaterialInput
-                                                    label="First Name"
-                                                    value={newUserForm.firstName}
-                                                    onChange={(e) => setNewUserForm(prev => ({ ...prev, firstName: e.target.value }))}
-                                                    required
-                                                />
-                                                <MaterialInput
-                                                    label="Last Name"
-                                                    value={newUserForm.lastName}
-                                                    onChange={(e) => setNewUserForm(prev => ({ ...prev, lastName: e.target.value }))}
-                                                    required
-                                                />
+                                                <MaterialInput label="First Name" />
+                                                <MaterialInput label="Last Name" />
                                             </div>
-                                            <MaterialInput
-                                                label="Cost Code"
-                                                value={newUserForm.costCode}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, costCode: e.target.value }))}
-                                                placeholder="e.g., 1-10-100-5770 (auto-generated if empty)"
-                                            />
-                                            <MaterialInput
-                                                label="Email (Optional)"
-                                                type="email"
-                                                value={newUserForm.email}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
-                                                placeholder="user@company.com"
-                                            />
-                                            <MaterialInput
-                                                label="Department"
-                                                value={newUserForm.department}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, department: e.target.value }))}
-                                                placeholder="e.g., IT, Finance, Operations"
-                                            />
-                                            <MaterialButton
-                                                type="submit"
-                                                variant="contained"
-                                                color="success"
-                                                className="w-full"
-                                                disabled={isCreatingUser}
-                                            >
-                                                {isCreatingUser ? (
-                                                    <>
-                                                        <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                                                        Creating...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <span className="material-icons mr-2">person_add</span>
-                                                        Create User
-                                                    </>
-                                                )}
+                                            <MaterialInput label="Cost Code" placeholder="e.g., IT-001-5770" />
+                                            <MaterialInput label="Email (Optional)" type="email" />
+                                            <MaterialInput label="Department" />
+                                            <MaterialButton variant="contained" color="success" className="w-full">
+                                                <span className="material-icons mr-2">person_add</span>
+                                                Create User
                                             </MaterialButton>
-                                        </form>
+                                        </div>
                                     </MaterialCard>
 
                                     {/* CSV Import/Export */}
@@ -2204,111 +1548,28 @@
                                             <div>
                                                 <h4 className="font-medium mb-2">Import Data</h4>
                                                 <div className="grid grid-cols-2 gap-3">
-                                                    <div>
-                                                        <input
-                                                            type="file"
-                                                            accept=".csv"
-                                                            onChange={handleItemsImport}
-                                                            className="hidden"
-                                                            id="items-csv-import"
-                                                        />
-                                                        <MaterialButton
-                                                            onClick={() => document.getElementById('items-csv-import').click()}
-                                                            variant="outlined"
-                                                            color="primary"
-                                                            className="w-full"
-                                                            disabled={csvOperations.importingItems}
-                                                        >
-                                                            {csvOperations.importingItems ? (
-                                                                <>
-                                                                    <div className="mat-spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
-                                                                    Importing...
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <span className="material-icons mr-2">upload_file</span>
-                                                                    Import Items
-                                                                </>
-                                                            )}
-                                                        </MaterialButton>
-                                                    </div>
-                                                    <div>
-                                                        <input
-                                                            type="file"
-                                                            accept=".csv"
-                                                            onChange={handleUsersImport}
-                                                            className="hidden"
-                                                            id="users-csv-import"
-                                                        />
-                                                        <MaterialButton
-                                                            onClick={() => document.getElementById('users-csv-import').click()}
-                                                            variant="outlined"
-                                                            color="primary"
-                                                            className="w-full"
-                                                            disabled={csvOperations.importingUsers}
-                                                        >
-                                                            {csvOperations.importingUsers ? (
-                                                                <>
-                                                                    <div className="mat-spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
-                                                                    Importing...
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <span className="material-icons mr-2">upload_file</span>
-                                                                    Import Users
-                                                                </>
-                                                            )}
-                                                        </MaterialButton>
-                                                    </div>
+                                                    <MaterialButton variant="outlined" color="primary" className="w-full">
+                                                        <span className="material-icons mr-2">upload_file</span>
+                                                        Import Items
+                                                    </MaterialButton>
+                                                    <MaterialButton variant="outlined" color="primary" className="w-full">
+                                                        <span className="material-icons mr-2">upload_file</span>
+                                                        Import Users
+                                                    </MaterialButton>
                                                 </div>
                                             </div>
                                             <div className="border-t dark:border-gray-600 pt-4">
                                                 <h4 className="font-medium mb-2">Export Data</h4>
                                                 <div className="grid grid-cols-2 gap-3">
-                                                    <MaterialButton
-                                                        onClick={exportItemsToCSV}
-                                                        variant="outlined"
-                                                        color="secondary"
-                                                        className="w-full"
-                                                        disabled={csvOperations.exportingItems}
-                                                    >
-                                                        {csvOperations.exportingItems ? (
-                                                            <>
-                                                                <div className="mat-spinner w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full mr-2"></div>
-                                                                Exporting...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <span className="material-icons mr-2">download</span>
-                                                                Export Items ({items.length})
-                                                            </>
-                                                        )}
+                                                    <MaterialButton variant="outlined" color="secondary" className="w-full">
+                                                        <span className="material-icons mr-2">download</span>
+                                                        Export Items
                                                     </MaterialButton>
-                                                    <MaterialButton
-                                                        onClick={exportUsersToCSV}
-                                                        variant="outlined"
-                                                        color="secondary"
-                                                        className="w-full"
-                                                        disabled={csvOperations.exportingUsers}
-                                                    >
-                                                        {csvOperations.exportingUsers ? (
-                                                            <>
-                                                                <div className="mat-spinner w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full mr-2"></div>
-                                                                Exporting...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <span className="material-icons mr-2">download</span>
-                                                                Export Users ({users.length})
-                                                            </>
-                                                        )}
+                                                    <MaterialButton variant="outlined" color="secondary" className="w-full">
+                                                        <span className="material-icons mr-2">download</span>
+                                                        Export Users
                                                     </MaterialButton>
                                                 </div>
-                                            </div>
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                                <p className="font-medium mb-1">📋 CSV Format Tips:</p>
-                                                <p><strong>Items:</strong> Item Name, Category, Quantity, Price, ASIN, Min Threshold</p>
-                                                <p><strong>Users:</strong> First Name, Last Name, Cost Code, Email, Department</p>
                                             </div>
                                         </div>
                                     </MaterialCard>
@@ -2323,39 +1584,19 @@
                                             <div>
                                                 <h4 className="font-medium mb-2">Inventory Management</h4>
                                                 <div className="space-y-3">
-                                                    <MaterialButton
-                                                        onClick={exportItemsToCSV}
-                                                        variant="outlined"
-                                                        color="primary"
-                                                        className="w-full"
-                                                    >
+                                                    <MaterialButton variant="outlined" color="primary" className="w-full">
                                                         <span className="material-icons mr-2">edit</span>
-                                                        Bulk Edit via CSV Export/Import
+                                                        Bulk Edit Quantities
                                                     </MaterialButton>
-                                                    <MaterialButton
-                                                        onClick={() => showSnackbar('Price bulk update: Export CSV, edit prices, then import back', 'info')}
-                                                        variant="outlined"
-                                                        color="primary"
-                                                        className="w-full"
-                                                    >
+                                                    <MaterialButton variant="outlined" color="primary" className="w-full">
                                                         <span className="material-icons mr-2">attach_money</span>
-                                                        Update Prices via CSV
+                                                        Update Prices
                                                     </MaterialButton>
-                                                    <MaterialButton
-                                                        onClick={handleResetAllQuantities}
-                                                        variant="outlined"
-                                                        color="error"
-                                                        className="w-full"
-                                                    >
+                                                    <MaterialButton variant="outlined" color="error" className="w-full">
                                                         <span className="material-icons mr-2">restore</span>
-                                                        Reset All Quantities to Zero
+                                                        Reset All to Zero
                                                     </MaterialButton>
                                                 </div>
-                                            </div>
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                                                <p className="font-medium mb-1">⚠️ Bulk Operations:</p>
-                                                <p><strong>Edit/Prices:</strong> Use CSV export → edit → import workflow</p>
-                                                <p><strong>Reset:</strong> Sets ALL item quantities to zero (permanent!)</p>
                                             </div>
                                         </div>
                                     </MaterialCard>
@@ -2383,118 +1624,6 @@
                                                 <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{notifications.length}</div>
                                                 <div className="text-sm text-gray-600 dark:text-gray-400">Low Stock Alerts</div>
                                             </div>
-                                        </div>
-                                    </MaterialCard>
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'shipment' && (
-                            <div>
-                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
-                                    <span className="material-icons mr-2">local_shipping</span>
-                                    Process Shipment
-                                </h2>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    {/* PDF Upload */}
-                                    <MaterialCard elevation={2}>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                                            <span className="material-icons mr-2 text-blue-600">upload_file</span>
-                                            Upload Receipt PDF
-                                        </h3>
-                                        <div className="space-y-4">
-                                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
-                                                <span className="material-icons text-4xl text-gray-400 mb-2">picture_as_pdf</span>
-                                                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                                                    Drop PDF receipt here or click to upload
-                                                </p>
-                                                <input
-                                                    type="file"
-                                                    accept=".pdf"
-                                                    className="hidden"
-                                                    id="pdf-upload"
-                                                />
-                                                <MaterialButton
-                                                    onClick={() => document.getElementById('pdf-upload').click()}
-                                                    variant="outlined"
-                                                    color="primary"
-                                                >
-                                                    <span className="material-icons mr-2">file_upload</span>
-                                                    Choose PDF File
-                                                </MaterialButton>
-                                            </div>
-                                            <div className="text-sm text-gray-600 dark:text-gray-400">
-                                                <p className="font-medium mb-2">Supported formats:</p>
-                                                <ul className="list-disc list-inside space-y-1">
-                                                    <li>PDF receipts from vendors</li>
-                                                    <li>Purchase orders with itemized costs</li>
-                                                    <li>Invoices with line items</li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                    </MaterialCard>
-
-                                    {/* Processing Options */}
-                                    <MaterialCard elevation={2}>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                                            <span className="material-icons mr-2 text-green-600">settings</span>
-                                            Processing Options
-                                        </h3>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                    Cost Allocation Method
-                                                </label>
-                                                <div className="space-y-2">
-                                                    <label className="flex items-center">
-                                                        <input type="radio" name="allocation" value="auto" className="mr-2" defaultChecked />
-                                                        <span className="text-sm">Automatic - Match against checkout history</span>
-                                                    </label>
-                                                    <label className="flex items-center">
-                                                        <input type="radio" name="allocation" value="manual" className="mr-2" />
-                                                        <span className="text-sm">Manual - Review and assign costs</span>
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div className="mat-input">
-                                                <input type="date" />
-                                                <label>Receipt Date</label>
-                                            </div>
-
-                                            <div className="mat-input">
-                                                <input type="text" placeholder="Optional vendor name" />
-                                                <label>Vendor Name</label>
-                                            </div>
-
-                                            <div className="mat-input">
-                                                <textarea rows={3} placeholder="Processing notes or special instructions"></textarea>
-                                                <label>Notes</label>
-                                            </div>
-
-                                            <MaterialButton
-                                                variant="contained"
-                                                color="success"
-                                                className="w-full"
-                                                disabled={true}
-                                            >
-                                                <span className="material-icons mr-2">process</span>
-                                                Process Receipt
-                                            </MaterialButton>
-                                        </div>
-                                    </MaterialCard>
-
-                                    {/* Recent Processing */}
-                                    <MaterialCard elevation={1} className="lg:col-span-2">
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                                            <span className="material-icons mr-2 text-purple-600">history</span>
-                                            Recent Shipment Processing
-                                        </h3>
-                                        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                                            <span className="material-icons text-6xl mb-4 opacity-50">receipt_long</span>
-                                            <p className="font-medium">No shipments processed yet</p>
-                                            <p className="text-sm">Upload a PDF receipt to get started</p>
                                         </div>
                                     </MaterialCard>
                                 </div>
@@ -2594,12 +1723,12 @@
             );
         };
 
-        // Render the Material Design Firebase app using React 18 API
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(
+        // Render the Material Design Firebase app
+        ReactDOM.render(
             <ErrorBoundary>
                 <MaterialFirebaseApp />
-            </ErrorBoundary>
+            </ErrorBoundary>,
+            document.getElementById('root')
         );
     </script>
 </body>

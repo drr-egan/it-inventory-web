@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Inventory Management - Firebase</title>
+
+    <!-- Firebase Compatible CSP -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval'
+            https://unpkg.com
+            https://cdn.tailwindcss.com
+            https://cdnjs.cloudflare.com
+            https://www.gstatic.com;
+        style-src 'self' 'unsafe-inline'
+            https://cdn.tailwindcss.com;
+        img-src 'self' data: blob:;
+        font-src 'self' data:;
+        connect-src 'self'
+            https://*.firebaseio.com
+            https://*.googleapis.com
+            https://*.gstatic.com;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+        frame-ancestors 'none';
+    ">
+
+    <!-- React and Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/papaparse@5/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+
+    <!-- Firebase Configuration -->
+    <script src="./firebase-config.js"></script>
+
+    <!-- Firebase Data Adapter -->
+    <script src="./firebase-adapter.js"></script>
+
+    <!-- Authentication Component -->
+    <script src="./auth-component.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Error Boundary Component
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null, errorInfo: null };
+            }
+
+            static getDerivedStateFromError(error) {
+                return { hasError: true };
+            }
+
+            componentDidCatch(error, errorInfo) {
+                console.error('🚨 Application Error:', error);
+                this.setState({ error, errorInfo });
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-red-50">
+                            <div className="max-w-md p-8 bg-white border border-red-200 rounded-lg shadow">
+                                <h1 className="text-xl font-bold text-red-600 mb-4">
+                                    🚨 Application Error
+                                </h1>
+                                <p className="text-gray-700 mb-4">
+                                    Something went wrong. Please refresh the page or contact support.
+                                </p>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                                >
+                                    Refresh Page
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return this.props.children;
+            }
+        }
+
+        // Main Application Component
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [items, setItems] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [checkoutHistory, setCheckoutHistory] = useState([]);
+            const [activeTab, setActiveTab] = useState('shop');
+            const [cart, setCart] = useState([]);
+            const [notifications, setNotifications] = useState([]);
+
+            // Initialize Firebase and authentication
+            useEffect(() => {
+                const initializeApp = async () => {
+                    try {
+                        await window.firebaseAdapter.initialize();
+
+                        // Set up auth state listener
+                        const unsubscribe = auth.onAuthStateChanged((user) => {
+                            setUser(user);
+                            setLoading(false);
+
+                            if (user) {
+                                // Load data when user is authenticated
+                                loadAllData();
+                            } else {
+                                // Clear data when user logs out
+                                setItems([]);
+                                setUsers([]);
+                                setCheckoutHistory([]);
+                                setCart([]);
+                            }
+                        });
+
+                        return unsubscribe;
+                    } catch (error) {
+                        console.error('❌ Failed to initialize app:', error);
+                        setLoading(false);
+                    }
+                };
+
+                initializeApp();
+            }, []);
+
+            // Load all data with real-time listeners
+            const loadAllData = async () => {
+                try {
+                    // Set up real-time listeners for live updates
+                    window.firebaseAdapter.onDataChange('items', (data) => {
+                        setItems(data);
+                        checkLowStock(data);
+                    });
+
+                    window.firebaseAdapter.onDataChange('users', (data) => {
+                        setUsers(data);
+                    });
+
+                    window.firebaseAdapter.onDataChange('checkoutHistory', (data) => {
+                        setCheckoutHistory(data);
+                    });
+
+                    console.log('✅ Real-time data listeners established');
+                } catch (error) {
+                    console.error('❌ Failed to load data:', error);
+                }
+            };
+
+            // BENEFICIAL IMPROVEMENT: Low stock notifications
+            const checkLowStock = (itemList) => {
+                const lowStockItems = itemList.filter(item =>
+                    item.quantity <= (item.minThreshold || 5)
+                );
+
+                if (lowStockItems.length > 0) {
+                    setNotifications(lowStockItems.map(item => ({
+                        id: item.id,
+                        type: 'warning',
+                        message: `Low stock: ${item.name} (${item.quantity} remaining)`,
+                        item: item
+                    })));
+                } else {
+                    setNotifications([]);
+                }
+            };
+
+            // BENEFICIAL IMPROVEMENT: Optimistic updates for cart
+            const addToCart = async (item, quantity = 1) => {
+                const existingIndex = cart.findIndex(cartItem => cartItem.id === item.id);
+
+                if (existingIndex >= 0) {
+                    // Update existing cart item
+                    const newCart = [...cart];
+                    newCart[existingIndex].cartQuantity += quantity;
+                    setCart(newCart);
+                } else {
+                    // Add new item to cart
+                    setCart(prev => [...prev, { ...item, cartQuantity: quantity }]);
+                }
+
+                console.log(`✅ Added ${quantity}x ${item.name} to cart`);
+            };
+
+            const removeFromCart = (itemId) => {
+                setCart(prev => prev.filter(item => item.id !== itemId));
+            };
+
+            const clearCart = () => {
+                setCart([]);
+            };
+
+            // BENEFICIAL IMPROVEMENT: Batch checkout with transaction
+            const processCheckout = async (checkoutData) => {
+                try {
+                    // Process all cart items in batch
+                    const checkoutPromises = cart.map(async (cartItem) => {
+                        await window.firebaseAdapter.createCheckout({
+                            itemId: cartItem.id,
+                            itemName: cartItem.name,
+                            userId: checkoutData.userId,
+                            userName: checkoutData.userName,
+                            quantity: cartItem.cartQuantity,
+                            departmentId: checkoutData.departmentId,
+                            jobNumber: checkoutData.jobNumber || '',
+                            notes: checkoutData.notes || '',
+                            status: 'active'
+                        });
+                    });
+
+                    await Promise.all(checkoutPromises);
+                    clearCart();
+
+                    console.log('✅ Checkout processed successfully');
+                    return true;
+                } catch (error) {
+                    console.error('❌ Checkout failed:', error);
+                    throw error;
+                }
+            };
+
+            // Show loading screen
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="mt-4 text-gray-600">Loading Firebase...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Show auth screen if not authenticated
+            if (!user) {
+                return <AuthComponent />;
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* Authentication Header */}
+                    <AuthComponent />
+
+                    {/* Notifications */}
+                    {notifications.length > 0 && (
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <div className="flex">
+                                <div className="flex-shrink-0">
+                                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div className="ml-3">
+                                    <p className="text-sm text-yellow-700">
+                                        <strong>Low Stock Alerts:</strong> {notifications.length} item(s) need attention
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Navigation */}
+                    <nav className="bg-white shadow">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between h-16">
+                                <div className="flex space-x-8">
+                                    <button
+                                        onClick={() => setActiveTab('shop')}
+                                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                                            activeTab === 'shop'
+                                                ? 'border-blue-500 text-gray-900'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        🛒 Shop {cart.length > 0 && <span className="ml-1 bg-blue-500 text-white px-2 py-1 text-xs rounded-full">{cart.length}</span>}
+                                    </button>
+
+                                    <button
+                                        onClick={() => setActiveTab('process-shipment')}
+                                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                                            activeTab === 'process-shipment'
+                                                ? 'border-blue-500 text-gray-900'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        📦 Process Shipment
+                                    </button>
+
+                                    <button
+                                        onClick={() => setActiveTab('users')}
+                                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                                            activeTab === 'users'
+                                                ? 'border-blue-500 text-gray-900'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        👥 Users ({users.length})
+                                    </button>
+
+                                    <button
+                                        onClick={() => setActiveTab('inventory')}
+                                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                                            activeTab === 'inventory'
+                                                ? 'border-blue-500 text-gray-900'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        📋 Inventory ({items.length})
+                                    </button>
+
+                                    <button
+                                        onClick={() => setActiveTab('checkout-history')}
+                                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                                            activeTab === 'checkout-history'
+                                                ? 'border-blue-500 text-gray-900'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        📝 History ({checkoutHistory.length})
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center space-x-4">
+                                    <div className="text-sm text-gray-500">
+                                        🔥 Firebase Connected
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Main Content */}
+                    <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                        {activeTab === 'shop' && (
+                            <ShopTab
+                                items={items}
+                                users={users}
+                                cart={cart}
+                                addToCart={addToCart}
+                                removeFromCart={removeFromCart}
+                                clearCart={clearCart}
+                                processCheckout={processCheckout}
+                            />
+                        )}
+
+                        {activeTab === 'process-shipment' && (
+                            <ProcessShipmentTab
+                                checkoutHistory={checkoutHistory}
+                                items={items}
+                            />
+                        )}
+
+                        {activeTab === 'users' && (
+                            <UsersTab
+                                users={users}
+                                onUsersChange={setUsers}
+                            />
+                        )}
+
+                        {activeTab === 'inventory' && (
+                            <InventoryTab
+                                items={items}
+                                onItemsChange={setItems}
+                            />
+                        )}
+
+                        {activeTab === 'checkout-history' && (
+                            <CheckoutHistoryTab
+                                checkoutHistory={checkoutHistory}
+                                items={items}
+                                users={users}
+                                onHistoryChange={setCheckoutHistory}
+                            />
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        // Simple placeholder components (will be expanded in next steps)
+        const ShopTab = ({ items, users, cart, addToCart, removeFromCart, clearCart, processCheckout }) => {
+            return (
+                <div className="text-center py-20">
+                    <h2 className="text-2xl font-bold text-gray-900">🛒 Shopping Interface</h2>
+                    <p className="mt-4 text-gray-600">Shop component with Firebase real-time updates coming next...</p>
+                    <p className="text-sm text-gray-500">Items: {items.length} | Cart: {cart.length}</p>
+                </div>
+            );
+        };
+
+        const ProcessShipmentTab = ({ checkoutHistory, items }) => {
+            return (
+                <div className="text-center py-20">
+                    <h2 className="text-2xl font-bold text-gray-900">📦 Process Shipment</h2>
+                    <p className="mt-4 text-gray-600">Shipment processing with Firebase storage coming next...</p>
+                </div>
+            );
+        };
+
+        const UsersTab = ({ users, onUsersChange }) => {
+            return (
+                <div className="text-center py-20">
+                    <h2 className="text-2xl font-bold text-gray-900">👥 User Management</h2>
+                    <p className="mt-4 text-gray-600">Real-time user management coming next...</p>
+                    <p className="text-sm text-gray-500">Total Users: {users.length}</p>
+                </div>
+            );
+        };
+
+        const InventoryTab = ({ items, onItemsChange }) => {
+            return (
+                <div className="text-center py-20">
+                    <h2 className="text-2xl font-bold text-gray-900">📋 Inventory Management</h2>
+                    <p className="mt-4 text-gray-600">Real-time inventory with Firebase transactions coming next...</p>
+                    <p className="text-sm text-gray-500">Total Items: {items.length}</p>
+                </div>
+            );
+        };
+
+        const CheckoutHistoryTab = ({ checkoutHistory, items, users, onHistoryChange }) => {
+            return (
+                <div className="text-center py-20">
+                    <h2 className="text-2xl font-bold text-gray-900">📝 Checkout History</h2>
+                    <p className="mt-4 text-gray-600">Real-time checkout history with Firebase coming next...</p>
+                    <p className="text-sm text-gray-500">Total Records: {checkoutHistory.length}</p>
+                </div>
+            );
+        };
+
+        // Render the application
+        ReactDOM.render(
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>,
+            document.getElementById('root')
+        );
+    </script>
+</body>
+</html>

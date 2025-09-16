@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Inventory Management - Firebase Complete</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Firebase Configuration -->
+    <script src="./firebase-config.js"></script>
+
+    <style>
+        .scan-success { animation: scanPulse 0.5s ease-out; }
+        @keyframes scanPulse {
+            0% { background-color: transparent; }
+            50% { background-color: rgb(34, 197, 94, 0.2); }
+            100% { background-color: transparent; }
+        }
+        .cart-badge { animation: cartBounce 0.3s ease-out; }
+        @keyframes cartBounce {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Error Boundary
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+
+            static getDerivedStateFromError(error) {
+                return { hasError: true };
+            }
+
+            componentDidCatch(error, errorInfo) {
+                console.error('🚨 Firebase App Error:', error);
+                this.setState({ error });
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-red-50">
+                            <div className="max-w-md p-8 bg-white border border-red-200 rounded-lg shadow">
+                                <h1 className="text-xl font-bold text-red-600 mb-4">🚨 Application Error</h1>
+                                <p className="text-gray-700 mb-4">
+                                    {this.state.error?.message || 'An unexpected error occurred'}
+                                </p>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                                >
+                                    Refresh Page
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // Authentication Component
+        const AuthComponent = () => {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((user) => {
+                    setUser(user);
+                    setLoading(false);
+                });
+                return unsubscribe;
+            }, []);
+
+            const handleSignIn = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+
+                try {
+                    await auth.signInWithEmailAndPassword(email, password);
+                } catch (error) {
+                    setError(error.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="mt-4 text-gray-600">Loading Firebase...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!user) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                        <div className="max-w-md w-full space-y-8">
+                            <div>
+                                <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                                    🔥 Firebase Inventory System
+                                </h2>
+                                <p className="mt-2 text-center text-sm text-gray-600">
+                                    Sign in to access your inventory
+                                </p>
+                            </div>
+
+                            <form className="mt-8 space-y-6" onSubmit={handleSignIn}>
+                                <div className="space-y-4">
+                                    <input
+                                        type="email"
+                                        required
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="Email address"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <input
+                                        type="password"
+                                        required
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        placeholder="Password"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                {error && (
+                                    <div className="text-red-600 text-sm text-center bg-red-50 p-2 rounded">
+                                        {error}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    {loading ? 'Signing in...' : 'Sign In'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="bg-blue-600 text-white px-4 py-3 flex justify-between items-center">
+                    <div className="flex items-center space-x-3">
+                        <span className="text-sm">👤 {user.email}</span>
+                        <span className="text-xs bg-green-500 px-2 py-1 rounded-full">Online</span>
+                    </div>
+                    <button
+                        onClick={() => auth.signOut()}
+                        className="text-sm bg-blue-500 hover:bg-blue-400 px-3 py-1 rounded transition-colors"
+                    >
+                        Sign Out
+                    </button>
+                </div>
+            );
+        };
+
+        // Shopping Cart Component
+        const ShoppingCart = ({ items, cart, addToCart, removeFromCart, clearCart, processCheckout, users }) => {
+            const [isCheckingOut, setIsCheckingOut] = useState(false);
+            const [checkoutMethod, setCheckoutMethod] = useState('user'); // 'user' or 'job'
+            const [selectedUser, setSelectedUser] = useState('');
+            const [jobNumber, setJobNumber] = useState('');
+            const [notes, setNotes] = useState('');
+
+            const cartTotal = cart.reduce((sum, item) => sum + (item.price || 0) * item.cartQuantity, 0);
+
+            const handleCheckout = async () => {
+                if (cart.length === 0) return;
+
+                if (checkoutMethod === 'user' && !selectedUser) {
+                    alert('Please select a user for checkout');
+                    return;
+                }
+
+                if (checkoutMethod === 'job' && !jobNumber.trim()) {
+                    alert('Please enter a job number');
+                    return;
+                }
+
+                setIsCheckingOut(true);
+
+                try {
+                    const user = users.find(u => u.id === selectedUser);
+
+                    for (const cartItem of cart) {
+                        // Update inventory
+                        const itemRef = db.collection('items').doc(cartItem.id);
+                        await db.runTransaction(async (transaction) => {
+                            const doc = await transaction.get(itemRef);
+                            const currentQty = doc.data().quantity || 0;
+                            const newQty = Math.max(0, currentQty - cartItem.cartQuantity);
+
+                            transaction.update(itemRef, {
+                                quantity: newQty,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+
+                            // Create checkout record
+                            const checkoutRef = db.collection('checkoutHistory').doc();
+                            transaction.set(checkoutRef, {
+                                itemId: cartItem.id,
+                                itemName: cartItem.name,
+                                userId: checkoutMethod === 'user' ? selectedUser : '',
+                                userName: checkoutMethod === 'user' ? (user?.name || `${user?.firstName} ${user?.lastName}`) : 'Job Checkout',
+                                quantity: cartItem.cartQuantity,
+                                departmentId: checkoutMethod === 'user' ? (user?.costCode || user?.cost_code) : jobNumber,
+                                jobNumber: checkoutMethod === 'job' ? jobNumber : '',
+                                notes: notes,
+                                status: 'active',
+                                dateEntered: firebase.firestore.FieldValue.serverTimestamp(),
+                                createdBy: auth.currentUser?.email || 'unknown'
+                            });
+                        });
+                    }
+
+                    // Clear cart and reset form
+                    clearCart();
+                    setSelectedUser('');
+                    setJobNumber('');
+                    setNotes('');
+                    setIsCheckingOut(false);
+
+                    alert(`✅ Checkout completed successfully! ${cart.length} items processed.`);
+
+                } catch (error) {
+                    console.error('Checkout error:', error);
+                    alert(`❌ Checkout failed: ${error.message}`);
+                    setIsCheckingOut(false);
+                }
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">🛒 Shopping Cart</h3>
+                        <div className="flex items-center space-x-2">
+                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm">
+                                {cart.length} items
+                            </span>
+                            {cartTotal > 0 && (
+                                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm font-medium">
+                                    ${cartTotal.toFixed(2)}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {cart.length === 0 ? (
+                        <div className="text-center text-gray-500 py-8">
+                            <div className="text-4xl mb-2">🛒</div>
+                            <p>Your cart is empty</p>
+                            <p className="text-sm">Add items to get started</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="space-y-3 mb-6 max-h-60 overflow-y-auto">
+                                {cart.map(item => (
+                                    <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                                        <div className="flex-1">
+                                            <div className="font-medium">{item.name}</div>
+                                            <div className="text-sm text-gray-600">
+                                                Qty: {item.cartQuantity}
+                                                {item.price > 0 && (
+                                                    <span className="ml-2 text-green-600">
+                                                        ${(item.price * item.cartQuantity).toFixed(2)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <button
+                                                onClick={() => addToCart(item, 1)}
+                                                className="bg-blue-600 text-white px-2 py-1 rounded text-sm hover:bg-blue-700"
+                                            >
+                                                +
+                                            </button>
+                                            <button
+                                                onClick={() => removeFromCart(item.id)}
+                                                className="bg-red-600 text-white px-2 py-1 rounded text-sm hover:bg-red-700"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="border-t pt-4">
+                                <div className="space-y-4">
+                                    {/* Checkout Method */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Checkout Method
+                                        </label>
+                                        <div className="flex space-x-4">
+                                            <label className="flex items-center">
+                                                <input
+                                                    type="radio"
+                                                    value="user"
+                                                    checked={checkoutMethod === 'user'}
+                                                    onChange={(e) => setCheckoutMethod(e.target.value)}
+                                                    className="mr-2"
+                                                />
+                                                👤 User Checkout
+                                            </label>
+                                            <label className="flex items-center">
+                                                <input
+                                                    type="radio"
+                                                    value="job"
+                                                    checked={checkoutMethod === 'job'}
+                                                    onChange={(e) => setCheckoutMethod(e.target.value)}
+                                                    className="mr-2"
+                                                />
+                                                🏗️ Job Checkout
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* User Selection */}
+                                    {checkoutMethod === 'user' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Select User
+                                            </label>
+                                            <select
+                                                value={selectedUser}
+                                                onChange={(e) => setSelectedUser(e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                required
+                                            >
+                                                <option value="">Choose a user...</option>
+                                                {users.slice(0, 50).map(user => (
+                                                    <option key={user.id} value={user.id}>
+                                                        {user.name || `${user.firstName} ${user.lastName}`} - {user.costCode || user.cost_code}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Job Number */}
+                                    {checkoutMethod === 'job' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Job Number
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={jobNumber}
+                                                onChange={(e) => setJobNumber(e.target.value)}
+                                                placeholder="Enter job number..."
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                required
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Notes */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Notes (Optional)
+                                        </label>
+                                        <textarea
+                                            value={notes}
+                                            onChange={(e) => setNotes(e.target.value)}
+                                            placeholder="Add notes..."
+                                            rows={2}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+
+                                    {/* Checkout Buttons */}
+                                    <div className="flex space-x-3">
+                                        <button
+                                            onClick={handleCheckout}
+                                            disabled={isCheckingOut}
+                                            className="flex-1 bg-green-600 text-white py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+                                        >
+                                            {isCheckingOut ? '⏳ Processing...' : '✅ Checkout'}
+                                        </button>
+                                        <button
+                                            onClick={clearCart}
+                                            className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        };
+
+        // Barcode Scanner Component
+        const BarcodeScanner = ({ items, onItemScanned }) => {
+            const [scanInput, setScanInput] = useState('');
+            const [scanMode, setScanMode] = useState('keyboard');
+            const [recentScans, setRecentScans] = useState([]);
+            const [feedback, setFeedback] = useState('');
+            const [isScanning, setIsScanning] = useState(false);
+
+            const inputRef = useRef(null);
+
+            const showFeedback = (message, type = 'success') => {
+                setFeedback({ message, type });
+
+                // Haptic feedback if supported
+                if ('vibrate' in navigator) {
+                    navigator.vibrate(type === 'success' ? 100 : [100, 50, 100]);
+                }
+
+                setTimeout(() => setFeedback(''), 3000);
+            };
+
+            const handleItemScanned = async (itemIdentifier, quantity = 1) => {
+                setIsScanning(true);
+
+                try {
+                    const item = items.find(i =>
+                        i.name.toLowerCase().includes(itemIdentifier.toLowerCase()) ||
+                        i.asin === itemIdentifier ||
+                        i.id === itemIdentifier ||
+                        itemIdentifier.toLowerCase().includes(i.name.toLowerCase().split(' ')[0])
+                    );
+
+                    if (!item) {
+                        showFeedback(`❌ Item not found: ${itemIdentifier}`, 'error');
+                        setIsScanning(false);
+                        return;
+                    }
+
+                    // Update inventory in Firebase
+                    await db.collection('items').doc(item.id).update({
+                        quantity: firebase.firestore.FieldValue.increment(quantity),
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    // Add to recent scans
+                    const scanRecord = {
+                        id: Date.now(),
+                        item: item,
+                        quantity: quantity,
+                        timestamp: new Date()
+                    };
+
+                    setRecentScans(prev => [scanRecord, ...prev.slice(0, 4)]);
+                    showFeedback(`✅ ${item.name} +${quantity}`, 'success');
+
+                    if (onItemScanned) {
+                        onItemScanned(item, quantity);
+                    }
+
+                    // Clear input
+                    setScanInput('');
+
+                } catch (error) {
+                    showFeedback(`❌ Scan error: ${error.message}`, 'error');
+                } finally {
+                    setIsScanning(false);
+
+                    // Keep focus on input
+                    if (inputRef.current) {
+                        setTimeout(() => inputRef.current.focus(), 100);
+                    }
+                }
+            };
+
+            const handleKeyPress = (e) => {
+                if (e.key === 'Enter' && scanInput.trim()) {
+                    handleItemScanned(scanInput.trim());
+                }
+            };
+
+            const startVoiceSearch = () => {
+                if (!('webkitSpeechRecognition' in window)) {
+                    showFeedback('❌ Voice recognition not supported', 'error');
+                    return;
+                }
+
+                const recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onstart = () => {
+                    showFeedback('🎤 Listening... speak item name', 'info');
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    setScanInput(transcript);
+                    handleItemScanned(transcript);
+                };
+
+                recognition.onerror = () => {
+                    showFeedback('❌ Voice recognition failed', 'error');
+                };
+
+                recognition.start();
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">📷 Barcode Scanner</h3>
+                        <div className="text-sm text-gray-500">
+                            Mode: {scanMode === 'keyboard' ? '⌨️ Keyboard' : '📷 Camera'}
+                        </div>
+                    </div>
+
+                    {feedback && (
+                        <div className={`mb-4 p-3 rounded ${
+                            feedback.type === 'success' ? 'bg-green-100 text-green-700' :
+                            feedback.type === 'error' ? 'bg-red-100 text-red-700' :
+                            'bg-blue-100 text-blue-700'
+                        }`}>
+                            {feedback.message}
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        {scanMode === 'keyboard' && (
+                            <div>
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={scanInput}
+                                    onChange={(e) => setScanInput(e.target.value)}
+                                    onKeyPress={handleKeyPress}
+                                    placeholder="Scan barcode or type item name..."
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    disabled={isScanning}
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Press Enter to scan • Use barcode scanner or type manually
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="flex space-x-2">
+                            <button
+                                onClick={startVoiceSearch}
+                                disabled={isScanning}
+                                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+                            >
+                                🎤 Voice Search
+                            </button>
+                            <button
+                                onClick={() => setScanMode(scanMode === 'keyboard' ? 'camera' : 'keyboard')}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                            >
+                                {scanMode === 'keyboard' ? '📷 Camera Mode' : '⌨️ Keyboard Mode'}
+                            </button>
+                        </div>
+
+                        {/* Recent Scans */}
+                        {recentScans.length > 0 && (
+                            <div>
+                                <h4 className="font-medium mb-2">📋 Recent Scans</h4>
+                                <div className="space-y-2 max-h-32 overflow-y-auto">
+                                    {recentScans.map((scan, index) => (
+                                        <div
+                                            key={scan.id}
+                                            className={`flex justify-between items-center p-2 rounded text-sm ${
+                                                index === 0 ? 'bg-green-50 border border-green-200' : 'bg-gray-50'
+                                            }`}
+                                        >
+                                            <span className="font-medium">{scan.item.name}</span>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="text-green-600">+{scan.quantity}</span>
+                                                <button
+                                                    onClick={() => handleItemScanned(scan.item.name)}
+                                                    className="text-blue-600 hover:text-blue-800"
+                                                >
+                                                    Scan Again
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // Main Firebase App
+        const FirebaseApp = () => {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [items, setItems] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [checkoutHistory, setCheckoutHistory] = useState([]);
+            const [activeTab, setActiveTab] = useState('shop');
+            const [cart, setCart] = useState([]);
+            const [connectionStatus, setConnectionStatus] = useState('connecting');
+            const [notifications, setNotifications] = useState([]);
+
+            // Real-time data listeners
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                    setUser(user);
+                    setLoading(false);
+
+                    if (user) {
+                        try {
+                            setConnectionStatus('connecting');
+
+                            // Set up real-time listeners
+                            const itemsUnsubscribe = db.collection('items')
+                                .onSnapshot((snapshot) => {
+                                    const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                                    setItems(itemsData);
+                                    checkLowStock(itemsData);
+                                });
+
+                            const usersUnsubscribe = db.collection('users')
+                                .limit(100) // Load first 100 users for performance
+                                .onSnapshot((snapshot) => {
+                                    const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                                    setUsers(usersData);
+                                });
+
+                            const historyUnsubscribe = db.collection('checkoutHistory')
+                                .orderBy('dateEntered', 'desc')
+                                .limit(50) // Load recent 50 records
+                                .onSnapshot((snapshot) => {
+                                    const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                                    setCheckoutHistory(historyData);
+                                });
+
+                            setConnectionStatus('connected');
+
+                            return () => {
+                                itemsUnsubscribe();
+                                usersUnsubscribe();
+                                historyUnsubscribe();
+                            };
+
+                        } catch (error) {
+                            console.error('Firebase connection error:', error);
+                            setConnectionStatus('error');
+                        }
+                    }
+                });
+
+                return unsubscribe;
+            }, []);
+
+            const checkLowStock = (itemList) => {
+                const lowStockItems = itemList.filter(item =>
+                    item.quantity <= (item.minThreshold || 5)
+                );
+
+                setNotifications(lowStockItems.map(item => ({
+                    id: item.id,
+                    type: 'warning',
+                    message: `Low stock: ${item.name} (${item.quantity} remaining)`
+                })));
+            };
+
+            const addToCart = (item, quantity = 1) => {
+                const existingIndex = cart.findIndex(cartItem => cartItem.id === item.id);
+
+                if (existingIndex >= 0) {
+                    const newCart = [...cart];
+                    newCart[existingIndex].cartQuantity += quantity;
+                    setCart(newCart);
+                } else {
+                    setCart(prev => [...prev, { ...item, cartQuantity: quantity }]);
+                }
+
+                // Add cart bounce animation class
+                setTimeout(() => {
+                    const badge = document.querySelector('.cart-badge');
+                    if (badge) {
+                        badge.classList.add('cart-badge');
+                        setTimeout(() => badge.classList.remove('cart-badge'), 300);
+                    }
+                }, 0);
+            };
+
+            const removeFromCart = (itemId) => {
+                setCart(prev => prev.filter(item => item.id !== itemId));
+            };
+
+            const clearCart = () => {
+                setCart([]);
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="mt-4 text-gray-600">Loading Firebase App...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!user) {
+                return <AuthComponent />;
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <AuthComponent />
+
+                    {/* Connection Status */}
+                    <div className={`px-4 py-2 text-center text-sm ${
+                        connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
+                        connectionStatus === 'error' ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
+                    }`}>
+                        {connectionStatus === 'connected' ? '🔥 Firebase Connected - Real-time sync active' :
+                         connectionStatus === 'error' ? '❌ Firebase Connection Error' :
+                         '🔄 Connecting to Firebase...'}
+                    </div>
+
+                    {/* Low Stock Notifications */}
+                    {notifications.length > 0 && (
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <div className="flex">
+                                <div className="text-yellow-400 text-xl mr-3">⚠️</div>
+                                <div>
+                                    <p className="text-yellow-700 font-medium">
+                                        Low Stock Alert: {notifications.length} item(s) need attention
+                                    </p>
+                                    <div className="text-sm text-yellow-600 mt-1">
+                                        {notifications.slice(0, 3).map(notif => notif.message).join(' • ')}
+                                        {notifications.length > 3 && ` • +${notifications.length - 3} more`}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Navigation */}
+                    <nav className="bg-white shadow sticky top-0 z-10">
+                        <div className="max-w-7xl mx-auto px-4">
+                            <div className="flex justify-between h-16">
+                                <div className="flex space-x-8">
+                                    {[
+                                        { id: 'shop', name: 'Shop', icon: '🛒', count: cart.length },
+                                        { id: 'scanner', name: 'Scanner', icon: '📷' },
+                                        { id: 'inventory', name: 'Inventory', icon: '📦', count: items.length },
+                                        { id: 'users', name: 'Users', icon: '👥', count: users.length },
+                                        { id: 'history', name: 'History', icon: '📝', count: checkoutHistory.length }
+                                    ].map(tab => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={`flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                                                activeTab === tab.id
+                                                    ? 'border-blue-500 text-gray-900'
+                                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                                            }`}
+                                        >
+                                            {tab.icon} {tab.name}
+                                            {tab.count !== undefined && tab.count > 0 && (
+                                                <span className={`ml-1 px-2 py-1 text-xs rounded-full cart-badge ${
+                                                    tab.id === 'shop' ? 'bg-blue-500 text-white' : 'bg-gray-200'
+                                                }`}>
+                                                    {tab.count}
+                                                </span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="flex items-center text-sm text-gray-500">
+                                    <span className="mr-2">Real-time sync</span>
+                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Main Content */}
+                    <main className="max-w-7xl mx-auto p-6">
+                        {activeTab === 'shop' && (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-2">
+                                    <h2 className="text-2xl font-bold mb-6">🛒 Shop Items</h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                        {items.slice(0, 24).map(item => (
+                                            <div key={item.id} className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h3 className="font-medium text-sm">{item.name}</h3>
+                                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                                        item.quantity <= (item.minThreshold || 5)
+                                                            ? 'bg-red-100 text-red-700'
+                                                            : 'bg-green-100 text-green-700'
+                                                    }`}>
+                                                        {item.quantity}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs text-gray-600 mb-3">
+                                                    {item.category}
+                                                    {item.price > 0 && (
+                                                        <span className="ml-2 text-green-600 font-medium">
+                                                            ${item.price}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={() => addToCart(item)}
+                                                    disabled={item.quantity === 0}
+                                                    className="w-full bg-blue-600 text-white py-2 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                                >
+                                                    {item.quantity === 0 ? 'Out of Stock' : 'Add to Cart'}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <ShoppingCart
+                                        items={items}
+                                        cart={cart}
+                                        addToCart={addToCart}
+                                        removeFromCart={removeFromCart}
+                                        clearCart={clearCart}
+                                        users={users}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'scanner' && (
+                            <div>
+                                <h2 className="text-2xl font-bold mb-6">📷 Barcode Scanner</h2>
+                                <div className="max-w-2xl">
+                                    <BarcodeScanner
+                                        items={items}
+                                        onItemScanned={(item, quantity) => {
+                                            console.log(`Scanned: ${item.name} +${quantity}`);
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'inventory' && (
+                            <div>
+                                <h2 className="text-2xl font-bold mb-6">📦 Inventory Management</h2>
+                                <div className="bg-white rounded-lg shadow overflow-hidden">
+                                    <div className="px-6 py-4 border-b">
+                                        <p className="text-sm text-gray-600">
+                                            Showing {Math.min(items.length, 50)} of {items.length} total items
+                                        </p>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {items.slice(0, 50).map(item => (
+                                                    <tr key={item.id} className="border-t hover:bg-gray-50">
+                                                        <td className="px-6 py-4 font-medium">{item.name}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`px-2 py-1 rounded-full text-xs ${
+                                                                item.quantity <= (item.minThreshold || 5)
+                                                                    ? 'bg-red-100 text-red-700'
+                                                                    : 'bg-green-100 text-green-700'
+                                                            }`}>
+                                                                {item.quantity}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm">{item.category}</td>
+                                                        <td className="px-6 py-4">
+                                                            {item.price > 0 ? (
+                                                                <span className="text-green-600 font-medium">${item.price}</span>
+                                                            ) : (
+                                                                <span className="text-gray-400">-</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <button
+                                                                onClick={() => addToCart(item)}
+                                                                className="text-blue-600 hover:text-blue-800 text-sm"
+                                                            >
+                                                                Add to Cart
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'users' && (
+                            <div>
+                                <h2 className="text-2xl font-bold mb-6">👥 Users</h2>
+                                <div className="bg-white rounded-lg shadow overflow-hidden">
+                                    <div className="px-6 py-4 border-b">
+                                        <p className="text-sm text-gray-600">
+                                            Showing {users.length} of {users.length}+ total users (first 100 loaded for performance)
+                                        </p>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost Code</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {users.map(user => (
+                                                    <tr key={user.id} className="border-t hover:bg-gray-50">
+                                                        <td className="px-6 py-4 font-medium">
+                                                            {user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim()}
+                                                        </td>
+                                                        <td className="px-6 py-4 font-mono text-sm">
+                                                            {user.costCode || user.cost_code}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                                            {(user.costCode || user.cost_code || '').split('-')[0] || 'Unknown'}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
+                                                                Active
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'history' && (
+                            <div>
+                                <h2 className="text-2xl font-bold mb-6">📝 Checkout History</h2>
+                                <div className="bg-white rounded-lg shadow overflow-hidden">
+                                    <div className="px-6 py-4 border-b">
+                                        <p className="text-sm text-gray-600">
+                                            Showing {checkoutHistory.length} most recent checkout records
+                                        </p>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {checkoutHistory.map(record => (
+                                                    <tr key={record.id} className="border-t hover:bg-gray-50">
+                                                        <td className="px-6 py-4 font-medium">{record.itemName}</td>
+                                                        <td className="px-6 py-4">{record.userName}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-sm">
+                                                                {record.quantity}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                                            {record.departmentId || record.costCode || '-'}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm">
+                                                            {record.dateEntered?.toDate?.()?.toLocaleDateString() ||
+                                                             (typeof record.dateEntered === 'string' ? new Date(record.dateEntered).toLocaleDateString() : 'Unknown')}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        // Render the complete app
+        ReactDOM.render(
+            <ErrorBoundary>
+                <FirebaseApp />
+            </ErrorBoundary>,
+            document.getElementById('root')
+        );
+    </script>
+</body>
+</html>

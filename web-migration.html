@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Data Migration Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <!-- Firebase Configuration -->
+    <script src="./firebase-config.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-4xl mx-auto p-6">
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">🔥 Firebase Data Migration</h1>
+            <p class="text-gray-600 mb-6">Upload your existing JSON data files to migrate to Firebase</p>
+
+            <div id="migrationStatus" class="mb-6"></div>
+
+            <!-- Authentication Section -->
+            <div id="authSection" class="mb-8">
+                <h2 class="text-xl font-semibold mb-4">🔐 Authentication Required</h2>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <p class="text-blue-700 text-sm">You need to sign in to upload data to Firebase.</p>
+                </div>
+
+                <form id="authForm" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input
+                                type="email"
+                                id="emailInput"
+                                required
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="your-email@company.com"
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                            <input
+                                type="password"
+                                id="passwordInput"
+                                required
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Your password"
+                            />
+                        </div>
+                    </div>
+                    <div class="flex space-x-4">
+                        <button
+                            type="button"
+                            id="signInBtn"
+                            class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            Sign In
+                        </button>
+                        <button
+                            type="button"
+                            id="signUpBtn"
+                            class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                            Create Account
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Migration Section (hidden until authenticated) -->
+            <div id="migrationSection" class="hidden">
+                <h2 class="text-xl font-semibold mb-4">📁 Upload Data Files</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <!-- Items Upload -->
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <div class="text-4xl mb-2">📦</div>
+                        <h3 class="font-medium mb-2">Items Data</h3>
+                        <input
+                            type="file"
+                            id="itemsFile"
+                            accept=".json"
+                            class="hidden"
+                        />
+                        <button
+                            onclick="document.getElementById('itemsFile').click()"
+                            class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
+                        >
+                            Upload items.json
+                        </button>
+                        <div id="itemsStatus" class="text-sm mt-2"></div>
+                    </div>
+
+                    <!-- Users Upload -->
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <div class="text-4xl mb-2">👥</div>
+                        <h3 class="font-medium mb-2">Users Data</h3>
+                        <input
+                            type="file"
+                            id="usersFile"
+                            accept=".json"
+                            class="hidden"
+                        />
+                        <button
+                            onclick="document.getElementById('usersFile').click()"
+                            class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm"
+                        >
+                            Upload users.json
+                        </button>
+                        <div id="usersStatus" class="text-sm mt-2"></div>
+                    </div>
+
+                    <!-- History Upload -->
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <div class="text-4xl mb-2">📝</div>
+                        <h3 class="font-medium mb-2">History Data</h3>
+                        <input
+                            type="file"
+                            id="historyFile"
+                            accept=".json"
+                            class="hidden"
+                        />
+                        <button
+                            onclick="document.getElementById('historyFile').click()"
+                            class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm"
+                        >
+                            Upload checkoutHistory.json
+                        </button>
+                        <div id="historyStatus" class="text-sm mt-2"></div>
+                    </div>
+                </div>
+
+                <!-- Migration Controls -->
+                <div class="bg-gray-50 rounded-lg p-6">
+                    <h3 class="font-medium mb-4">🚀 Start Migration</h3>
+                    <div class="flex items-center justify-between">
+                        <div class="text-sm text-gray-600">
+                            Upload your JSON files above, then click migrate to transfer data to Firebase
+                        </div>
+                        <button
+                            id="migrateBtn"
+                            disabled
+                            class="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                            🔥 Migrate to Firebase
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress Section -->
+                <div id="progressSection" class="hidden mt-6">
+                    <h3 class="font-medium mb-4">📊 Migration Progress</h3>
+                    <div id="progressDetails" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let uploadedData = {
+            items: null,
+            users: null,
+            checkoutHistory: null
+        };
+
+        let currentUser = null;
+
+        // Authentication state listener
+        auth.onAuthStateChanged((user) => {
+            currentUser = user;
+            if (user) {
+                document.getElementById('authSection').classList.add('hidden');
+                document.getElementById('migrationSection').classList.remove('hidden');
+                showStatus(`✅ Signed in as ${user.email}`, 'success');
+            } else {
+                document.getElementById('authSection').classList.remove('hidden');
+                document.getElementById('migrationSection').classList.add('hidden');
+                currentUser = null;
+            }
+        });
+
+        // Authentication handlers
+        document.getElementById('signInBtn').onclick = async () => {
+            const email = document.getElementById('emailInput').value;
+            const password = document.getElementById('passwordInput').value;
+
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+            } catch (error) {
+                showStatus(`❌ Sign in failed: ${error.message}`, 'error');
+            }
+        };
+
+        document.getElementById('signUpBtn').onclick = async () => {
+            const email = document.getElementById('emailInput').value;
+            const password = document.getElementById('passwordInput').value;
+
+            try {
+                await auth.createUserWithEmailAndPassword(email, password);
+                showStatus('✅ Account created successfully!', 'success');
+            } catch (error) {
+                showStatus(`❌ Account creation failed: ${error.message}`, 'error');
+            }
+        };
+
+        // File upload handlers
+        document.getElementById('itemsFile').onchange = (e) => {
+            handleFileUpload(e.target.files[0], 'items', 'itemsStatus');
+        };
+
+        document.getElementById('usersFile').onchange = (e) => {
+            handleFileUpload(e.target.files[0], 'users', 'usersStatus');
+        };
+
+        document.getElementById('historyFile').onchange = (e) => {
+            handleFileUpload(e.target.files[0], 'checkoutHistory', 'historyStatus');
+        };
+
+        function handleFileUpload(file, dataType, statusId) {
+            if (!file) return;
+
+            const statusElement = document.getElementById(statusId);
+            statusElement.innerHTML = '<div class="text-blue-600">📄 Reading file...</div>';
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    uploadedData[dataType] = data;
+                    statusElement.innerHTML = `<div class="text-green-600">✅ ${data.length} records loaded</div>`;
+
+                    checkMigrationReady();
+                } catch (error) {
+                    statusElement.innerHTML = `<div class="text-red-600">❌ Invalid JSON: ${error.message}</div>`;
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function checkMigrationReady() {
+            const migrateBtn = document.getElementById('migrateBtn');
+            const hasData = uploadedData.items || uploadedData.users || uploadedData.checkoutHistory;
+
+            migrateBtn.disabled = !hasData;
+
+            if (hasData) {
+                migrateBtn.textContent = `🔥 Migrate ${Object.values(uploadedData).filter(d => d).length} Collections`;
+            }
+        }
+
+        // Migration handler
+        document.getElementById('migrateBtn').onclick = async () => {
+            if (!currentUser) {
+                showStatus('❌ Please sign in first', 'error');
+                return;
+            }
+
+            const progressSection = document.getElementById('progressSection');
+            const progressDetails = document.getElementById('progressDetails');
+
+            progressSection.classList.remove('hidden');
+            progressDetails.innerHTML = '';
+
+            try {
+                // Migrate each collection
+                for (const [collectionName, data] of Object.entries(uploadedData)) {
+                    if (!data) continue;
+
+                    progressDetails.innerHTML += `<div class="p-3 bg-blue-50 rounded">🔄 Migrating ${collectionName} (${data.length} records)...</div>`;
+
+                    await migrateCollection(collectionName, data);
+
+                    progressDetails.innerHTML += `<div class="p-3 bg-green-50 rounded">✅ ${collectionName} migration completed!</div>`;
+                }
+
+                showStatus('🎉 Migration completed successfully!', 'success');
+
+            } catch (error) {
+                showStatus(`❌ Migration failed: ${error.message}`, 'error');
+                progressDetails.innerHTML += `<div class="p-3 bg-red-50 rounded">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        async function migrateCollection(collectionName, data) {
+            const collectionRef = db.collection(collectionName);
+            let batch = db.batch();
+            let batchCount = 0;
+
+            for (let i = 0; i < data.length; i++) {
+                const item = data[i];
+                const docData = prepareDocumentData(collectionName, item);
+                const docRef = collectionRef.doc(docData.id);
+
+                batch.set(docRef, docData);
+                batchCount++;
+
+                // Commit in batches of 500 (Firestore limit) and create new batch
+                if (batchCount === 500 || i === data.length - 1) {
+                    await batch.commit();
+                    console.log(`✅ Committed batch for ${collectionName}: ${i + 1}/${data.length}`);
+
+                    // Create new batch for next iteration (if not the last)
+                    if (i !== data.length - 1) {
+                        batch = db.batch();
+                        batchCount = 0;
+                    }
+                }
+            }
+        }
+
+        function prepareDocumentData(collectionName, item) {
+            const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+            const baseData = {
+                ...item,
+                lastUpdated: timestamp,
+                createdAt: timestamp,
+                createdBy: currentUser.email,
+                updatedBy: currentUser.email
+            };
+
+            // Collection-specific preparations
+            switch (collectionName) {
+                case 'items':
+                    return {
+                        ...baseData,
+                        price: parseFloat(item.price || 0),
+                        quantity: parseInt(item.quantity || 0),
+                        minThreshold: parseInt(item.minThreshold || 5),
+                        active: true
+                    };
+
+                case 'users':
+                    return {
+                        ...baseData,
+                        active: true,
+                        role: 'user'
+                    };
+
+                case 'checkoutHistory':
+                    return {
+                        ...baseData,
+                        quantity: parseInt(item.quantity || 1),
+                        status: item.isComplete ? 'completed' : 'active',
+                        dateEntered: item.dateEntered ? new Date(item.dateEntered) : timestamp
+                    };
+
+                default:
+                    return baseData;
+            }
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('migrationStatus');
+            const bgColor = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' :
+                           type === 'error' ? 'bg-red-100 border-red-400 text-red-700' :
+                           'bg-blue-100 border-blue-400 text-blue-700';
+
+            statusDiv.innerHTML = `
+                <div class="border-l-4 p-4 ${bgColor}">
+                    <p class="font-medium">${message}</p>
+                </div>
+            `;
+
+            // Auto-hide success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.innerHTML = '';
+                }, 5000);
+            }
+        }
+
+        // Initialize
+        console.log('🔥 Firebase Migration Tool loaded');
+        showStatus('📁 Upload your JSON data files to begin migration', 'info');
+    </script>
+</body>
+</html>

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mobile Scanner Preview - IT Inventory</title>
+
+    <!-- Mobile-optimized settings -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Prevent zoom on input focus */
+        input, select, textarea {
+            font-size: 16px !important;
+        }
+
+        /* Smooth transitions */
+        * {
+            transition: all 0.2s ease;
+        }
+
+        /* Active button feedback */
+        .btn-active {
+            transform: scale(0.95);
+        }
+
+        /* Camera viewfinder overlay */
+        .camera-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid #10b981;
+            border-radius: 12px;
+            width: 200px;
+            height: 120px;
+            opacity: 0.8;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Scan success animation */
+        .scan-success {
+            animation: scanSuccess 0.5s ease-out;
+        }
+
+        @keyframes scanSuccess {
+            0% { background-color: transparent; }
+            50% { background-color: rgb(34, 197, 94, 0.2); }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 touch-manipulation">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Sample data for preview
+        const sampleItems = [
+            { id: '1', name: 'Dell Monitor 24"', asin: 'B07CVL2D2T', quantity: 15, category: 'Electronics', price: 299.99 },
+            { id: '2', name: 'USB-C Hub', asin: 'B08HR6DSLT', quantity: 25, category: 'Accessories', price: 49.99 },
+            { id: '3', name: 'Wireless Mouse', asin: 'B07FKMDJQZ', quantity: 30, category: 'Accessories', price: 29.99 },
+            { id: '4', name: 'Ethernet Cable 6ft', asin: 'B00N2VIALK', quantity: 50, category: 'Cables', price: 12.99 },
+            { id: '5', name: 'Laptop Stand', asin: 'B075GCG36Z', quantity: 8, category: 'Accessories', price: 79.99 },
+            { id: '6', name: 'HDMI Cable', asin: 'B014I8SSD0', quantity: 22, category: 'Cables', price: 8.99 },
+            { id: '7', name: 'Keyboard Wireless', asin: 'B01E8KO2B0', quantity: 12, category: 'Accessories', price: 45.99 },
+            { id: '8', name: 'Webcam HD', asin: 'B006JH8T3S', quantity: 6, category: 'Electronics', price: 89.99 },
+        ];
+
+        const MobilePreview = () => {
+            const [scanMode, setScanMode] = useState('camera');
+            const [scanInput, setScanInput] = useState('');
+            const [isScanning, setIsScanning] = useState(false);
+            const [recentScans, setRecentScans] = useState([]);
+            const [feedback, setFeedback] = useState('');
+            const [items, setItems] = useState(sampleItems);
+            const [cameraActive, setCameraActive] = useState(false);
+            const [isListening, setIsListening] = useState(false);
+
+            const inputRef = useRef(null);
+
+            // Simulate haptic feedback
+            const vibrate = (pattern = 100) => {
+                if ('vibrate' in navigator) {
+                    navigator.vibrate(pattern);
+                }
+            };
+
+            // Show feedback with animation
+            const showFeedback = (message, type = 'success') => {
+                setFeedback({ message, type });
+
+                // Haptic feedback
+                vibrate(type === 'success' ? 100 : [100, 50, 100]);
+
+                setTimeout(() => setFeedback(''), 3000);
+            };
+
+            // Simulate item scanning
+            const handleItemScanned = async (item, quantity = 1) => {
+                setIsScanning(true);
+
+                // Simulate network delay
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Update local quantity (in real app, this would be Firebase)
+                setItems(prev => prev.map(i =>
+                    i.id === item.id
+                        ? { ...i, quantity: i.quantity + quantity }
+                        : i
+                ));
+
+                // Add to recent scans
+                const scanRecord = {
+                    id: Date.now(),
+                    item: item,
+                    quantity: quantity,
+                    timestamp: new Date()
+                };
+
+                setRecentScans(prev => [scanRecord, ...prev.slice(0, 4)]);
+
+                showFeedback(`✅ ${item.name} +${quantity}`, 'success');
+                setIsScanning(false);
+
+                // Clear input if in keyboard mode
+                if (scanMode === 'keyboard') {
+                    setScanInput('');
+                }
+            };
+
+            // Simulate voice recognition
+            const startVoiceSearch = () => {
+                if (!('webkitSpeechRecognition' in window)) {
+                    showFeedback('❌ Voice not supported in this browser', 'error');
+                    return;
+                }
+
+                setIsListening(true);
+                showFeedback('🎤 Listening... say item name', 'info');
+
+                // Simulate voice recognition after 2 seconds
+                setTimeout(() => {
+                    setIsListening(false);
+
+                    // Simulate recognizing "Dell Monitor"
+                    const voiceResult = 'Dell Monitor';
+                    const matchingItem = items.find(item =>
+                        item.name.toLowerCase().includes(voiceResult.toLowerCase())
+                    );
+
+                    if (matchingItem) {
+                        handleItemScanned(matchingItem);
+                    } else {
+                        showFeedback(`❌ No item found matching "${voiceResult}"`, 'error');
+                    }
+                }, 2000);
+            };
+
+            // Handle keyboard scanning
+            const handleKeyboardScan = (e) => {
+                if (e.key === 'Enter') {
+                    const matchingItem = items.find(item =>
+                        item.name.toLowerCase().includes(scanInput.toLowerCase()) ||
+                        item.asin === scanInput ||
+                        item.id === scanInput
+                    );
+
+                    if (matchingItem) {
+                        handleItemScanned(matchingItem);
+                    } else {
+                        showFeedback(`❌ Item not found: ${scanInput}`, 'error');
+                    }
+                }
+            };
+
+            // Simulate camera scanning
+            const toggleCamera = () => {
+                setCameraActive(!cameraActive);
+                if (!cameraActive) {
+                    showFeedback('📷 Camera scanning active', 'info');
+
+                    // Simulate finding a barcode after 3 seconds
+                    setTimeout(() => {
+                        if (cameraActive) return; // Only if still active
+
+                        const randomItem = items[Math.floor(Math.random() * items.length)];
+                        handleItemScanned(randomItem);
+                        setCameraActive(false);
+                    }, 3000);
+                }
+            };
+
+            // Get frequent items for quick scan
+            const quickScanItems = items.slice(0, 8);
+
+            return (
+                <div className="min-h-screen bg-gray-50 pb-20">
+                    {/* Mobile Header */}
+                    <div className="bg-blue-600 text-white p-4 sticky top-0 z-10 shadow-lg">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-lg font-semibold">📱 Mobile Scanner</h1>
+                                <div className="text-xs opacity-90">Preview Mode</div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-sm bg-blue-500 px-2 py-1 rounded">
+                                    {items.length} items
+                                </div>
+                                <div className="text-xs opacity-90 mt-1">
+                                    🔄 Real-time sync
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Feedback Bar */}
+                    {feedback && (
+                        <div className={`p-3 text-center font-medium sticky top-16 z-10 shadow ${
+                            feedback.type === 'success' ? 'bg-green-100 text-green-700' :
+                            feedback.type === 'error' ? 'bg-red-100 text-red-700' :
+                            'bg-blue-100 text-blue-700'
+                        }`}>
+                            {isListening && (
+                                <div className="inline-block mr-2 animate-pulse">🎤</div>
+                            )}
+                            {feedback.message}
+                        </div>
+                    )}
+
+                    {/* Scan Mode Tabs */}
+                    <div className="p-4 bg-white border-b sticky top-20 z-10">
+                        <div className="grid grid-cols-3 gap-2">
+                            {[
+                                { mode: 'camera', icon: '📷', label: 'Camera' },
+                                { mode: 'keyboard', icon: '⌨️', label: 'Manual' },
+                                { mode: 'quick', icon: '⚡', label: 'Quick' }
+                            ].map(({ mode, icon, label }) => (
+                                <button
+                                    key={mode}
+                                    onClick={() => {
+                                        setScanMode(mode);
+                                        setCameraActive(false);
+                                        vibrate(50);
+                                    }}
+                                    className={`p-4 rounded-xl text-center transform active:scale-95 ${
+                                        scanMode === mode
+                                            ? 'bg-blue-600 text-white shadow-lg'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <div className="text-2xl mb-1">{icon}</div>
+                                    <div className="text-xs font-medium">{label}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Camera Mode */}
+                    {scanMode === 'camera' && (
+                        <div className="p-4">
+                            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                                <div className="p-4">
+                                    <h3 className="font-semibold text-center mb-4">📷 Camera Scanning</h3>
+                                </div>
+
+                                {/* Simulated Camera View */}
+                                <div className="relative bg-gray-900 aspect-video mx-4 rounded-lg overflow-hidden mb-4">
+                                    {cameraActive ? (
+                                        <>
+                                            <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                                                <div className="text-white text-center">
+                                                    <div className="text-4xl mb-2 animate-bounce">📷</div>
+                                                    <div className="text-sm">Scanning for barcodes...</div>
+                                                </div>
+                                            </div>
+                                            <div className="camera-overlay"></div>
+                                        </>
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                                            <div className="text-center">
+                                                <div className="text-4xl mb-2">📷</div>
+                                                <div className="text-sm">Camera Ready</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="p-4 space-y-3">
+                                    <button
+                                        onClick={toggleCamera}
+                                        disabled={isScanning}
+                                        className={`w-full py-4 rounded-lg font-medium transform active:scale-95 ${
+                                            cameraActive
+                                                ? 'bg-red-600 text-white'
+                                                : 'bg-blue-600 text-white'
+                                        } disabled:opacity-50`}
+                                    >
+                                        {cameraActive ? '⏹️ Stop Camera' : '▶️ Start Camera'}
+                                    </button>
+
+                                    <button
+                                        onClick={startVoiceSearch}
+                                        disabled={isScanning || isListening}
+                                        className="w-full bg-green-600 text-white py-3 rounded-lg font-medium transform active:scale-95 disabled:opacity-50"
+                                    >
+                                        {isListening ? '🎤 Listening...' : '🎤 Voice Search'}
+                                    </button>
+                                </div>
+
+                                <div className="p-4 pt-0">
+                                    <div className="text-xs text-gray-500 text-center bg-gray-50 p-3 rounded-lg">
+                                        📱 In real app: Uses BarcodeDetector API for instant scanning
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Manual Entry Mode */}
+                    {scanMode === 'keyboard' && (
+                        <div className="p-4">
+                            <div className="bg-white rounded-xl shadow-lg p-6">
+                                <h3 className="font-semibold text-center mb-4">⌨️ Manual Entry</h3>
+
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={scanInput}
+                                    onChange={(e) => setScanInput(e.target.value)}
+                                    onKeyPress={handleKeyboardScan}
+                                    placeholder="Type or scan item name, ASIN..."
+                                    className="w-full p-4 border-2 border-gray-300 rounded-lg text-lg mb-4 focus:border-blue-500 focus:outline-none"
+                                    autoFocus
+                                />
+
+                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                    <button
+                                        onClick={() => {
+                                            setScanInput('Dell Monitor');
+                                            setTimeout(() => inputRef.current?.focus(), 100);
+                                        }}
+                                        className="bg-gray-100 p-3 rounded-lg text-sm transform active:scale-95"
+                                    >
+                                        📝 Sample: Dell Monitor
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setScanInput('B07CVL2D2T');
+                                            setTimeout(() => inputRef.current?.focus(), 100);
+                                        }}
+                                        className="bg-gray-100 p-3 rounded-lg text-sm transform active:scale-95"
+                                    >
+                                        🔢 Sample ASIN
+                                    </button>
+                                </div>
+
+                                <button
+                                    onClick={startVoiceSearch}
+                                    disabled={isListening}
+                                    className="w-full bg-green-600 text-white py-3 rounded-lg font-medium transform active:scale-95 disabled:opacity-50"
+                                >
+                                    {isListening ? '🎤 Listening...' : '🎤 Use Voice Instead'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Quick Scan Mode */}
+                    {scanMode === 'quick' && (
+                        <div className="p-4">
+                            <div className="bg-white rounded-xl shadow-lg p-4">
+                                <h3 className="font-semibold text-center mb-2">⚡ Quick Scan</h3>
+                                <p className="text-sm text-gray-600 text-center mb-4">
+                                    Tap to scan frequently used items
+                                </p>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    {quickScanItems.map(item => (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => handleItemScanned(item)}
+                                            disabled={isScanning}
+                                            className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl text-left hover:from-gray-100 hover:to-gray-200 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
+                                        >
+                                            <div className="font-medium text-sm mb-2 truncate">
+                                                {item.name}
+                                            </div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                                    Qty: {item.quantity}
+                                                </span>
+                                                {item.price > 0 && (
+                                                    <span className="text-xs font-semibold text-green-600">
+                                                        ${item.price}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                {item.category}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Recent Scans */}
+                    {recentScans.length > 0 && (
+                        <div className="p-4">
+                            <div className="bg-white rounded-xl shadow-lg p-4">
+                                <h3 className="font-semibold mb-3 flex items-center">
+                                    📋 Recent Scans
+                                    <span className="ml-2 bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">
+                                        {recentScans.length}
+                                    </span>
+                                </h3>
+                                <div className="space-y-2">
+                                    {recentScans.map((scan, index) => (
+                                        <div
+                                            key={scan.id}
+                                            className={`flex justify-between items-center p-3 rounded-lg transition-all ${
+                                                index === 0
+                                                    ? 'bg-green-50 border-2 border-green-200 scan-success'
+                                                    : 'bg-gray-50 border border-gray-200'
+                                            }`}
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-medium text-sm truncate">
+                                                    {scan.item.name}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {scan.timestamp.toLocaleTimeString()}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center space-x-2 ml-3">
+                                                <div className="text-green-600 font-bold text-lg">
+                                                    +{scan.quantity}
+                                                </div>
+                                                <button
+                                                    onClick={() => handleItemScanned(scan.item)}
+                                                    className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full transform active:scale-95"
+                                                >
+                                                    Scan Again
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Instructions */}
+                    <div className="p-4">
+                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                            <div className="flex items-start">
+                                <div className="text-blue-600 text-xl mr-3">💡</div>
+                                <div>
+                                    <div className="font-medium text-blue-900 mb-2">Mobile Scanning Features:</div>
+                                    <ul className="text-xs text-blue-700 space-y-1">
+                                        <li>• 📷 Camera automatically detects barcodes</li>
+                                        <li>• 🎤 Voice search understands partial names</li>
+                                        <li>• ⚡ Quick scan for your most-used items</li>
+                                        <li>• 📳 Haptic feedback confirms successful scans</li>
+                                        <li>• 🔄 Real-time sync across all devices</li>
+                                        <li>• 📡 Works offline, syncs when connected</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Loading overlay */}
+                    {isScanning && (
+                        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+                            <div className="bg-white rounded-xl p-6 shadow-2xl">
+                                <div className="flex items-center space-x-3">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                    <div className="font-medium">Processing scan...</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        };
+
+        // Render the preview
+        ReactDOM.render(<MobilePreview />, document.getElementById('root'));
+    </script>
+</body>
+</html>
