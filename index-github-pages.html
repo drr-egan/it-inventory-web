@@ -1486,6 +1486,110 @@
             const { isDarkMode, toggleDarkMode } = useTheme();
             const { snackbar, showSnackbar } = useSnackbar();
 
+            // Initialize Firebase with existing data if empty
+            const initializeDataIfEmpty = async () => {
+                try {
+                    // Check if collections are empty
+                    const itemsSnapshot = await db.collection('items').limit(1).get();
+                    const usersSnapshot = await db.collection('users').limit(1).get();
+
+                    if (itemsSnapshot.empty || usersSnapshot.empty) {
+                        showSnackbar('Initializing database with inventory data...', 'info');
+
+                        // Load and populate items
+                        if (itemsSnapshot.empty) {
+                            const itemsResponse = await fetch('./data/items.json');
+                            if (itemsResponse.ok) {
+                                const itemsData = await itemsResponse.json();
+                                const batch = db.batch();
+
+                                itemsData.forEach(item => {
+                                    const docRef = db.collection('items').doc(item.id);
+                                    batch.set(docRef, {
+                                        ...item,
+                                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                        createdBy: 'auto-migration'
+                                    });
+                                });
+
+                                await batch.commit();
+                                showSnackbar(`Loaded ${itemsData.length} items`, 'success');
+                            }
+                        }
+
+                        // Load and populate users
+                        if (usersSnapshot.empty) {
+                            const usersResponse = await fetch('./data/users.json');
+                            if (usersResponse.ok) {
+                                const usersData = await usersResponse.json();
+
+                                // Process in smaller batches due to Firestore 500 doc limit
+                                const batchSize = 400;
+                                for (let i = 0; i < usersData.length; i += batchSize) {
+                                    const batch = db.batch();
+                                    const usersBatch = usersData.slice(i, i + batchSize);
+
+                                    usersBatch.forEach(user => {
+                                        const docRef = db.collection('users').doc(user.id);
+                                        batch.set(docRef, {
+                                            ...user,
+                                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                            createdBy: 'auto-migration',
+                                            active: true
+                                        });
+                                    });
+
+                                    await batch.commit();
+                                    showSnackbar(`Loaded ${Math.min(i + batchSize, usersData.length)} / ${usersData.length} users`, 'info');
+                                }
+
+                                showSnackbar(`Loaded ${usersData.length} users`, 'success');
+                            }
+                        }
+
+                        // Optionally load checkout history (limit to recent records due to size)
+                        const historySnapshot = await db.collection('checkoutHistory').limit(1).get();
+                        if (historySnapshot.empty) {
+                            const historyResponse = await fetch('./data/checkoutHistory.json');
+                            if (historyResponse.ok) {
+                                const historyData = await historyResponse.json();
+
+                                // Only load most recent 500 records to avoid quota issues
+                                const recentHistory = historyData
+                                    .sort((a, b) => new Date(b.dateEntered) - new Date(a.dateEntered))
+                                    .slice(0, 500);
+
+                                const batchSize = 400;
+                                for (let i = 0; i < recentHistory.length; i += batchSize) {
+                                    const batch = db.batch();
+                                    const historyBatch = recentHistory.slice(i, i + batchSize);
+
+                                    historyBatch.forEach(record => {
+                                        const docRef = db.collection('checkoutHistory').doc(record.id);
+                                        batch.set(docRef, {
+                                            ...record,
+                                            dateEntered: record.dateEntered ? new Date(record.dateEntered) : firebase.firestore.FieldValue.serverTimestamp(),
+                                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                            createdBy: 'auto-migration'
+                                        });
+                                    });
+
+                                    await batch.commit();
+                                }
+
+                                showSnackbar(`Loaded ${recentHistory.length} recent checkout records`, 'success');
+                            }
+                        }
+
+                        showSnackbar('Database initialization complete!', 'success');
+                    }
+                } catch (error) {
+                    console.error('Data initialization error:', error);
+                    showSnackbar(`Data initialization failed: ${error.message}`, 'error');
+                }
+            };
+
             // Real-time data listeners
             useEffect(() => {
                 const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -1495,6 +1599,9 @@
                     if (user) {
                         try {
                             setConnectionStatus('connecting');
+
+                            // Check if data needs to be initialized
+                            await initializeDataIfEmpty();
 
                             // Set up real-time listeners
                             const itemsUnsubscribe = db.collection('items')
