@@ -941,8 +941,12 @@
             const [recentScans, setRecentScans] = useState([]);
             const [feedback, setFeedback] = useState('');
             const [isScanning, setIsScanning] = useState(false);
+            const [cameraMode, setCameraMode] = useState(false);
+            const [cameraStream, setCameraStream] = useState(null);
             const { showSnackbar } = useSnackbar();
             const inputRef = useRef(null);
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
 
             const handleItemScanned = async (itemIdentifier, quantity = 1) => {
                 setIsScanning(true);
@@ -1044,6 +1048,103 @@
                 recognition.start();
             };
 
+            // Camera barcode scanning functions
+            const startCamera = async () => {
+                try {
+                    setIsScanning(true);
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'environment', // Use back camera if available
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    });
+
+                    setCameraStream(stream);
+                    setCameraMode(true);
+
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        videoRef.current.play();
+                        startBarcodeDetection();
+                    }
+
+                    showSnackbar('Camera started - point at barcode', 'success');
+                } catch (error) {
+                    showSnackbar(`Camera access failed: ${error.message}`, 'error');
+                    setIsScanning(false);
+                }
+            };
+
+            const stopCamera = () => {
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                    setCameraStream(null);
+                }
+                setCameraMode(false);
+                setIsScanning(false);
+            };
+
+            const startBarcodeDetection = async () => {
+                if (!videoRef.current || !canvasRef.current) return;
+
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+
+                // Check for BarcodeDetector API support
+                if ('BarcodeDetector' in window) {
+                    const detector = new BarcodeDetector({ formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+
+                    const detectBarcodes = async () => {
+                        if (!cameraMode || !video.videoWidth || !video.videoHeight) return;
+
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        ctx.drawImage(video, 0, 0);
+
+                        try {
+                            const barcodes = await detector.detect(canvas);
+                            if (barcodes.length > 0) {
+                                const barcode = barcodes[0];
+                                showSnackbar(`Barcode detected: ${barcode.rawValue}`, 'info');
+                                await handleItemScanned(barcode.rawValue);
+                                stopCamera();
+                                return;
+                            }
+                        } catch (error) {
+                            console.warn('Barcode detection error:', error);
+                        }
+
+                        // Continue scanning
+                        if (cameraMode) {
+                            requestAnimationFrame(detectBarcodes);
+                        }
+                    };
+
+                    // Start detection when video is ready
+                    video.addEventListener('loadedmetadata', () => {
+                        detectBarcodes();
+                    });
+
+                    if (video.readyState >= video.HAVE_METADATA) {
+                        detectBarcodes();
+                    }
+                } else {
+                    // Fallback: Manual capture for browsers without BarcodeDetector
+                    showSnackbar('Automatic scanning not supported - use manual input', 'warning');
+                }
+            };
+
+            // Cleanup effect
+            useEffect(() => {
+                return () => {
+                    if (cameraStream) {
+                        cameraStream.getTracks().forEach(track => track.stop());
+                    }
+                };
+            }, [cameraStream]);
+
             return (
                 <MaterialCard elevation={2}>
                     <div className="flex items-center justify-between mb-4">
@@ -1069,25 +1170,37 @@
                             placeholder="Enter item name, ASIN, or scan barcode..."
                         />
 
-                        <div className="flex space-x-3">
+                        <div className="flex space-x-2">
+                            <MaterialButton
+                                onClick={cameraMode ? stopCamera : startCamera}
+                                disabled={false}
+                                variant={cameraMode ? "contained" : "outlined"}
+                                color={cameraMode ? "error" : "primary"}
+                                className="flex-1"
+                            >
+                                <span className="material-icons mr-2">
+                                    {cameraMode ? 'videocam_off' : 'videocam'}
+                                </span>
+                                {cameraMode ? 'Stop Camera' : 'Start Camera'}
+                            </MaterialButton>
                             <MaterialButton
                                 onClick={startVoiceSearch}
-                                disabled={isScanning}
+                                disabled={isScanning || cameraMode}
                                 variant="outlined"
                                 color="primary"
                                 className="flex-1"
                             >
                                 <span className="material-icons mr-2">mic</span>
-                                Voice Search
+                                Voice
                             </MaterialButton>
                             <MaterialButton
                                 onClick={handleScanClick}
-                                disabled={isScanning || !scanInput.trim()}
+                                disabled={isScanning || !scanInput.trim() || cameraMode}
                                 variant="contained"
                                 color="primary"
                                 className="flex-1"
                             >
-                                {isScanning ? (
+                                {isScanning && !cameraMode ? (
                                     <>
                                         <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
                                         Scanning...
@@ -1095,11 +1208,45 @@
                                 ) : (
                                     <>
                                         <span className="material-icons mr-2">search</span>
-                                        Scan
+                                        Manual
                                     </>
                                 )}
                             </MaterialButton>
                         </div>
+
+                        {/* Camera View */}
+                        {cameraMode && (
+                            <div className="bg-black rounded-lg overflow-hidden relative">
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="w-full h-64 object-cover"
+                                />
+                                <canvas
+                                    ref={canvasRef}
+                                    className="hidden"
+                                />
+                                <div className="absolute inset-0 border-2 border-red-500 border-dashed rounded-lg pointer-events-none">
+                                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-24 border-2 border-red-500 rounded-lg bg-red-500/10">
+                                        <div className="text-white text-center mt-8 text-sm font-medium">
+                                            Position barcode here
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="absolute top-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs">
+                                    {isScanning ? (
+                                        <div className="flex items-center">
+                                            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse mr-2"></div>
+                                            Scanning...
+                                        </div>
+                                    ) : (
+                                        'Ready'
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Recent Scans */}
                         {recentScans.length > 0 && (
