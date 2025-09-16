@@ -1048,31 +1048,142 @@
                 recognition.start();
             };
 
+            // Check camera permissions and capabilities
+            const checkCameraSupport = async () => {
+                try {
+                    // Check if getUserMedia is supported
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        return { supported: false, message: 'Camera API not supported' };
+                    }
+
+                    // Check permissions
+                    if (navigator.permissions && navigator.permissions.query) {
+                        try {
+                            const permission = await navigator.permissions.query({ name: 'camera' });
+                            console.log('Camera permission status:', permission.state);
+                            if (permission.state === 'denied') {
+                                return { supported: false, message: 'Camera permission denied' };
+                            }
+                        } catch (permError) {
+                            console.warn('Permission query failed:', permError);
+                        }
+                    }
+
+                    // Check available devices
+                    if (navigator.mediaDevices.enumerateDevices) {
+                        try {
+                            const devices = await navigator.mediaDevices.enumerateDevices();
+                            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                            console.log('Available video devices:', videoDevices.length);
+                            if (videoDevices.length === 0) {
+                                return { supported: false, message: 'No cameras found' };
+                            }
+                        } catch (enumError) {
+                            console.warn('Device enumeration failed:', enumError);
+                        }
+                    }
+
+                    return { supported: true, message: 'Camera supported' };
+                } catch (error) {
+                    return { supported: false, message: error.message };
+                }
+            };
+
             // Camera barcode scanning functions
             const startCamera = async () => {
                 try {
                     setIsScanning(true);
-                    const stream = await navigator.mediaDevices.getUserMedia({
+                    showSnackbar('Checking camera support...', 'info');
+
+                    // Check camera support first
+                    const supportCheck = await checkCameraSupport();
+                    if (!supportCheck.supported) {
+                        throw new Error(supportCheck.message);
+                    }
+
+                    showSnackbar('Requesting camera access...', 'info');
+
+                    // iOS-optimized constraints
+                    const constraints = {
                         video: {
-                            facingMode: 'environment', // Use back camera if available
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
+                            facingMode: { ideal: 'environment' },
+                            width: { min: 320, ideal: 640, max: 1920 },
+                            height: { min: 240, ideal: 480, max: 1080 },
+                            frameRate: { ideal: 30, max: 30 }
+                        },
+                        audio: false
+                    };
+
+                    let stream;
+                    try {
+                        // Try with environment camera first
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    } catch (envError) {
+                        console.warn('Environment camera failed, trying any camera:', envError);
+                        // Fallback to any available camera
+                        try {
+                            stream = await navigator.mediaDevices.getUserMedia({
+                                video: {
+                                    width: { min: 320, ideal: 640 },
+                                    height: { min: 240, ideal: 480 }
+                                },
+                                audio: false
+                            });
+                        } catch (anyError) {
+                            throw new Error(`Camera access denied: ${anyError.message}`);
                         }
-                    });
+                    }
 
                     setCameraStream(stream);
                     setCameraMode(true);
 
                     if (videoRef.current) {
-                        videoRef.current.srcObject = stream;
-                        videoRef.current.play();
-                        startBarcodeDetection();
+                        const video = videoRef.current;
+
+                        // iOS-specific video setup
+                        video.setAttribute('playsinline', 'true');
+                        video.setAttribute('webkit-playsinline', 'true');
+                        video.muted = true;
+                        video.autoplay = true;
+
+                        video.srcObject = stream;
+
+                        // Wait for video to be ready
+                        video.addEventListener('loadedmetadata', () => {
+                            console.log('Video metadata loaded:', video.videoWidth, 'x', video.videoHeight);
+                            startBarcodeDetection();
+                        });
+
+                        video.addEventListener('canplay', () => {
+                            console.log('Video can play');
+                            video.play().catch(playError => {
+                                console.error('Video play failed:', playError);
+                                showSnackbar('Video playback failed', 'error');
+                            });
+                        });
+
+                        // Force play for iOS
+                        const playPromise = video.play();
+                        if (playPromise !== undefined) {
+                            playPromise.catch(error => {
+                                console.error('Play promise failed:', error);
+                                // Try again after a short delay
+                                setTimeout(() => {
+                                    video.play().catch(retryError => {
+                                        console.error('Retry play failed:', retryError);
+                                        showSnackbar('Unable to start video on this device', 'error');
+                                    });
+                                }, 100);
+                            });
+                        }
                     }
 
                     showSnackbar('Camera started - point at barcode', 'success');
                 } catch (error) {
-                    showSnackbar(`Camera access failed: ${error.message}`, 'error');
+                    console.error('Camera start error:', error);
+                    showSnackbar(`Camera failed: ${error.message}`, 'error');
                     setIsScanning(false);
+                    setCameraMode(false);
                 }
             };
 
@@ -1214,6 +1325,18 @@
                             </MaterialButton>
                         </div>
 
+                        {/* Debug Info */}
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-xs">
+                            <div className="font-medium text-blue-800 dark:text-blue-200 mb-2">Camera Debug Info:</div>
+                            <div className="space-y-1 text-blue-700 dark:text-blue-300">
+                                <div>HTTPS: {location.protocol === 'https:' ? '✅' : '❌'}</div>
+                                <div>MediaDevices: {navigator.mediaDevices ? '✅' : '❌'}</div>
+                                <div>getUserMedia: {navigator.mediaDevices?.getUserMedia ? '✅' : '❌'}</div>
+                                <div>User Agent: {navigator.userAgent.includes('iPhone') ? 'iPhone' : navigator.userAgent.includes('iPad') ? 'iPad' : 'Other'}</div>
+                                <div>BarcodeDetector: {'BarcodeDetector' in window ? '✅' : '❌'}</div>
+                            </div>
+                        </div>
+
                         {/* Camera View */}
                         {cameraMode && (
                             <div className="bg-black rounded-lg overflow-hidden relative">
@@ -1221,8 +1344,11 @@
                                     ref={videoRef}
                                     autoPlay
                                     playsInline
+                                    webkitPlaysinline="true"
                                     muted
+                                    controls={false}
                                     className="w-full h-64 object-cover"
+                                    style={{ backgroundColor: '#000' }}
                                 />
                                 <canvas
                                     ref={canvasRef}
