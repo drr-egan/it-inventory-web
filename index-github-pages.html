@@ -1389,7 +1389,7 @@
                 try {
                     const csvHeader = 'Item Name,Category,Quantity,Price,ASIN,Min Threshold\n';
                     const csvRows = items.map(item =>
-                        `"${item.name}","${item.category || ''}",${item.quantity || 0},${item.price || 0},"${item.asin || '"}",${item.minThreshold || 5}`
+                        `"${(item.name || '').replace(/"/g, '""')}","${(item.category || '').replace(/"/g, '""')}",${item.quantity || 0},${item.price || 0},"${(item.asin || '').replace(/"/g, '""')}",${item.minThreshold || 5}`
                     ).join('\n');
 
                     const csvContent = csvHeader + csvRows;
@@ -1412,7 +1412,7 @@
                 try {
                     const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Email,Department,Status\n';
                     const csvRows = users.map(user =>
-                        `"${user.firstName || ''}","${user.lastName || ''}","${user.name || ''}","${user.costCode || user.cost_code || ''}","${user.email || ''}","${user.department || ''}","${user.status || 'active'}"`
+                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.email || '').replace(/"/g, '""')}","${(user.department || '').replace(/"/g, '""')}","${user.status || 'active'}"`
                     ).join('\n');
 
                     const csvContent = csvHeader + csvRows;
