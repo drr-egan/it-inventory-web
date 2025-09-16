@@ -50,17 +50,140 @@
     </script>
 
     <style>
-        /* Material Design Custom Styles */
+        /* Material You Design System */
+        :root {
+            /* Material You Elevation Tokens */
+            --md-elevation-1: 0px 1px 3px 1px rgba(0, 0, 0, 0.15), 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+            --md-elevation-2: 0px 2px 6px 2px rgba(0, 0, 0, 0.15), 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+            --md-elevation-3: 0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px 0px rgba(0, 0, 0, 0.3);
+            --md-elevation-4: 0px 6px 10px 4px rgba(0, 0, 0, 0.15), 0px 2px 3px 0px rgba(0, 0, 0, 0.3);
+            --md-elevation-5: 0px 8px 12px 6px rgba(0, 0, 0, 0.15), 0px 4px 4px 0px rgba(0, 0, 0, 0.3);
+
+            /* Material You Shape Tokens */
+            --md-sys-shape-corner-none: 0px;
+            --md-sys-shape-corner-extra-small: 4px;
+            --md-sys-shape-corner-small: 8px;
+            --md-sys-shape-corner-medium: 12px;
+            --md-sys-shape-corner-large: 16px;
+            --md-sys-shape-corner-extra-large: 28px;
+            --md-sys-shape-corner-full: 1000px;
+
+            /* Material You Typography Scale */
+            --md-sys-typescale-display-large: 400 57px/64px 'Roboto', sans-serif;
+            --md-sys-typescale-headline-large: 400 32px/40px 'Roboto', sans-serif;
+            --md-sys-typescale-headline-medium: 400 28px/36px 'Roboto', sans-serif;
+            --md-sys-typescale-title-large: 400 22px/28px 'Roboto', sans-serif;
+            --md-sys-typescale-title-medium: 500 16px/24px 'Roboto', sans-serif;
+            --md-sys-typescale-body-large: 400 16px/24px 'Roboto', sans-serif;
+            --md-sys-typescale-body-medium: 400 14px/20px 'Roboto', sans-serif;
+            --md-sys-typescale-label-large: 500 14px/20px 'Roboto', sans-serif;
+            --md-sys-typescale-label-medium: 500 12px/16px 'Roboto', sans-serif;
+        }
+
+        /* Material You Base Styles */
         * {
             font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
-        /* Material Design Shadows */
-        .mat-elevation-1 { box-shadow: 0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12); }
-        .mat-elevation-2 { box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12); }
-        .mat-elevation-4 { box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12); }
-        .mat-elevation-8 { box-shadow: 0px 5px 5px -3px rgba(0,0,0,0.2), 0px 8px 10px 1px rgba(0,0,0,0.14), 0px 3px 14px 2px rgba(0,0,0,0.12); }
-        .mat-elevation-16 { box-shadow: 0px 8px 10px -5px rgba(0,0,0,0.2), 0px 16px 24px 2px rgba(0,0,0,0.14), 0px 6px 30px 5px rgba(0,0,0,0.12); }
+        /* Material You Global Styles */
+        body {
+            background-color: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Material You Elevation System */
+        .md-elevation-1 { box-shadow: var(--md-elevation-1); }
+        .md-elevation-2 { box-shadow: var(--md-elevation-2); }
+        .md-elevation-3 { box-shadow: var(--md-elevation-3); }
+        .md-elevation-4 { box-shadow: var(--md-elevation-4); }
+        .md-elevation-5 { box-shadow: var(--md-elevation-5); }
+
+        /* Material You Navigation Components */
+        .md-navigation-bar {
+            transition: background-color 0.3s ease;
+        }
+
+        .md-navigation-tab {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 24px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: var(--md-sys-shape-corner-small);
+            font: var(--md-sys-typescale-label-large);
+            min-height: 48px;
+        }
+
+        .md-navigation-tab:hover {
+            background-color: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+        }
+
+        .md-navigation-tab .material-icons {
+            font-size: 20px;
+        }
+
+        /* Material You Badges */
+        .md-badge {
+            border-radius: var(--md-sys-shape-corner-full);
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 500;
+            min-width: 16px;
+            text-align: center;
+            line-height: 1;
+        }
+
+        /* Material You Theme Toggle */
+        .md-theme-toggle {
+            background-color: var(--md-sys-color-surface-container-highest);
+            color: var(--md-sys-color-on-surface);
+            border: 1px solid var(--md-sys-color-outline);
+            border-radius: var(--md-sys-shape-corner-full);
+            padding: 8px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .md-theme-toggle:hover {
+            background-color: var(--md-sys-color-surface-container-high);
+            transform: scale(1.05);
+        }
+
+        /* Material You Status Indicator */
+        .md-status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            background-color: var(--md-sys-color-success-container);
+            color: var(--md-sys-color-on-surface-variant);
+            border-radius: var(--md-sys-shape-corner-full);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .md-status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--md-sys-color-success);
+            border-radius: 50%;
+            animation: md-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes md-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.95); }
+        }
 
         /* Material Design Ripple Effect */
         .mat-ripple {
@@ -322,19 +445,63 @@
             return { snackbar, showSnackbar };
         };
 
-        // Material Design Hook for Theme
+        // Material You Theme System
         const useTheme = () => {
             const [isDarkMode, setIsDarkMode] = useState(() => {
-                const saved = localStorage.getItem('darkMode');
+                const saved = localStorage.getItem('materialYouTheme');
                 return saved ? JSON.parse(saved) : false;
             });
 
             useEffect(() => {
-                localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
+                localStorage.setItem('materialYouTheme', JSON.stringify(isDarkMode));
+
+                // Apply Material You color tokens
+                const root = document.documentElement;
+
                 if (isDarkMode) {
-                    document.documentElement.classList.add('dark');
+                    // Material You Dark Theme
+                    root.classList.add('dark');
+                    root.style.setProperty('--md-sys-color-primary', '#A6C8FF');
+                    root.style.setProperty('--md-sys-color-on-primary', '#002E69');
+                    root.style.setProperty('--md-sys-color-primary-container', '#004494');
+                    root.style.setProperty('--md-sys-color-on-primary-container', '#D1E4FF');
+                    root.style.setProperty('--md-sys-color-surface', '#101418');
+                    root.style.setProperty('--md-sys-color-on-surface', '#E1E2E8');
+                    root.style.setProperty('--md-sys-color-surface-variant', '#42474E');
+                    root.style.setProperty('--md-sys-color-on-surface-variant', '#C2C7CF');
+                    root.style.setProperty('--md-sys-color-surface-container', '#1C2024');
+                    root.style.setProperty('--md-sys-color-surface-container-high', '#272A2F');
+                    root.style.setProperty('--md-sys-color-surface-container-highest', '#31353A');
+                    root.style.setProperty('--md-sys-color-outline', '#8C9199');
+                    root.style.setProperty('--md-sys-color-outline-variant', '#42474E');
+                    root.style.setProperty('--md-sys-color-error', '#FFB4AB');
+                    root.style.setProperty('--md-sys-color-error-container', '#93000A');
+                    root.style.setProperty('--md-sys-color-warning', '#FFB951');
+                    root.style.setProperty('--md-sys-color-warning-container', '#7F4F00');
+                    root.style.setProperty('--md-sys-color-success', '#4DD865');
+                    root.style.setProperty('--md-sys-color-success-container', '#00390F');
                 } else {
-                    document.documentElement.classList.remove('dark');
+                    // Material You Light Theme
+                    root.classList.remove('dark');
+                    root.style.setProperty('--md-sys-color-primary', '#1B5FBF');
+                    root.style.setProperty('--md-sys-color-on-primary', '#FFFFFF');
+                    root.style.setProperty('--md-sys-color-primary-container', '#D1E4FF');
+                    root.style.setProperty('--md-sys-color-on-primary-container', '#001D35');
+                    root.style.setProperty('--md-sys-color-surface', '#FCFCFF');
+                    root.style.setProperty('--md-sys-color-on-surface', '#1A1C1E');
+                    root.style.setProperty('--md-sys-color-surface-variant', '#E1E2E8');
+                    root.style.setProperty('--md-sys-color-on-surface-variant', '#42474E');
+                    root.style.setProperty('--md-sys-color-surface-container', '#F3F4FA');
+                    root.style.setProperty('--md-sys-color-surface-container-high', '#ECEEF4');
+                    root.style.setProperty('--md-sys-color-surface-container-highest', '#E6E7ED');
+                    root.style.setProperty('--md-sys-color-outline', '#73777F');
+                    root.style.setProperty('--md-sys-color-outline-variant', '#C2C7CF');
+                    root.style.setProperty('--md-sys-color-error', '#BA1A1A');
+                    root.style.setProperty('--md-sys-color-error-container', '#FFDAD6');
+                    root.style.setProperty('--md-sys-color-warning', '#A06500');
+                    root.style.setProperty('--md-sys-color-warning-container', '#FFDDB3');
+                    root.style.setProperty('--md-sys-color-success', '#146C2E');
+                    root.style.setProperty('--md-sys-color-success-container', '#B7F4B7');
                 }
             }, [isDarkMode]);
 
@@ -2185,30 +2352,43 @@
                         </div>
                     )}
 
-                    {/* Material Design Navigation */}
-                    <nav className="bg-white dark:bg-gray-800 mat-elevation-2 transition-colors duration-300">
+                    {/* Material You Navigation */}
+                    <nav className="md-navigation-bar md-elevation-2" style={{
+                        backgroundColor: 'var(--md-sys-color-surface-container)',
+                        borderBottom: '1px solid var(--md-sys-color-outline-variant)'
+                    }}>
                         <div className="max-w-7xl mx-auto">
                             {/* Desktop Navigation */}
-                            <div className="hidden lg:flex justify-between items-center">
-                                <div className="flex mat-tab-nav">
+                            <div className="hidden lg:flex justify-between items-center px-4">
+                                <div className="flex">
                                     {tabs.map(tab => (
                                         <button
                                             key={tab.id}
                                             onClick={() => setActiveTab(tab.id)}
-                                            className={`mat-tab flex items-center space-x-2 ${
-                                                activeTab === tab.id
-                                                    ? 'active text-blue-600 dark:text-blue-400'
-                                                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-                                            }`}
+                                            className={`md-navigation-tab ${activeTab === tab.id ? 'active' : ''}`}
+                                            style={{
+                                                backgroundColor: activeTab === tab.id
+                                                    ? 'var(--md-sys-color-primary-container)'
+                                                    : 'transparent',
+                                                color: activeTab === tab.id
+                                                    ? 'var(--md-sys-color-on-primary-container)'
+                                                    : 'var(--md-sys-color-on-surface-variant)'
+                                            }}
                                         >
-                                            <span className="material-icons text-sm">{tab.icon}</span>
-                                            <span className="font-medium">{tab.name}</span>
+                                            <span className="material-icons text-lg">{tab.icon}</span>
+                                            <span>{tab.name}</span>
                                             {tab.count !== undefined && tab.count > 0 && (
-                                                <div className={`px-2 py-1 text-xs rounded-full ${
-                                                    tab.id === 'shop'
-                                                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                                                }`}>
+                                                <div
+                                                    className="md-badge"
+                                                    style={{
+                                                        backgroundColor: tab.id === 'shop'
+                                                            ? 'var(--md-sys-color-primary)'
+                                                            : 'var(--md-sys-color-surface-variant)',
+                                                        color: tab.id === 'shop'
+                                                            ? 'var(--md-sys-color-on-primary)'
+                                                            : 'var(--md-sys-color-on-surface-variant)'
+                                                    }}
+                                                >
                                                     {tab.count}
                                                 </div>
                                             )}
@@ -2216,21 +2396,21 @@
                                     ))}
                                 </div>
 
-                                <div className="flex items-center space-x-4 px-4">
-                                    <MaterialButton
+                                <div className="flex items-center gap-3">
+                                    <div className="md-status-indicator">
+                                        <div className="md-status-dot"></div>
+                                        <span>Connected</span>
+                                    </div>
+
+                                    <button
                                         onClick={toggleDarkMode}
-                                        variant="text"
-                                        className="!p-2 !min-w-0"
+                                        className="md-theme-toggle"
+                                        title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
                                     >
-                                        <span className="material-icons">
+                                        <span className="material-icons text-lg">
                                             {isDarkMode ? 'light_mode' : 'dark_mode'}
                                         </span>
-                                    </MaterialButton>
-
-                                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                        <span>Real-time</span>
-                                    </div>
+                                    </button>
                                 </div>
                             </div>
 
@@ -2238,44 +2418,65 @@
                             <div className="lg:hidden">
                                 {/* Mobile Header */}
                                 <div className="flex justify-between items-center p-4">
-                                    <h2 className="font-semibold text-gray-900 dark:text-white">
+                                    <h2 className="font-medium text-xl" style={{
+                                        color: 'var(--md-sys-color-on-surface)',
+                                        font: 'var(--md-sys-typescale-title-large)'
+                                    }}>
                                         {tabs.find(t => t.id === activeTab)?.name || 'IT Inventory'}
                                     </h2>
-                                    <div className="flex items-center space-x-2">
-                                        <MaterialButton
+                                    <div className="flex items-center gap-2">
+                                        <div className="md-status-indicator" style={{ padding: '4px 12px', fontSize: '11px' }}>
+                                            <div className="md-status-dot" style={{ width: '6px', height: '6px' }}></div>
+                                            <span>Live</span>
+                                        </div>
+                                        <button
                                             onClick={toggleDarkMode}
-                                            variant="text"
-                                            className="!p-2 !min-w-0"
+                                            className="md-theme-toggle"
+                                            style={{ padding: '6px' }}
                                         >
-                                            <span className="material-icons text-sm">
+                                            <span className="material-icons text-base">
                                                 {isDarkMode ? 'light_mode' : 'dark_mode'}
                                             </span>
-                                        </MaterialButton>
-                                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                        </button>
                                     </div>
                                 </div>
 
                                 {/* Mobile Tab Scrollable */}
                                 <div className="overflow-x-auto">
-                                    <div className="flex space-x-1 px-4 pb-2">
+                                    <div className="flex gap-1 px-4 pb-3">
                                         {tabs.map(tab => (
                                             <button
                                                 key={tab.id}
                                                 onClick={() => setActiveTab(tab.id)}
-                                                className={`flex-shrink-0 flex items-center space-x-1 px-3 py-2 rounded-full text-sm transition-all ${
-                                                    activeTab === tab.id
-                                                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400'
-                                                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                                }`}
+                                                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all whitespace-nowrap"
+                                                style={{
+                                                    backgroundColor: activeTab === tab.id
+                                                        ? 'var(--md-sys-color-primary-container)'
+                                                        : 'var(--md-sys-color-surface-container-highest)',
+                                                    color: activeTab === tab.id
+                                                        ? 'var(--md-sys-color-on-primary-container)'
+                                                        : 'var(--md-sys-color-on-surface-variant)',
+                                                    border: activeTab === tab.id
+                                                        ? 'none'
+                                                        : '1px solid var(--md-sys-color-outline-variant)'
+                                                }}
                                             >
                                                 <span className="material-icons text-sm">{tab.icon}</span>
-                                                <span className="font-medium whitespace-nowrap">{tab.name}</span>
+                                                <span className="font-medium">{tab.name}</span>
                                                 {tab.count !== undefined && tab.count > 0 && (
-                                                    <div className={`px-2 py-1 text-xs rounded-full ${
-                                                        tab.id === 'shop'
-                                                            ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200'
-                                                            : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
-                                                    }`}>
+                                                    <div
+                                                        className="md-badge"
+                                                        style={{
+                                                            backgroundColor: tab.id === 'shop'
+                                                                ? 'var(--md-sys-color-primary)'
+                                                                : 'var(--md-sys-color-surface-variant)',
+                                                            color: tab.id === 'shop'
+                                                                ? 'var(--md-sys-color-on-primary)'
+                                                                : 'var(--md-sys-color-on-surface-variant)',
+                                                            fontSize: '10px',
+                                                            padding: '1px 6px'
+                                                        }}
+                                                    >
                                                         {tab.count}
                                                     </div>
                                                 )}
