@@ -724,6 +724,116 @@
             );
         };
 
+        // Material You Pagination Component
+        const MaterialPagination = ({
+            currentPage,
+            totalItems,
+            itemsPerPage,
+            onPageChange,
+            onItemsPerPageChange,
+            className = ''
+        }) => {
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            const startItem = (currentPage - 1) * itemsPerPage + 1;
+            const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+            const getVisiblePages = () => {
+                const delta = 2;
+                const range = [];
+                const rangeWithDots = [];
+
+                for (let i = Math.max(2, currentPage - delta);
+                     i <= Math.min(totalPages - 1, currentPage + delta);
+                     i++) {
+                    range.push(i);
+                }
+
+                if (currentPage - delta > 2) {
+                    rangeWithDots.push(1, '...');
+                } else {
+                    rangeWithDots.push(1);
+                }
+
+                rangeWithDots.push(...range);
+
+                if (currentPage + delta < totalPages - 1) {
+                    rangeWithDots.push('...', totalPages);
+                } else {
+                    rangeWithDots.push(totalPages);
+                }
+
+                return rangeWithDots.filter((v, i, a) => a.indexOf(v) === i);
+            };
+
+            if (totalPages <= 1) return null;
+
+            return (
+                <div className={`flex items-center justify-between flex-wrap gap-4 mt-6 ${className}`}>
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                            Showing {startItem}-{endItem} of {totalItems} items
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
+                                Items per page:
+                            </span>
+                            <select
+                                value={itemsPerPage}
+                                onChange={(e) => onItemsPerPageChange(parseInt(e.target.value))}
+                                className="mat-input-select"
+                                style={{
+                                    padding: '4px 8px',
+                                    border: `1px solid var(--md-sys-color-outline)`,
+                                    borderRadius: '4px',
+                                    backgroundColor: 'var(--md-sys-color-surface)',
+                                    color: 'var(--md-sys-color-on-surface)'
+                                }}
+                            >
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                        <MaterialButton
+                            variant="text"
+                            onClick={() => onPageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="!p-2 !min-w-0"
+                        >
+                            <span className="material-icons">chevron_left</span>
+                        </MaterialButton>
+
+                        {getVisiblePages().map((page, index) => (
+                            page === '...' ? (
+                                <span key={`dots-${index}`} className="px-2 text-gray-400">...</span>
+                            ) : (
+                                <MaterialButton
+                                    key={page}
+                                    variant={currentPage === page ? "contained" : "text"}
+                                    color="primary"
+                                    onClick={() => onPageChange(page)}
+                                    className="!p-2 !min-w-[40px] !w-10 !h-10"
+                                >
+                                    {page}
+                                </MaterialButton>
+                            )
+                        ))}
+
+                        <MaterialButton
+                            variant="text"
+                            onClick={() => onPageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="!p-2 !min-w-0"
+                        >
+                            <span className="material-icons">chevron_right</span>
+                        </MaterialButton>
+                    </div>
+                </div>
+            );
+        };
+
         // Error Boundary
         class ErrorBoundary extends React.Component {
             constructor(props) {
@@ -1591,7 +1701,7 @@
                     <div className="space-y-4">
                         <MaterialInput
                             ref={inputRef}
-                            label="Scan barcode or type item name/ASIN"
+                            label="Scan barcode or type item name"
                             value={scanInput}
                             onChange={(e) => setScanInput(e.target.value)}
                             onKeyDown={handleKeyPress}
@@ -1784,7 +1894,6 @@
                 name: '',
                 price: '',
                 quantity: '',
-                asin: '',
                 category: ''
             });
             const [isCreatingItem, setIsCreatingItem] = useState(false);
@@ -1794,7 +1903,6 @@
                 firstName: '',
                 lastName: '',
                 costCode: '',
-                email: '',
                 department: ''
             });
 
@@ -1804,7 +1912,6 @@
                 firstName: '',
                 lastName: '',
                 costCode: '',
-                email: '',
                 department: ''
             });
             const [isCreatingUser, setIsCreatingUser] = useState(false);
@@ -1817,8 +1924,81 @@
                 exportingUsers: false
             });
 
+            // Pagination states
+            const [inventoryPagination, setInventoryPagination] = useState({
+                currentPage: 1,
+                itemsPerPage: 50,
+                totalItems: 0
+            });
+            const [usersPagination, setUsersPagination] = useState({
+                currentPage: 1,
+                itemsPerPage: 50,
+                totalItems: 0
+            });
+            const [checkoutPagination, setCheckoutPagination] = useState({
+                currentPage: 1,
+                itemsPerPage: 50,
+                totalItems: 0
+            });
+
             const { isDarkMode, toggleDarkMode } = useTheme();
             const { snackbar, showSnackbar } = useSnackbar();
+
+            // Pagination handlers
+            const handleInventoryPageChange = (page) => {
+                setInventoryPagination(prev => ({ ...prev, currentPage: page }));
+            };
+
+            const handleInventoryItemsPerPageChange = (itemsPerPage) => {
+                setInventoryPagination(prev => ({
+                    ...prev,
+                    currentPage: 1,
+                    itemsPerPage
+                }));
+            };
+
+            const handleUsersPageChange = (page) => {
+                setUsersPagination(prev => ({ ...prev, currentPage: page }));
+            };
+
+            const handleUsersItemsPerPageChange = (itemsPerPage) => {
+                setUsersPagination(prev => ({
+                    ...prev,
+                    currentPage: 1,
+                    itemsPerPage
+                }));
+            };
+
+            const handleCheckoutPageChange = (page) => {
+                setCheckoutPagination(prev => ({ ...prev, currentPage: page }));
+            };
+
+            const handleCheckoutItemsPerPageChange = (itemsPerPage) => {
+                setCheckoutPagination(prev => ({
+                    ...prev,
+                    currentPage: 1,
+                    itemsPerPage
+                }));
+            };
+
+            // Get paginated data
+            const getPaginatedItems = () => {
+                const startIndex = (inventoryPagination.currentPage - 1) * inventoryPagination.itemsPerPage;
+                const endIndex = startIndex + inventoryPagination.itemsPerPage;
+                return items.slice(startIndex, endIndex);
+            };
+
+            const getPaginatedUsers = () => {
+                const startIndex = (usersPagination.currentPage - 1) * usersPagination.itemsPerPage;
+                const endIndex = startIndex + usersPagination.itemsPerPage;
+                return users.slice(startIndex, endIndex);
+            };
+
+            const getPaginatedCheckoutHistory = () => {
+                const startIndex = (checkoutPagination.currentPage - 1) * checkoutPagination.itemsPerPage;
+                const endIndex = startIndex + checkoutPagination.itemsPerPage;
+                return checkoutHistory.slice(startIndex, endIndex);
+            };
 
             // Initialize Firebase with existing data if empty
             const initializeDataIfEmpty = async () => {
@@ -2070,7 +2250,6 @@
                         name: newItemForm.name.trim(),
                         price: parseFloat(newItemForm.price) || 0,
                         quantity: parseInt(newItemForm.quantity) || 0,
-                        asin: newItemForm.asin.trim(),
                         category: newItemForm.category.trim() || 'Uncategorized',
                         minThreshold: 5,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -2085,7 +2264,6 @@
                         name: '',
                         price: '',
                         quantity: '',
-                        asin: '',
                         category: ''
                     });
 
@@ -2113,7 +2291,6 @@
                         lastName: newUserForm.lastName.trim(),
                         name: `${newUserForm.firstName.trim()} ${newUserForm.lastName.trim()}`,
                         costCode: newUserForm.costCode.trim() || `${Date.now()}-5770`,
-                        email: newUserForm.email.trim(),
                         department: newUserForm.department.trim(),
                         status: 'active',
                         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -2127,7 +2304,6 @@
                         firstName: '',
                         lastName: '',
                         costCode: '',
-                        email: '',
                         department: ''
                     });
 
@@ -2147,11 +2323,23 @@
                         firstName: editingUser.firstName || '',
                         lastName: editingUser.lastName || '',
                         costCode: editingUser.costCode || editingUser.cost_code || '',
-                        email: editingUser.email || '',
                         department: editingUser.department || (editingUser.costCode || editingUser.cost_code || '').split('-')[0] || ''
                     });
                 }
             }, [editingUser]);
+
+            // Update pagination totals when data changes
+            useEffect(() => {
+                setInventoryPagination(prev => ({ ...prev, totalItems: items.length }));
+            }, [items]);
+
+            useEffect(() => {
+                setUsersPagination(prev => ({ ...prev, totalItems: users.length }));
+            }, [users]);
+
+            useEffect(() => {
+                setCheckoutPagination(prev => ({ ...prev, totalItems: checkoutHistory.length }));
+            }, [checkoutHistory]);
 
             // Handle Edit User
             const [isUpdatingUser, setIsUpdatingUser] = useState(false);
@@ -2169,7 +2357,6 @@
                         lastName: editUserForm.lastName.trim(),
                         name: `${editUserForm.firstName.trim()} ${editUserForm.lastName.trim()}`,
                         costCode: editUserForm.costCode.trim() || `${Date.now()}-5770`,
-                        email: editUserForm.email.trim(),
                         department: editUserForm.department.trim(),
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedBy: user?.email || 'anonymous'
@@ -2187,7 +2374,6 @@
                         firstName: '',
                         lastName: '',
                         costCode: '',
-                        email: '',
                         department: ''
                     });
 
@@ -2204,9 +2390,9 @@
             const exportItemsToCSV = async () => {
                 setCsvOperations(prev => ({ ...prev, exportingItems: true }));
                 try {
-                    const csvHeader = 'Item Name,Category,Quantity,Price,ASIN,Min Threshold\n';
+                    const csvHeader = 'Item Name,Category,Quantity,Price,Min Threshold\n';
                     const csvRows = items.map(item =>
-                        `"${(item.name || '').replace(/"/g, '""')}","${(item.category || '').replace(/"/g, '""')}",${item.quantity || 0},${item.price || 0},"${(item.asin || '').replace(/"/g, '""')}",${item.minThreshold || 5}`
+                        `"${(item.name || '').replace(/"/g, '""')}","${(item.category || '').replace(/"/g, '""')}",${item.quantity || 0},${item.price || 0},${item.minThreshold || 5}`
                     ).join('\n');
 
                     const csvContent = csvHeader + csvRows;
@@ -2227,9 +2413,9 @@
             const exportUsersToCSV = async () => {
                 setCsvOperations(prev => ({ ...prev, exportingUsers: true }));
                 try {
-                    const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Email,Department,Status\n';
+                    const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Department,Status\n';
                     const csvRows = users.map(user =>
-                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.email || '').replace(/"/g, '""')}","${(user.department || '').replace(/"/g, '""')}","${user.status || 'active'}"`
+                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.department || '').replace(/"/g, '""')}","${user.status || 'active'}"`
                     ).join('\n');
 
                     const csvContent = csvHeader + csvRows;
@@ -2371,9 +2557,6 @@
                                         case 'price':
                                             item.price = parseFloat(values[index]) || 0;
                                             break;
-                                        case 'asin':
-                                            item.asin = values[index];
-                                            break;
                                         case 'min threshold':
                                             item.minThreshold = parseInt(values[index]) || 5;
                                             break;
@@ -2445,9 +2628,6 @@
                                         case 'cost code':
                                         case 'costcode':
                                             user.costCode = values[index];
-                                            break;
-                                        case 'email':
-                                            user.email = values[index];
                                             break;
                                         case 'department':
                                             user.department = values[index];
@@ -2722,7 +2902,7 @@
                                             Shop Items
                                         </h2>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
-                                            {items.slice(0, 24).map(item => (
+                                            {getPaginatedItems().map(item => (
                                                 <MaterialCard key={item.id} elevation={1} className="!p-3 lg:!p-4 hover:mat-elevation-4">
                                                     <div className="flex justify-between items-start mb-3">
                                                         <h3 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">
@@ -2770,6 +2950,15 @@
                                                 </MaterialCard>
                                             ))}
                                         </div>
+
+                                        {/* Inventory Pagination */}
+                                        <MaterialPagination
+                                            currentPage={inventoryPagination.currentPage}
+                                            totalItems={inventoryPagination.totalItems}
+                                            itemsPerPage={inventoryPagination.itemsPerPage}
+                                            onPageChange={handleInventoryPageChange}
+                                            onItemsPerPageChange={handleInventoryItemsPerPageChange}
+                                        />
                                     </div>
                                 </div>
 
@@ -2815,7 +3004,7 @@
                                 <MaterialCard elevation={1}>
                                     <div className="mb-4 flex justify-between items-center">
                                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                                            Showing {Math.min(items.length, 50)} of {items.length} total items
+                                            Comprehensive inventory management with pagination
                                         </p>
                                         <div className="flex items-center space-x-2">
                                             <span className="material-icons text-green-500">trending_up</span>
@@ -2854,11 +3043,10 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                                {items.slice(0, 50).map(item => (
+                                                {getPaginatedItems().map(item => (
                                                     <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                                                         <td className="px-6 py-4">
                                                             <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
-                                                            <div className="text-sm text-gray-500 dark:text-gray-400">{item.asin}</div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
@@ -2896,6 +3084,15 @@
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    {/* Inventory Management Pagination */}
+                                    <MaterialPagination
+                                        currentPage={inventoryPagination.currentPage}
+                                        totalItems={inventoryPagination.totalItems}
+                                        itemsPerPage={inventoryPagination.itemsPerPage}
+                                        onPageChange={handleInventoryPageChange}
+                                        onItemsPerPageChange={handleInventoryItemsPerPageChange}
+                                    />
                                 </MaterialCard>
                             </div>
                         )}
@@ -2909,7 +3106,7 @@
                                 <MaterialCard elevation={1}>
                                     <div className="mb-4">
                                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                                            Showing {users.length} of 1,000+ total users (first 100 loaded for performance)
+                                            Manage user accounts with pagination for better performance
                                         </p>
                                     </div>
                                     <div className="overflow-x-auto">
@@ -2939,7 +3136,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                                {users.map(user => (
+                                                {getPaginatedUsers().map(user => (
                                                     <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                                                         <td className="px-6 py-4">
                                                             <div className="font-medium text-gray-900 dark:text-white">
@@ -2975,6 +3172,15 @@
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    {/* Users Pagination */}
+                                    <MaterialPagination
+                                        currentPage={usersPagination.currentPage}
+                                        totalItems={usersPagination.totalItems}
+                                        itemsPerPage={usersPagination.itemsPerPage}
+                                        onPageChange={handleUsersPageChange}
+                                        onItemsPerPageChange={handleUsersItemsPerPageChange}
+                                    />
                                 </MaterialCard>
                             </div>
                         )}
@@ -3017,14 +3223,7 @@
                                                     placeholder="0"
                                                 />
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <MaterialInput
-                                                    label="ASIN"
-                                                    value={newItemForm.asin}
-                                                    onChange={(e) => setNewItemForm(prev => ({ ...prev, asin: e.target.value }))}
-                                                    placeholder="Optional product identifier"
-                                                />
-                                                <div className="mat-input">
+                                            <div className="mat-input">
                                                     <select
                                                         value={newItemForm.category}
                                                         onChange={(e) => setNewItemForm(prev => ({ ...prev, category: e.target.value }))}
@@ -3089,13 +3288,6 @@
                                                 value={newUserForm.costCode}
                                                 onChange={(e) => setNewUserForm(prev => ({ ...prev, costCode: e.target.value }))}
                                                 placeholder="e.g., 1-10-100-5770 (auto-generated if empty)"
-                                            />
-                                            <MaterialInput
-                                                label="Email (Optional)"
-                                                type="email"
-                                                value={newUserForm.email}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, email: e.target.value }))}
-                                                placeholder="user@company.com"
                                             />
                                             <MaterialInput
                                                 label="Department"
@@ -3450,7 +3642,7 @@
                                 <MaterialCard elevation={1}>
                                     <div className="mb-4">
                                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                                            Showing {checkoutHistory.length} most recent checkout records
+                                            View checkout history with pagination for better performance
                                         </p>
                                     </div>
                                     <div className="overflow-x-auto">
@@ -3490,7 +3682,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                                {checkoutHistory.map(record => (
+                                                {getPaginatedCheckoutHistory().map(record => (
                                                     <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
                                                             {record.itemName}
@@ -3515,6 +3707,15 @@
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    {/* Checkout History Pagination */}
+                                    <MaterialPagination
+                                        currentPage={checkoutPagination.currentPage}
+                                        totalItems={checkoutPagination.totalItems}
+                                        itemsPerPage={checkoutPagination.itemsPerPage}
+                                        onPageChange={handleCheckoutPageChange}
+                                        onItemsPerPageChange={handleCheckoutItemsPerPageChange}
+                                    />
                                 </MaterialCard>
                             </div>
                         )}
@@ -3637,13 +3838,6 @@
                                                 value={editUserForm.costCode}
                                                 onChange={(e) => setEditUserForm(prev => ({ ...prev, costCode: e.target.value }))}
                                                 placeholder="e.g., 1-10-100-5770"
-                                            />
-                                            <MaterialInput
-                                                label="Email (Optional)"
-                                                type="email"
-                                                value={editUserForm.email}
-                                                onChange={(e) => setEditUserForm(prev => ({ ...prev, email: e.target.value }))}
-                                                placeholder="user@company.com"
                                             />
                                             <MaterialInput
                                                 label="Department"
