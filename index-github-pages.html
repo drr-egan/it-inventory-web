@@ -3224,21 +3224,20 @@
                                                 />
                                             </div>
                                             <div className="mat-input">
-                                                    <select
-                                                        value={newItemForm.category}
-                                                        onChange={(e) => setNewItemForm(prev => ({ ...prev, category: e.target.value }))}
-                                                    >
-                                                        <option value="">Choose category...</option>
-                                                        <option value="Electronics">Electronics</option>
-                                                        <option value="Accessories">Accessories</option>
-                                                        <option value="Cables">Cables</option>
-                                                        <option value="Office">Office</option>
-                                                        <option value="Hardware">Hardware</option>
-                                                        <option value="Software">Software</option>
-                                                        <option value="Supplies">Supplies</option>
-                                                    </select>
-                                                    <label>Category</label>
-                                                </div>
+                                                <select
+                                                    value={newItemForm.category}
+                                                    onChange={(e) => setNewItemForm(prev => ({ ...prev, category: e.target.value }))}
+                                                >
+                                                    <option value="">Choose category...</option>
+                                                    <option value="Electronics">Electronics</option>
+                                                    <option value="Accessories">Accessories</option>
+                                                    <option value="Cables">Cables</option>
+                                                    <option value="Office">Office</option>
+                                                    <option value="Hardware">Hardware</option>
+                                                    <option value="Software">Software</option>
+                                                    <option value="Supplies">Supplies</option>
+                                                </select>
+                                                <label>Category</label>
                                             </div>
                                             <MaterialButton
                                                 type="submit"
