@@ -21,6 +21,16 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+    <!-- PDF Processing Libraries -->
+    <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+    <!-- PDF.js Configuration -->
+    <script>
+        // Set PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    </script>
+
     <!-- Firebase Configuration (Embedded for GitHub Pages) -->
     <script>
         // Firebase Configuration
@@ -1944,6 +1954,17 @@
             const { isDarkMode, toggleDarkMode } = useTheme();
             const { snackbar, showSnackbar } = useSnackbar();
 
+            // Process Shipment states
+            const [pdfFile, setPdfFile] = useState(null);
+            const [pdfText, setPdfText] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [allocationMethod, setAllocationMethod] = useState('auto');
+            const [receiptDate, setReceiptDate] = useState('');
+            const [vendorName, setVendorName] = useState('');
+            const [processingNotes, setProcessingNotes] = useState('');
+            const [matchedItems, setMatchedItems] = useState([]);
+            const [processingResults, setProcessingResults] = useState([]);
+
             // Pagination handlers
             const handleInventoryPageChange = (page) => {
                 setInventoryPagination(prev => ({ ...prev, currentPage: page }));
@@ -1998,6 +2019,306 @@
                 const startIndex = (checkoutPagination.currentPage - 1) * checkoutPagination.itemsPerPage;
                 const endIndex = startIndex + checkoutPagination.itemsPerPage;
                 return checkoutHistory.slice(startIndex, endIndex);
+            };
+
+            // Process Shipment PDF handling
+            const handlePdfUpload = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                if (file.type !== 'application/pdf') {
+                    showSnackbar('Please select a PDF file', 'error');
+                    return;
+                }
+
+                setPdfFile(file);
+                setIsProcessing(true);
+
+                try {
+                    // Extract text from PDF using PDF.js
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+
+                    let fullText = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' ');
+                        fullText += pageText + ' ';
+                    }
+
+                    setPdfText(fullText);
+                    showSnackbar(`PDF uploaded successfully! Extracted ${fullText.length} characters.`, 'success');
+
+                    // Auto-match items if automatic allocation is selected
+                    if (allocationMethod === 'auto') {
+                        await matchItemsFromPdf(fullText);
+                    }
+                } catch (error) {
+                    console.error('Error processing PDF:', error);
+                    showSnackbar(`Failed to process PDF: ${error.message}`, 'error');
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+
+            const matchItemsFromPdf = async (text) => {
+                try {
+                    const matches = [];
+                    const textLower = text.toLowerCase();
+
+                    // Match against checkout history items
+                    for (const record of checkoutHistory) {
+                        const itemNameLower = record.itemName.toLowerCase();
+
+                        // Simple text matching - look for item names in the PDF
+                        if (textLower.includes(itemNameLower) ||
+                            itemNameLower.split(' ').some(word => word.length > 3 && textLower.includes(word))) {
+
+                            // Try to extract price and quantity from surrounding text
+                            const itemIndex = textLower.indexOf(itemNameLower);
+                            const surroundingText = text.substring(Math.max(0, itemIndex - 100), itemIndex + 200);
+
+                            // Simple regex patterns for price and quantity
+                            const priceMatch = surroundingText.match(/\$?(\d+\.?\d{0,2})/);
+                            const quantityMatch = surroundingText.match(/(\d+)\s*(?:ea|each|qty|quantity|pcs?|pieces?)?/i);
+
+                            matches.push({
+                                ...record,
+                                extractedPrice: priceMatch ? parseFloat(priceMatch[1]) : null,
+                                extractedQuantity: quantityMatch ? parseInt(quantityMatch[1]) : record.quantity,
+                                confidence: itemNameLower.length > 5 ? 'high' : 'medium'
+                            });
+                        }
+                    }
+
+                    setMatchedItems(matches);
+                    showSnackbar(`Found ${matches.length} potential item matches in PDF`, matches.length > 0 ? 'success' : 'info');
+                } catch (error) {
+                    console.error('Error matching items:', error);
+                    showSnackbar(`Error matching items: ${error.message}`, 'error');
+                }
+            };
+
+            const formatDepartmentId = (deptId) => {
+                if (!deptId) return '';
+                const parts = deptId.split('-');
+                if (parts.length >= 3) {
+                    const [first, second, third, ...rest] = parts;
+                    const formattedThird = third.padStart(3, '0');
+                    return `${first}-${second}-${formattedThird}-5770`;
+                }
+                return deptId;
+            };
+
+            const processShipment = async () => {
+                if (!pdfFile) {
+                    showSnackbar('Please upload a PDF file first', 'error');
+                    return;
+                }
+
+                if (matchedItems.length === 0) {
+                    showSnackbar('No matched items found. Cannot generate cost allocation.', 'error');
+                    return;
+                }
+
+                setIsProcessing(true);
+
+                try {
+                    // Calculate cost allocation
+                    const totalItems = matchedItems.reduce((sum, item) => sum + item.quantity, 0);
+
+                    // Extract financial data from PDF text
+                    const priceMatches = pdfText.match(/\$(\d+\.?\d{0,2})/g) || [];
+                    const prices = priceMatches.map(p => parseFloat(p.replace('$', ''))).filter(p => p > 0);
+
+                    let subtotal = 0;
+                    let tax = 0;
+                    let fees = 0;
+                    let total = 0;
+
+                    if (prices.length > 0) {
+                        // Simple heuristic: largest number is likely the total
+                        total = Math.max(...prices);
+
+                        // Look for tax patterns
+                        const taxMatch = pdfText.match(/tax[:\s]*\$?(\d+\.?\d{0,2})/i);
+                        tax = taxMatch ? parseFloat(taxMatch[1]) : total * 0.08; // Default 8% tax
+
+                        // Look for fee patterns
+                        const feeMatch = pdfText.match(/(?:fee|shipping|handling)[:\s]*\$?(\d+\.?\d{0,2})/i);
+                        fees = feeMatch ? parseFloat(feeMatch[1]) : 0;
+
+                        subtotal = total - tax - fees;
+                    } else {
+                        // Fallback: estimate from matched items
+                        subtotal = matchedItems.reduce((sum, item) => sum + (item.extractedPrice || 0) * item.quantity, 0);
+                        tax = subtotal * 0.08;
+                        total = subtotal + tax + fees;
+                    }
+
+                    // Distribute costs across items
+                    const costPerItem = subtotal / totalItems;
+                    const taxPerItem = tax / totalItems;
+                    const feePerItem = fees / totalItems;
+
+                    const allocation = matchedItems.map(item => ({
+                        ...item,
+                        unitPrice: item.extractedPrice || costPerItem,
+                        totalCost: (item.extractedPrice || costPerItem) * item.quantity +
+                                   (taxPerItem * item.quantity) + (feePerItem * item.quantity),
+                        taxAllocation: taxPerItem * item.quantity,
+                        feeAllocation: feePerItem * item.quantity,
+                        costCode: formatDepartmentId(item.departmentId)
+                    }));
+
+                    // Generate PDF report
+                    await generateCostAllocationReport(allocation, { subtotal, tax, fees, total });
+
+                    // Remove processed items from checkout history
+                    await removeProcessedItems(matchedItems);
+
+                    // Update processing results
+                    setProcessingResults(prev => [...prev, {
+                        timestamp: new Date().toISOString(),
+                        fileName: pdfFile.name,
+                        itemsProcessed: matchedItems.length,
+                        totalAmount: total,
+                        vendor: vendorName || 'Unknown'
+                    }]);
+
+                    showSnackbar(`Successfully processed ${matchedItems.length} items with cost allocation!`, 'success');
+
+                    // Reset form
+                    setPdfFile(null);
+                    setPdfText('');
+                    setMatchedItems([]);
+                    document.getElementById('pdf-upload').value = '';
+
+                } catch (error) {
+                    console.error('Error processing shipment:', error);
+                    showSnackbar(`Error processing shipment: ${error.message}`, 'error');
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+
+            const generateCostAllocationReport = async (allocation, totals) => {
+                try {
+                    // Create new PDF document
+                    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                    const pdfDoc = await PDFDocument.create();
+                    const page = pdfDoc.addPage([612, 792]); // Letter size
+                    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+                    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+                    let y = 750;
+                    const leftMargin = 50;
+
+                    // Title
+                    page.drawText('COST ALLOCATION REPORT', {
+                        x: leftMargin,
+                        y,
+                        size: 16,
+                        font: boldFont,
+                        color: rgb(0, 0, 0)
+                    });
+                    y -= 30;
+
+                    // Metadata
+                    page.drawText(`Date: ${new Date().toLocaleDateString()}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    page.drawText(`Vendor: ${vendorName || 'Unknown'}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    page.drawText(`Source File: ${pdfFile.name}`, { x: leftMargin, y, size: 10, font });
+                    y -= 30;
+
+                    // Table header
+                    page.drawText('Item Description', { x: leftMargin, y, size: 10, font: boldFont });
+                    page.drawText('Qty', { x: 250, y, size: 10, font: boldFont });
+                    page.drawText('Cost Code', { x: 300, y, size: 10, font: boldFont });
+                    page.drawText('Unit Price', { x: 400, y, size: 10, font: boldFont });
+                    page.drawText('Total Cost', { x: 480, y, size: 10, font: boldFont });
+                    y -= 20;
+
+                    // Draw line
+                    page.drawLine({
+                        start: { x: leftMargin, y },
+                        end: { x: 550, y },
+                        thickness: 1,
+                        color: rgb(0, 0, 0)
+                    });
+                    y -= 15;
+
+                    // Allocation details
+                    for (const item of allocation) {
+                        if (y < 100) {
+                            // Add new page if needed
+                            const newPage = pdfDoc.addPage([612, 792]);
+                            y = 750;
+                        }
+
+                        const itemName = item.itemName.length > 25 ?
+                            item.itemName.substring(0, 25) + '...' : item.itemName;
+
+                        page.drawText(itemName, { x: leftMargin, y, size: 9, font });
+                        page.drawText(item.quantity.toString(), { x: 250, y, size: 9, font });
+                        page.drawText(item.costCode || item.departmentId || '-', { x: 300, y, size: 9, font });
+                        page.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 400, y, size: 9, font });
+                        page.drawText(`$${item.totalCost.toFixed(2)}`, { x: 480, y, size: 9, font });
+                        y -= 15;
+                    }
+
+                    y -= 20;
+
+                    // Financial summary
+                    page.drawText('FINANCIAL SUMMARY', { x: leftMargin, y, size: 12, font: boldFont });
+                    y -= 20;
+                    page.drawText(`Subtotal: $${totals.subtotal.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    page.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    page.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    page.drawText(`Total: $${totals.total.toFixed(2)}`, { x: leftMargin, y, size: 12, font: boldFont });
+
+                    // Download the PDF
+                    const pdfBytes = await pdfDoc.save();
+                    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `shipment-allocation-${Date.now()}.pdf`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+
+                } catch (error) {
+                    console.error('Error generating PDF report:', error);
+                    showSnackbar('Failed to generate PDF report', 'error');
+                }
+            };
+
+            const removeProcessedItems = async (processedItems) => {
+                try {
+                    const batch = db.batch();
+
+                    for (const item of processedItems) {
+                        const docRef = db.collection('checkoutHistory').doc(item.id);
+                        batch.delete(docRef);
+                    }
+
+                    await batch.commit();
+
+                    // Update local state
+                    setCheckoutHistory(prev =>
+                        prev.filter(record => !processedItems.some(item => item.id === record.id))
+                    );
+
+                    console.log(`Removed ${processedItems.length} processed items from checkout history`);
+                } catch (error) {
+                    console.error('Error removing processed items:', error);
+                    throw error;
+                }
             };
 
             // Initialize Firebase with existing data if empty
@@ -3545,14 +3866,16 @@
                                                     accept=".pdf"
                                                     className="hidden"
                                                     id="pdf-upload"
+                                                    onChange={handlePdfUpload}
                                                 />
                                                 <MaterialButton
                                                     onClick={() => document.getElementById('pdf-upload').click()}
                                                     variant="outlined"
                                                     color="primary"
+                                                    disabled={isProcessing}
                                                 >
                                                     <span className="material-icons mr-2">file_upload</span>
-                                                    Choose PDF File
+                                                    {pdfFile ? pdfFile.name : 'Choose PDF File'}
                                                 </MaterialButton>
                                             </div>
                                             <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -3579,28 +3902,56 @@
                                                 </label>
                                                 <div className="space-y-2">
                                                     <label className="flex items-center">
-                                                        <input type="radio" name="allocation" value="auto" className="mr-2" defaultChecked />
+                                                        <input
+                                                            type="radio"
+                                                            name="allocation"
+                                                            value="auto"
+                                                            className="mr-2"
+                                                            checked={allocationMethod === 'auto'}
+                                                            onChange={(e) => setAllocationMethod(e.target.value)}
+                                                        />
                                                         <span className="text-sm">Automatic - Match against checkout history</span>
                                                     </label>
                                                     <label className="flex items-center">
-                                                        <input type="radio" name="allocation" value="manual" className="mr-2" />
+                                                        <input
+                                                            type="radio"
+                                                            name="allocation"
+                                                            value="manual"
+                                                            className="mr-2"
+                                                            checked={allocationMethod === 'manual'}
+                                                            onChange={(e) => setAllocationMethod(e.target.value)}
+                                                        />
                                                         <span className="text-sm">Manual - Review and assign costs</span>
                                                     </label>
                                                 </div>
                                             </div>
 
                                             <div className="mat-input">
-                                                <input type="date" />
+                                                <input
+                                                    type="date"
+                                                    value={receiptDate}
+                                                    onChange={(e) => setReceiptDate(e.target.value)}
+                                                />
                                                 <label>Receipt Date</label>
                                             </div>
 
                                             <div className="mat-input">
-                                                <input type="text" placeholder="Optional vendor name" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Optional vendor name"
+                                                    value={vendorName}
+                                                    onChange={(e) => setVendorName(e.target.value)}
+                                                />
                                                 <label>Vendor Name</label>
                                             </div>
 
                                             <div className="mat-input">
-                                                <textarea rows={3} placeholder="Processing notes or special instructions"></textarea>
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Processing notes or special instructions"
+                                                    value={processingNotes}
+                                                    onChange={(e) => setProcessingNotes(e.target.value)}
+                                                />
                                                 <label>Notes</label>
                                             </div>
 
@@ -3608,13 +3959,71 @@
                                                 variant="contained"
                                                 color="success"
                                                 className="w-full"
-                                                disabled={true}
+                                                disabled={!pdfFile || isProcessing}
+                                                onClick={processShipment}
                                             >
-                                                <span className="material-icons mr-2">process</span>
-                                                Process Receipt
+                                                {isProcessing ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                                        Processing...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="material-icons mr-2">process</span>
+                                                        Process Receipt
+                                                    </>
+                                                )}
                                             </MaterialButton>
                                         </div>
                                     </MaterialCard>
+
+                                    {/* Matched Items Preview */}
+                                    {matchedItems.length > 0 && (
+                                        <MaterialCard elevation={1} className="lg:col-span-2">
+                                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                                <span className="material-icons mr-2 text-orange-600">assignment_turned_in</span>
+                                                Matched Items ({matchedItems.length})
+                                            </h3>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full">
+                                                    <thead className="bg-gray-50 dark:bg-gray-700">
+                                                        <tr>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Item</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">User</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Qty</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Dept</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Confidence</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                                        {matchedItems.slice(0, 5).map((item, index) => (
+                                                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                                                <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                                                                    {item.itemName.length > 30 ? item.itemName.substring(0, 30) + '...' : item.itemName}
+                                                                </td>
+                                                                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{item.userName}</td>
+                                                                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{item.quantity}</td>
+                                                                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{item.departmentId || '-'}</td>
+                                                                <td className="px-4 py-2">
+                                                                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                                                                        item.confidence === 'high' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' :
+                                                                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+                                                                    }`}>
+                                                                        {item.confidence}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                                {matchedItems.length > 5 && (
+                                                    <div className="text-center py-2 text-sm text-gray-500 dark:text-gray-400">
+                                                        and {matchedItems.length - 5} more items...
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </MaterialCard>
+                                    )}
 
                                     {/* Recent Processing */}
                                     <MaterialCard elevation={1} className="lg:col-span-2">
@@ -3622,11 +4031,32 @@
                                             <span className="material-icons mr-2 text-purple-600">history</span>
                                             Recent Shipment Processing
                                         </h3>
-                                        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                                            <span className="material-icons text-6xl mb-4 opacity-50">receipt_long</span>
-                                            <p className="font-medium">No shipments processed yet</p>
-                                            <p className="text-sm">Upload a PDF receipt to get started</p>
-                                        </div>
+                                        {processingResults.length === 0 ? (
+                                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                                <span className="material-icons text-6xl mb-4 opacity-50">receipt_long</span>
+                                                <p className="font-medium">No shipments processed yet</p>
+                                                <p className="text-sm">Upload a PDF receipt to get started</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {processingResults.slice(-5).reverse().map((result, index) => (
+                                                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                                        <div className="flex items-center space-x-3">
+                                                            <span className="material-icons text-green-600">check_circle</span>
+                                                            <div>
+                                                                <p className="font-medium text-gray-900 dark:text-white">{result.fileName}</p>
+                                                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                                    {result.itemsProcessed} items • ${result.totalAmount.toFixed(2)} • {result.vendor}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                                                            {new Date(result.timestamp).toLocaleDateString()}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </MaterialCard>
                                 </div>
                             </div>
