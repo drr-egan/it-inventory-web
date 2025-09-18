@@ -2447,13 +2447,42 @@
                             // Check if data needs to be initialized
                             await initializeDataIfEmpty();
 
-                            // Set up real-time listeners
+                            // Set up real-time listeners with fallback data
                             const itemsUnsubscribe = db.collection('items')
                                 .onSnapshot((snapshot) => {
                                     const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                                    setItems(itemsData);
-                                    checkLowStock(itemsData);
-                                    console.log(`Loaded ${itemsData.length} items from Firebase`);
+
+                                    // If Firebase is empty, use default items
+                                    if (itemsData.length === 0) {
+                                        console.log('Firebase collection empty, using default items');
+                                        const defaultItems = [
+                                            { id: "item001", name: "Dell Monitor 24\"", asin: "B07CVL2D2T", quantity: 15, minThreshold: 5, category: "Electronics", price: 299.99 },
+                                            { id: "item002", name: "USB-C Hub", asin: "B08HR6DSLT", quantity: 25, minThreshold: 10, category: "Accessories", price: 49.99 },
+                                            { id: "item003", name: "Wireless Mouse", asin: "B07FKMDJQZ", quantity: 30, minThreshold: 15, category: "Accessories", price: 29.99 },
+                                            { id: "item004", name: "Ethernet Cable 6ft", asin: "B00N2VIALK", quantity: 50, minThreshold: 20, category: "Cables", price: 12.99 },
+                                            { id: "item005", name: "Laptop Stand", asin: "B075GCG36Z", quantity: 8, minThreshold: 3, category: "Accessories", price: 79.99 }
+                                        ];
+                                        setItems(defaultItems);
+                                        checkLowStock(defaultItems);
+                                        console.log(`Using ${defaultItems.length} default items`);
+                                    } else {
+                                        setItems(itemsData);
+                                        checkLowStock(itemsData);
+                                        console.log(`Loaded ${itemsData.length} items from Firebase`);
+                                    }
+                                }, (error) => {
+                                    console.error('Firebase items error:', error);
+                                    // Fallback to default items on error
+                                    const defaultItems = [
+                                        { id: "item001", name: "Dell Monitor 24\"", asin: "B07CVL2D2T", quantity: 15, minThreshold: 5, category: "Electronics", price: 299.99 },
+                                        { id: "item002", name: "USB-C Hub", asin: "B08HR6DSLT", quantity: 25, minThreshold: 10, category: "Accessories", price: 49.99 },
+                                        { id: "item003", name: "Wireless Mouse", asin: "B07FKMDJQZ", quantity: 30, minThreshold: 15, category: "Accessories", price: 29.99 },
+                                        { id: "item004", name: "Ethernet Cable 6ft", asin: "B00N2VIALK", quantity: 50, minThreshold: 20, category: "Cables", price: 12.99 },
+                                        { id: "item005", name: "Laptop Stand", asin: "B075GCG36Z", quantity: 8, minThreshold: 3, category: "Accessories", price: 79.99 }
+                                    ];
+                                    setItems(defaultItems);
+                                    checkLowStock(defaultItems);
+                                    console.log(`Firebase error, using ${defaultItems.length} default items`);
                                 });
 
                             const usersUnsubscribe = db.collection('users')
