@@ -8,15 +8,19 @@
     <!-- GitHub Pages Compatible - Relaxed CSP -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' 'unsafe-inline' 'unsafe-eval' 
-            https://unpkg.com 
-            https://cdn.tailwindcss.com 
-            https://cdnjs.cloudflare.com;
+        script-src 'self' 'unsafe-inline' 'unsafe-eval'
+            https://unpkg.com
+            https://cdn.tailwindcss.com
+            https://cdnjs.cloudflare.com
+            https://www.gstatic.com;
         style-src 'self' 'unsafe-inline' 
             https://cdn.tailwindcss.com;
         img-src 'self' data: blob:;
         font-src 'self' data:;
-        connect-src 'self' *;
+        connect-src 'self' *
+            https://*.firebaseio.com
+            https://*.googleapis.com
+            https://*.firebaseapp.com;
         object-src 'none';
         base-uri 'self';
         form-action 'self';
@@ -34,9 +38,18 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    
-    <!-- GitHub Pages Data Adapter -->
-    <script src="./github-pages-adapter.js"></script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-storage-compat.js"></script>
+
+    <!-- Firebase Configuration -->
+    <script src="./firebase-config.js"></script>
+
+    <!-- Firebase Data Adapter -->
+    <script src="./firebase-adapter.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -4371,9 +4384,11 @@
                         doc.save(originalFilename);
                     }
                     
-                    // Move allocated items to historical instead of deleting - GitHub Pages version
+                    // Move allocated items to historical instead of deleting - Firebase version
                     const historicalItems = [...historicalCheckouts];
-                    const updatedCheckoutHistory = [...checkoutHistory];
+
+                    // Use Firebase batch operations for efficiency
+                    const batch = db.batch();
 
                     for (const item of allAllocatedItems) {
                         // Add item to historical checkouts with processed timestamp
@@ -4384,35 +4399,31 @@
                         };
                         historicalItems.push(historicalItem);
 
-                        // Remove from active checkout history (GitHub Pages - direct array manipulation)
-                        const itemIndex = updatedCheckoutHistory.findIndex(h => h.id === item.id);
-                        if (itemIndex !== -1) {
-                            updatedCheckoutHistory.splice(itemIndex, 1);
-                        }
+                        // Add to historical collection in Firebase
+                        const historicalRef = db.collection('historicalCheckouts').doc();
+                        batch.set(historicalRef, historicalItem);
+
+                        // Remove from active checkout history in Firebase
+                        const checkoutRef = db.collection('checkoutHistory').doc(item.id);
+                        batch.delete(checkoutRef);
                     }
 
-                    // Update both state and localStorage
-                    setHistoricalCheckouts(historicalItems);
-                    setCheckoutHistory(updatedCheckoutHistory);
-
-                    // Save to localStorage (GitHub Pages data persistence)
-                    localStorage.setItem('inventory_checkoutHistory', JSON.stringify(updatedCheckoutHistory));
-                    localStorage.setItem('inventory_historicalCheckouts', JSON.stringify(historicalItems));
-
-                    // Update item prices in localStorage (GitHub Pages version)
+                    // Update item prices in Firebase
                     let pricesUpdated = 0;
-                    const updatedItems = [...items];
-
                     for (const itemName of selectedShipmentItems) {
                         const newPrice = itemPrices[itemName];
 
                         if (newPrice && newPrice > 0) {
                             // Find the item in the current inventory
-                            const itemIndex = updatedItems.findIndex(i => i.name.toLowerCase() === itemName.toLowerCase());
+                            const item = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
 
-                            if (itemIndex !== -1) {
-                                // Update price directly in the items array
-                                updatedItems[itemIndex].price = newPrice;
+                            if (item) {
+                                // Update price in Firebase
+                                const itemRef = db.collection('items').doc(item.id);
+                                batch.update(itemRef, {
+                                    price: newPrice,
+                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                                });
                                 pricesUpdated++;
                                 console.log(`✅ Updated price for ${itemName}: $${newPrice}`);
                             } else {
@@ -4421,15 +4432,33 @@
                         }
                     }
 
-                    // Update items state and localStorage
+                    // Commit all Firebase operations as a batch
+                    await batch.commit();
+
+                    // Update local state to reflect changes immediately
+                    setHistoricalCheckouts(historicalItems);
+                    const updatedCheckoutHistory = checkoutHistory.filter(h =>
+                        !allAllocatedItems.find(allocated => allocated.id === h.id)
+                    );
+                    setCheckoutHistory(updatedCheckoutHistory);
+
+                    // Update items with new prices in local state
+                    const updatedItems = items.map(item => {
+                        const itemName = selectedShipmentItems.find(name =>
+                            name.toLowerCase() === item.name.toLowerCase()
+                        );
+                        if (itemName && itemPrices[itemName]) {
+                            return { ...item, price: itemPrices[itemName] };
+                        }
+                        return item;
+                    });
                     setItems(updatedItems);
-                    localStorage.setItem('inventory_items', JSON.stringify(updatedItems));
                     
                     
-                    // Add a small delay to ensure localStorage writes are complete
+                    // Add a small delay to ensure Firebase writes are complete
                     await new Promise(resolve => setTimeout(resolve, 100));
 
-                    // No need to refresh data since we're using localStorage and already updated the state
+                    // Firebase automatically syncs data through real-time listeners
                     
                     // Reset states
                     setSelectedShipmentItems([]);
