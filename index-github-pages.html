@@ -1925,6 +1925,7 @@
                 department: ''
             });
             const [isCreatingUser, setIsCreatingUser] = useState(false);
+            const [isUpdatingUser, setIsUpdatingUser] = useState(false);
 
             // CSV and bulk operation states
             const [csvOperations, setCsvOperations] = useState({
@@ -1964,6 +1965,12 @@
             const [processingNotes, setProcessingNotes] = useState('');
             const [matchedItems, setMatchedItems] = useState([]);
             const [processingResults, setProcessingResults] = useState([]);
+
+            // Process Shipment item selection states
+            const [itemSearchQuery, setItemSearchQuery] = useState('');
+            const [selectedShipmentItems, setSelectedShipmentItems] = useState([]);
+            const [showQuantityModal, setShowQuantityModal] = useState(false);
+            const [shipmentItemDetails, setShipmentItemDetails] = useState({});
 
             // Pagination handlers
             const handleInventoryPageChange = (page) => {
@@ -3877,9 +3884,98 @@
                                     Process Shipment
                                 </h2>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    {/* PDF Upload */}
+                                <div className="space-y-6">
+                                    {/* Item Selection */}
                                     <MaterialCard elevation={2}>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                            <span className="material-icons mr-2 text-purple-600">search</span>
+                                            Select Items for Processing
+                                        </h3>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                    Search and Add Items
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Type item name to search..."
+                                                        value={itemSearchQuery || ''}
+                                                        onChange={(e) => setItemSearchQuery(e.target.value)}
+                                                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                    />
+                                                    <span className="material-icons absolute right-3 top-2.5 text-gray-400">search</span>
+                                                </div>
+
+                                                {/* Search Results */}
+                                                {itemSearchQuery && itemSearchQuery.length > 0 && (
+                                                    <div className="mt-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                                        {items
+                                                            .filter(item => item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()))
+                                                            .slice(0, 10)
+                                                            .map(item => (
+                                                                <div
+                                                                    key={item.id}
+                                                                    onClick={() => {
+                                                                        if (!selectedShipmentItems.includes(item.name)) {
+                                                                            setSelectedShipmentItems(prev => [...prev, item.name]);
+                                                                        }
+                                                                        setItemSearchQuery('');
+                                                                    }}
+                                                                    className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer border-b border-gray-200 dark:border-gray-600 last:border-b-0"
+                                                                >
+                                                                    <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
+                                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                                        Qty: {item.quantity} | Category: {item.category}
+                                                                        {item.price > 0 && <span className="ml-2 text-green-600">${item.price}</span>}
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                        }
+                                                        {items.filter(item => item.name.toLowerCase().includes(itemSearchQuery.toLowerCase())).length === 0 && (
+                                                            <div className="px-4 py-2 text-gray-500 dark:text-gray-400">No items found</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Selected Items List */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                    Selected Items ({selectedShipmentItems?.length || 0})
+                                                </label>
+                                                <div className="space-y-2 max-h-32 overflow-y-auto">
+                                                    {selectedShipmentItems?.map(itemName => (
+                                                        <div key={itemName} className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
+                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">{itemName}</span>
+                                                            <button
+                                                                onClick={() => setSelectedShipmentItems(prev => prev.filter(name => name !== itemName))}
+                                                                className="text-red-600 hover:text-red-800 dark:text-red-400"
+                                                            >
+                                                                <span className="material-icons text-sm">close</span>
+                                                            </button>
+                                                        </div>
+                                                    )) || <div className="text-sm text-gray-500 dark:text-gray-400 italic">No items selected</div>}
+                                                </div>
+                                            </div>
+
+                                            {selectedShipmentItems?.length > 0 && (
+                                                <MaterialButton
+                                                    onClick={() => setShowQuantityModal(true)}
+                                                    variant="contained"
+                                                    color="primary"
+                                                    className="w-full"
+                                                >
+                                                    <span className="material-icons mr-2">edit</span>
+                                                    Set Quantities & Prices ({selectedShipmentItems.length} items)
+                                                </MaterialButton>
+                                            )}
+                                        </div>
+                                    </MaterialCard>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        {/* PDF Upload */}
+                                        <MaterialCard elevation={2}>
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
                                             <span className="material-icons mr-2 text-blue-600">upload_file</span>
                                             Upload Receipt PDF
@@ -4334,6 +4430,95 @@
                                         </MaterialButton>
                                     </div>
                                 </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Quantity/Price Modal for Process Shipment */}
+                    {showQuantityModal && (
+                        <div className="md-modal-overlay" onClick={() => setShowQuantityModal(false)}>
+                            <div className="md-modal" onClick={(e) => e.stopPropagation()}>
+                                <button className="md-modal-close" onClick={() => setShowQuantityModal(false)}>
+                                    <span className="material-icons">close</span>
+                                </button>
+
+                                <div className="md-modal-header">
+                                    <h2 className="md-modal-title">
+                                        <span className="material-icons" style={{ color: 'var(--md-sys-color-primary)' }}>
+                                            edit
+                                        </span>
+                                        Set Quantities & Prices
+                                    </h2>
+                                </div>
+
+                                <div className="md-modal-body">
+                                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                                        {selectedShipmentItems?.map((itemName, index) => {
+                                            const item = items.find(i => i.name === itemName);
+                                            return (
+                                                <div key={itemName} className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                                                    <h4 className="font-medium text-gray-900 dark:text-white mb-3">{itemName}</h4>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <MaterialInput
+                                                            type="number"
+                                                            label="Quantity"
+                                                            value={shipmentItemDetails[itemName]?.quantity || ''}
+                                                            onChange={(e) => setShipmentItemDetails(prev => ({
+                                                                ...prev,
+                                                                [itemName]: {
+                                                                    ...prev[itemName],
+                                                                    quantity: parseInt(e.target.value) || 0
+                                                                }
+                                                            }))}
+                                                            min="1"
+                                                            required
+                                                        />
+                                                        <MaterialInput
+                                                            type="number"
+                                                            label="Unit Price"
+                                                            value={shipmentItemDetails[itemName]?.price || ''}
+                                                            onChange={(e) => setShipmentItemDetails(prev => ({
+                                                                ...prev,
+                                                                [itemName]: {
+                                                                    ...prev[itemName],
+                                                                    price: parseFloat(e.target.value) || 0
+                                                                }
+                                                            }))}
+                                                            step="0.01"
+                                                            placeholder="0.00"
+                                                        />
+                                                    </div>
+                                                    {item && (
+                                                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                                                            Current stock: {item.quantity} | Category: {item.category}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="md-modal-actions">
+                                    <button
+                                        type="button"
+                                        className="md-button secondary"
+                                        onClick={() => setShowQuantityModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <MaterialButton
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={() => {
+                                            setShowQuantityModal(false);
+                                            showSnackbar('Item details saved successfully', 'success');
+                                        }}
+                                    >
+                                        <span className="material-icons mr-2">save</span>
+                                        Save Details
+                                    </MaterialButton>
+                                </div>
                             </div>
                         </div>
                     )}
