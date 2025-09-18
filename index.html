@@ -4371,8 +4371,10 @@
                         doc.save(originalFilename);
                     }
                     
-                    // Move allocated items to historical instead of deleting
+                    // Move allocated items to historical instead of deleting - GitHub Pages version
                     const historicalItems = [...historicalCheckouts];
+                    const updatedCheckoutHistory = [...checkoutHistory];
+
                     for (const item of allAllocatedItems) {
                         // Add item to historical checkouts with processed timestamp
                         const historicalItem = {
@@ -4381,64 +4383,53 @@
                             status: 'historical'
                         };
                         historicalItems.push(historicalItem);
-                        
-                        // Remove from active checkout history
-                        await fetch(`${API_BASE}/checkoutHistory/${item.id}`, {
-                            method: 'DELETE'
-                        });
+
+                        // Remove from active checkout history (GitHub Pages - direct array manipulation)
+                        const itemIndex = updatedCheckoutHistory.findIndex(h => h.id === item.id);
+                        if (itemIndex !== -1) {
+                            updatedCheckoutHistory.splice(itemIndex, 1);
+                        }
                     }
-                    
-                    // Update historical checkouts state
+
+                    // Update both state and localStorage
                     setHistoricalCheckouts(historicalItems);
-                    
-                    // Update item prices in database
-                    
+                    setCheckoutHistory(updatedCheckoutHistory);
+
+                    // Save to localStorage (GitHub Pages data persistence)
+                    localStorage.setItem('inventory_checkoutHistory', JSON.stringify(updatedCheckoutHistory));
+                    localStorage.setItem('inventory_historicalCheckouts', JSON.stringify(historicalItems));
+
+                    // Update item prices in localStorage (GitHub Pages version)
                     let pricesUpdated = 0;
+                    const updatedItems = [...items];
+
                     for (const itemName of selectedShipmentItems) {
                         const newPrice = itemPrices[itemName];
-                        
+
                         if (newPrice && newPrice > 0) {
                             // Find the item in the current inventory
-                            const item = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
-                            
-                            if (item) {
-                                try {
-                                    const response = await fetch(`${API_BASE}/items/${item.id}`, {
-                                        method: 'PATCH',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ price: newPrice })
-                                    });
-                                    
-                                    if (response.ok) {
-                                        pricesUpdated++;
-                                        
-                                        // Verify the update by fetching the item again
-                                        const verifyResponse = await fetch(`${API_BASE}/items/${item.id}`);
-                                        if (verifyResponse.ok) {
-                                            const updatedItem = await verifyResponse.json();
-                                        }
-                                    } else {
-                                        console.error(`❌ API error updating ${itemName}:`, response.status, response.statusText);
-                                        const errorText = await response.text();
-                                        console.error(`Error details:`, errorText);
-                                    }
-                                } catch (priceError) {
-                                    console.error(`❌ Failed to update price for ${itemName}:`, priceError);
-                                }
+                            const itemIndex = updatedItems.findIndex(i => i.name.toLowerCase() === itemName.toLowerCase());
+
+                            if (itemIndex !== -1) {
+                                // Update price directly in the items array
+                                updatedItems[itemIndex].price = newPrice;
+                                pricesUpdated++;
+                                console.log(`✅ Updated price for ${itemName}: $${newPrice}`);
                             } else {
                                 console.warn(`⚠️ Item not found in inventory: ${itemName}`);
                             }
-                        } else {
                         }
                     }
+
+                    // Update items state and localStorage
+                    setItems(updatedItems);
+                    localStorage.setItem('inventory_items', JSON.stringify(updatedItems));
                     
                     
-                    // Add a small delay to ensure database writes are complete
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
-                    // Refresh checkout history and items list
-                    await fetchCheckoutHistory();
-                    await fetchItems(); // Refresh items to show updated prices
+                    // Add a small delay to ensure localStorage writes are complete
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    // No need to refresh data since we're using localStorage and already updated the state
                     
                     // Reset states
                     setSelectedShipmentItems([]);
