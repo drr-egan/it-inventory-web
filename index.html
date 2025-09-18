@@ -4387,8 +4387,20 @@
                     // Move allocated items to historical instead of deleting - Firebase version
                     const historicalItems = [...historicalCheckouts];
 
-                    // Use Firebase batch operations for efficiency
-                    const batch = db.batch();
+                    // Use Firebase batch operations for efficiency (with fallback)
+                    let batch;
+                    let useFirebase = true;
+
+                    try {
+                        if (typeof db !== 'undefined' && db) {
+                            batch = db.batch();
+                        } else {
+                            throw new Error('Firebase not available');
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Firebase not available, using localStorage fallback:', error);
+                        useFirebase = false;
+                    }
 
                     for (const item of allAllocatedItems) {
                         // Add item to historical checkouts with processed timestamp
@@ -4399,17 +4411,26 @@
                         };
                         historicalItems.push(historicalItem);
 
-                        // Add to historical collection in Firebase
-                        const historicalRef = db.collection('historicalCheckouts').doc();
-                        batch.set(historicalRef, historicalItem);
+                        if (useFirebase) {
+                            try {
+                                // Add to historical collection in Firebase
+                                const historicalRef = db.collection('historicalCheckouts').doc();
+                                batch.set(historicalRef, historicalItem);
 
-                        // Remove from active checkout history in Firebase
-                        const checkoutRef = db.collection('checkoutHistory').doc(item.id);
-                        batch.delete(checkoutRef);
+                                // Remove from active checkout history in Firebase
+                                const checkoutRef = db.collection('checkoutHistory').doc(item.id);
+                                batch.delete(checkoutRef);
+                            } catch (error) {
+                                console.error('Firebase operation error:', error);
+                                useFirebase = false;
+                            }
+                        }
                     }
 
-                    // Update item prices in Firebase
+                    // Update item prices in Firebase (with fallback)
                     let pricesUpdated = 0;
+                    const updatedItems = [...items];
+
                     for (const itemName of selectedShipmentItems) {
                         const newPrice = itemPrices[itemName];
 
@@ -4418,12 +4439,26 @@
                             const item = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
 
                             if (item) {
-                                // Update price in Firebase
-                                const itemRef = db.collection('items').doc(item.id);
-                                batch.update(itemRef, {
-                                    price: newPrice,
-                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                                });
+                                if (useFirebase) {
+                                    try {
+                                        // Update price in Firebase
+                                        const itemRef = db.collection('items').doc(item.id);
+                                        batch.update(itemRef, {
+                                            price: newPrice,
+                                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                                        });
+                                    } catch (error) {
+                                        console.error('Firebase price update error:', error);
+                                        useFirebase = false;
+                                    }
+                                }
+
+                                // Always update local state
+                                const itemIndex = updatedItems.findIndex(i => i.id === item.id);
+                                if (itemIndex !== -1) {
+                                    updatedItems[itemIndex].price = newPrice;
+                                }
+
                                 pricesUpdated++;
                                 console.log(`✅ Updated price for ${itemName}: $${newPrice}`);
                             } else {
@@ -4432,26 +4467,47 @@
                         }
                     }
 
-                    // Commit all Firebase operations as a batch
-                    await batch.commit();
+                    // Commit all Firebase operations as a batch (if using Firebase)
+                    if (useFirebase && batch) {
+                        try {
+                            await batch.commit();
+                            console.log('✅ Firebase batch committed successfully');
+                        } catch (error) {
+                            console.error('❌ Firebase batch commit failed:', error);
+                            useFirebase = false;
+                        }
+                    }
+
+                    // Fallback to localStorage if Firebase failed
+                    if (!useFirebase) {
+                        console.log('📦 Using localStorage fallback for data persistence');
+
+                        // Update checkout history
+                        const updatedCheckoutHistory = checkoutHistory.filter(h =>
+                            !allAllocatedItems.find(allocated => allocated.id === h.id)
+                        );
+                        setCheckoutHistory(updatedCheckoutHistory);
+                        localStorage.setItem('inventory_checkoutHistory', JSON.stringify(updatedCheckoutHistory));
+
+                        // Update historical items
+                        localStorage.setItem('inventory_historicalCheckouts', JSON.stringify(historicalItems));
+
+                        // Update items with prices
+                        localStorage.setItem('inventory_items', JSON.stringify(updatedItems));
+                    }
 
                     // Update local state to reflect changes immediately
                     setHistoricalCheckouts(historicalItems);
-                    const updatedCheckoutHistory = checkoutHistory.filter(h =>
-                        !allAllocatedItems.find(allocated => allocated.id === h.id)
-                    );
-                    setCheckoutHistory(updatedCheckoutHistory);
+
+                    if (!useFirebase) {
+                        // Only update state manually if not using Firebase (Firebase has real-time listeners)
+                        const finalCheckoutHistory = checkoutHistory.filter(h =>
+                            !allAllocatedItems.find(allocated => allocated.id === h.id)
+                        );
+                        setCheckoutHistory(finalCheckoutHistory);
+                    }
 
                     // Update items with new prices in local state
-                    const updatedItems = items.map(item => {
-                        const itemName = selectedShipmentItems.find(name =>
-                            name.toLowerCase() === item.name.toLowerCase()
-                        );
-                        if (itemName && itemPrices[itemName]) {
-                            return { ...item, price: itemPrices[itemName] };
-                        }
-                        return item;
-                    });
                     setItems(updatedItems);
                     
                     
