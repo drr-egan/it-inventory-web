@@ -31,6 +31,144 @@ class FirebaseDataAdapter {
 
         this.initialized = true;
         console.log('✅ Firebase Data Adapter ready');
+
+        // Check if we need to seed with default data
+        await this.seedDefaultDataIfEmpty();
+    }
+
+    // Seed Firebase with default data if collections are empty
+    async seedDefaultDataIfEmpty() {
+        try {
+            console.log('🌱 Checking if Firebase needs default data...');
+
+            // Check if items collection is empty
+            const itemsSnapshot = await db.collection('items').limit(1).get();
+
+            if (itemsSnapshot.empty) {
+                console.log('📦 Seeding Firebase with default items...');
+                const defaultItems = this.getDefaultItems();
+                const batch = db.batch();
+
+                defaultItems.forEach(item => {
+                    const docRef = db.collection('items').doc();
+                    batch.set(docRef, {
+                        ...item,
+                        id: docRef.id,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdBy: 'system',
+                        updatedBy: 'system'
+                    });
+                });
+
+                await batch.commit();
+                console.log(`✅ Seeded ${defaultItems.length} default items`);
+            }
+
+            // Check if users collection is empty
+            const usersSnapshot = await db.collection('users').limit(1).get();
+
+            if (usersSnapshot.empty) {
+                console.log('👥 Seeding Firebase with default users...');
+                const defaultUsers = this.getDefaultUsers();
+                const batch = db.batch();
+
+                defaultUsers.forEach(user => {
+                    const docRef = db.collection('users').doc();
+                    batch.set(docRef, {
+                        ...user,
+                        id: docRef.id,
+                        active: true,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        createdBy: 'system',
+                        updatedBy: 'system'
+                    });
+                });
+
+                await batch.commit();
+                console.log(`✅ Seeded ${defaultUsers.length} default users`);
+            }
+
+        } catch (error) {
+            console.warn('⚠️ Could not seed default data:', error);
+        }
+    }
+
+    // Default items for seeding
+    getDefaultItems() {
+        return [
+            {
+                "name": "Dell Monitor 24\"",
+                "asin": "B07CVL2D2T",
+                "quantity": 15,
+                "minThreshold": 5,
+                "category": "Electronics",
+                "price": 299.99
+            },
+            {
+                "name": "USB-C Hub",
+                "asin": "B08HR6DSLT",
+                "quantity": 25,
+                "minThreshold": 10,
+                "category": "Accessories",
+                "price": 49.99
+            },
+            {
+                "name": "Wireless Mouse",
+                "asin": "B07FKMDJQZ",
+                "quantity": 30,
+                "minThreshold": 15,
+                "category": "Accessories",
+                "price": 29.99
+            },
+            {
+                "name": "Ethernet Cable 6ft",
+                "asin": "B00N2VIALK",
+                "quantity": 50,
+                "minThreshold": 20,
+                "category": "Cables",
+                "price": 12.99
+            },
+            {
+                "name": "Laptop Stand",
+                "asin": "B075GCG36Z",
+                "quantity": 8,
+                "minThreshold": 3,
+                "category": "Accessories",
+                "price": 79.99
+            }
+        ];
+    }
+
+    // Default users for seeding
+    getDefaultUsers() {
+        return [
+            {
+                "name": "John Doe",
+                "costCode": "IT-001-5770",
+                "firstName": "John",
+                "lastName": "Doe"
+            },
+            {
+                "name": "Jane Smith",
+                "costCode": "IT-002-5770",
+                "firstName": "Jane",
+                "lastName": "Smith"
+            },
+            {
+                "name": "Mike Wilson",
+                "costCode": "HR-001-5770",
+                "firstName": "Mike",
+                "lastName": "Wilson"
+            },
+            {
+                "name": "Sarah Johnson",
+                "costCode": "ACC-001-5770",
+                "firstName": "Sarah",
+                "lastName": "Johnson"
+            }
+        ];
     }
 
     // BENEFICIAL IMPROVEMENT: Real-time listeners for live updates
