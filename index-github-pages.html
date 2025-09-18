@@ -2699,7 +2699,6 @@
             }, [checkoutHistory]);
 
             // Handle Edit User
-            const [isUpdatingUser, setIsUpdatingUser] = useState(false);
             const handleUpdateUser = async (e) => {
                 e.preventDefault();
                 if (!editUserForm.firstName.trim() || !editUserForm.lastName.trim()) {
