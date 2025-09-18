@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Test Receipt PDF</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>Test Receipt Generator</h1>
+    <button onclick="generateTestReceipt()">Generate Test Receipt PDF</button>
+
+    <script>
+        function generateTestReceipt() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Header
+            doc.setFontSize(20);
+            doc.text('OFFICE SUPPLY RECEIPT', 20, 20);
+
+            doc.setFontSize(12);
+            doc.text('Office Depot Store #1234', 20, 35);
+            doc.text('123 Business Way, City, ST 12345', 20, 45);
+            doc.text('Phone: (555) 123-4567', 20, 55);
+
+            // Receipt details
+            doc.text('Receipt #: OD-2025-09-18-001', 20, 75);
+            doc.text('Date: September 18, 2025', 20, 85);
+            doc.text('Time: 10:30 AM', 20, 95);
+            doc.text('Cashier: Sarah M.', 20, 105);
+
+            // Items section
+            doc.setFontSize(14);
+            doc.text('ITEMS PURCHASED:', 20, 125);
+
+            doc.setFontSize(10);
+            let y = 140;
+
+            // Item 1 - Paper
+            doc.text('Copy Paper 8.5x11 White 500 Sheets', 20, y);
+            doc.text('SKU: CP85110500', 20, y + 8);
+            doc.text('Qty: 5', 20, y + 16);
+            doc.text('Unit Price: $12.99', 100, y + 16);
+            doc.text('Total: $64.95', 150, y + 16);
+            y += 35;
+
+            // Item 2 - Pens
+            doc.text('BIC Blue Ballpoint Pens Pack of 12', 20, y);
+            doc.text('SKU: BICBP12BLU', 20, y + 8);
+            doc.text('Qty: 3', 20, y + 16);
+            doc.text('Unit Price: $8.49', 100, y + 16);
+            doc.text('Total: $25.47', 150, y + 16);
+            y += 35;
+
+            // Item 3 - Folders
+            doc.text('Manila File Folders Letter Size 100 Pack', 20, y);
+            doc.text('SKU: MFF100LET', 20, y + 8);
+            doc.text('Qty: 2', 20, y + 16);
+            doc.text('Unit Price: $15.99', 100, y + 16);
+            doc.text('Total: $31.98', 150, y + 16);
+            y += 35;
+
+            // Item 4 - Stapler
+            doc.text('Heavy Duty Stapler Black', 20, y);
+            doc.text('SKU: HDSBLK001', 20, y + 8);
+            doc.text('Qty: 1', 20, y + 16);
+            doc.text('Unit Price: $24.99', 100, y + 16);
+            doc.text('Total: $24.99', 150, y + 16);
+            y += 35;
+
+            // Totals section
+            doc.setFontSize(12);
+            doc.text('Subtotal:', 120, y);
+            doc.text('$147.39', 150, y);
+            y += 15;
+
+            doc.text('Tax (8.25%):', 120, y);
+            doc.text('$12.16', 150, y);
+            y += 15;
+
+            doc.text('Shipping Fee:', 120, y);
+            doc.text('$5.99', 150, y);
+            y += 15;
+
+            doc.setFontSize(14);
+            doc.text('TOTAL:', 120, y);
+            doc.text('$165.54', 150, y);
+
+            // Footer
+            doc.setFontSize(8);
+            doc.text('Thank you for shopping with Office Depot!', 20, 280);
+            doc.text('Return Policy: 30 days with receipt', 20, 290);
+
+            // Save the PDF
+            doc.save('test-receipt-office-supplies.pdf');
+        }
+    </script>
+</body>
+</html>

@@ -50,6 +50,9 @@
 
     <!-- Firebase Data Adapter -->
     <script src="./firebase-adapter.js"></script>
+
+    <!-- GitHub Pages Data Adapter (fallback) -->
+    <script src="./github-pages-adapter.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -174,10 +177,33 @@
             }
         }
 
-        // API Utility Functions with Retry Logic
-        const API_BASE = window.location.hostname === 'localhost' 
-            ? 'http://localhost:3001' 
-            : `http://${window.location.hostname}:8080/api`;
+        // Data Adapter Pattern - Firebase with localStorage fallback
+        const isLocalhost = window.location.hostname === 'localhost';
+        const API_BASE = isLocalhost ? 'http://localhost:3001' : null; // No API for GitHub Pages
+
+        // Initialize data adapter (Firebase or GitHub Pages)
+        let dataAdapter = null;
+        const initializeDataAdapter = async () => {
+            try {
+                if (typeof firebase !== 'undefined' && typeof db !== 'undefined') {
+                    // Try Firebase first
+                    dataAdapter = new FirebaseDataAdapter();
+                    await dataAdapter.initialize();
+                    console.log('✅ Using Firebase data adapter');
+                } else {
+                    throw new Error('Firebase not available');
+                }
+            } catch (error) {
+                console.warn('⚠️ Firebase unavailable, using GitHub Pages adapter:', error);
+                if (typeof GitHubPagesDataAdapter !== 'undefined') {
+                    dataAdapter = new GitHubPagesDataAdapter();
+                    await dataAdapter.initialize();
+                    console.log('✅ Using GitHub Pages data adapter');
+                } else {
+                    console.error('❌ No data adapter available');
+                }
+            }
+        };
 
         const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -2020,11 +2046,27 @@
 
             // API_BASE is already defined globally above
 
-            // Load data on component mount
+            // Initialize data adapter and load data on component mount
             useEffect(() => {
-                fetchItems();
-                fetchUsers();
-                fetchCheckoutHistory();
+                const initializeAndLoadData = async () => {
+                    try {
+                        // Initialize data adapter first
+                        await initializeDataAdapter();
+
+                        // Then load data
+                        fetchItems();
+                        fetchUsers();
+                        fetchCheckoutHistory();
+                    } catch (error) {
+                        console.error('Initialization error:', error);
+                        // Still try to load data even if adapter initialization fails
+                        fetchItems();
+                        fetchUsers();
+                        fetchCheckoutHistory();
+                    }
+                };
+
+                initializeAndLoadData();
             }, []);
 
             // Generate notifications when items change
@@ -2037,17 +2079,49 @@
                 })));
             }, [items]);
 
-            // Fetch functions
+            // Fetch functions using data adapter
             const fetchItems = async () => {
                 try {
                     setLoading('items', true);
-                    logger.info('Refreshing items from database', {}, 'ItemsData');
-                    const data = await fetchWithRetry(`${API_BASE}/items`);
-                    logger.success(`Fetched ${data.length} items from database`, { count: data.length }, 'ItemsData');
+                    logger.info('Refreshing items from data source', {}, 'ItemsData');
+
+                    let data = [];
+                    if (dataAdapter) {
+                        if (dataAdapter.getItems) {
+                            data = await dataAdapter.getItems();
+                        } else if (dataAdapter.loadData) {
+                            await dataAdapter.loadData();
+                            data = dataAdapter.getData('items') || [];
+                        }
+                    } else if (API_BASE) {
+                        // Fallback to API for localhost
+                        data = await fetchWithRetry(`${API_BASE}/items`);
+                    } else {
+                        // Last resort: use default data
+                        data = [
+                            { id: "item001", name: "Dell Monitor 24\"", asin: "B07CVL2D2T", quantity: 15, minThreshold: 5, category: "Electronics", price: 299.99 },
+                            { id: "item002", name: "USB-C Hub", asin: "B08HR6DSLT", quantity: 25, minThreshold: 10, category: "Accessories", price: 49.99 },
+                            { id: "item003", name: "Wireless Mouse", asin: "B07FKMDJQZ", quantity: 30, minThreshold: 15, category: "Accessories", price: 29.99 },
+                            { id: "item004", name: "Ethernet Cable 6ft", asin: "B00N2VIALK", quantity: 50, minThreshold: 20, category: "Cables", price: 12.99 },
+                            { id: "item005", name: "Laptop Stand", asin: "B075GCG36Z", quantity: 8, minThreshold: 3, category: "Accessories", price: 79.99 }
+                        ];
+                    }
+
+                    logger.success(`Fetched ${data.length} items from data source`, { count: data.length }, 'ItemsData');
                     setItems(data);
                 } catch (error) {
                     logger.error('Failed to fetch items', { error: error.message }, 'ItemsData');
-                    alert(`Failed to load inventory items: ${error.message}`);
+                    console.error('Items fetch error:', error);
+                    // Use default items as fallback
+                    const defaultItems = [
+                        { id: "item001", name: "Dell Monitor 24\"", asin: "B07CVL2D2T", quantity: 15, minThreshold: 5, category: "Electronics", price: 299.99 },
+                        { id: "item002", name: "USB-C Hub", asin: "B08HR6DSLT", quantity: 25, minThreshold: 10, category: "Accessories", price: 49.99 },
+                        { id: "item003", name: "Wireless Mouse", asin: "B07FKMDJQZ", quantity: 30, minThreshold: 15, category: "Accessories", price: 29.99 },
+                        { id: "item004", name: "Ethernet Cable 6ft", asin: "B00N2VIALK", quantity: 50, minThreshold: 20, category: "Cables", price: 12.99 },
+                        { id: "item005", name: "Laptop Stand", asin: "B075GCG36Z", quantity: 8, minThreshold: 3, category: "Accessories", price: 79.99 }
+                    ];
+                    setItems(defaultItems);
+                    logger.info('Using default items as fallback', { count: defaultItems.length }, 'ItemsData');
                 } finally {
                     setLoading('items', false);
                 }

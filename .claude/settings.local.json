@@ -6,7 +6,8 @@
       "Bash(grep:*)",
       "Bash(pip install:*)",
       "Bash(git add:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
