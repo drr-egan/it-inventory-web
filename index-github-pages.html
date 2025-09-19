@@ -2011,6 +2011,8 @@
             const [receiptDate, setReceiptDate] = useState('');
             const [vendorName, setVendorName] = useState('');
             const [processingNotes, setProcessingNotes] = useState('');
+            const [taxAmount, setTaxAmount] = useState(0);
+            const [extraFees, setExtraFees] = useState(0);
             const [processingResults, setProcessingResults] = useState([]);
 
             // Process Shipment item selection states
@@ -2142,10 +2144,10 @@
                         };
                     });
 
-                    // Calculate totals
+                    // Calculate totals using manual input
                     const subtotal = allocation.reduce((sum, item) => sum + item.totalCost, 0);
-                    const tax = subtotal * 0.08; // 8% tax estimation
-                    const fees = 0; // No fees for manual entry
+                    const tax = taxAmount || 0;
+                    const fees = extraFees || 0;
                     const total = subtotal + tax + fees;
 
                     // Update inventory quantities
@@ -2192,6 +2194,11 @@
                     setPdfFile(null);
                     setSelectedShipmentItems([]);
                     setShipmentItemDetails({});
+                    setTaxAmount(0);
+                    setExtraFees(0);
+                    setVendorName('');
+                    setReceiptDate('');
+                    setProcessingNotes('');
                     document.getElementById('pdf-upload').value = '';
 
                 } catch (error) {
@@ -2204,12 +2211,16 @@
 
             const generateCostAllocationReport = async (allocation, totals) => {
                 try {
-                    // Create new PDF document
                     const { PDFDocument, rgb, StandardFonts } = PDFLib;
-                    const pdfDoc = await PDFDocument.create();
-                    const page = pdfDoc.addPage([612, 792]); // Letter size
-                    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-                    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+                    // Load the original PDF
+                    const originalPdfBytes = await pdfFile.arrayBuffer();
+                    const originalPdfDoc = await PDFDocument.load(originalPdfBytes);
+
+                    // Add a new page for the cost allocation report
+                    const page = originalPdfDoc.addPage([612, 792]); // Letter size
+                    const font = await originalPdfDoc.embedFont(StandardFonts.Helvetica);
+                    const boldFont = await originalPdfDoc.embedFont(StandardFonts.HelveticaBold);
 
                     let y = 750;
                     const leftMargin = 50;
@@ -2229,7 +2240,7 @@
                     y -= 15;
                     page.drawText(`Vendor: ${vendorName || 'Unknown'}`, { x: leftMargin, y, size: 10, font });
                     y -= 15;
-                    page.drawText(`Source File: ${pdfFile.name}`, { x: leftMargin, y, size: 10, font });
+                    page.drawText(`Receipt Date: ${receiptDate || 'Not specified'}`, { x: leftMargin, y, size: 10, font });
                     y -= 30;
 
                     // Table header
@@ -2250,50 +2261,72 @@
                     y -= 15;
 
                     // Allocation details
+                    let currentPage = page;
                     for (const item of allocation) {
                         if (y < 100) {
                             // Add new page if needed
-                            const newPage = pdfDoc.addPage([612, 792]);
+                            currentPage = originalPdfDoc.addPage([612, 792]);
                             y = 750;
                         }
 
-                        const itemName = item.itemName.length > 25 ?
-                            item.itemName.substring(0, 25) + '...' : item.itemName;
+                        const itemName = item.itemName.length > 30 ?
+                            item.itemName.substring(0, 30) + '...' : item.itemName;
 
-                        page.drawText(itemName, { x: leftMargin, y, size: 9, font });
-                        page.drawText(item.quantity.toString(), { x: 250, y, size: 9, font });
-                        page.drawText(item.costCode || item.departmentId || '-', { x: 300, y, size: 9, font });
-                        page.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 400, y, size: 9, font });
-                        page.drawText(`$${item.totalCost.toFixed(2)}`, { x: 480, y, size: 9, font });
+                        currentPage.drawText(itemName, { x: leftMargin, y, size: 9, font });
+                        currentPage.drawText(item.quantity.toString(), { x: 250, y, size: 9, font });
+                        currentPage.drawText(item.costCode || item.departmentId || '-', { x: 300, y, size: 9, font });
+                        currentPage.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 400, y, size: 9, font });
+                        currentPage.drawText(`$${item.totalCost.toFixed(2)}`, { x: 480, y, size: 9, font });
                         y -= 15;
                     }
 
                     y -= 20;
 
                     // Financial summary
-                    page.drawText('FINANCIAL SUMMARY', { x: leftMargin, y, size: 12, font: boldFont });
-                    y -= 20;
-                    page.drawText(`Subtotal: $${totals.subtotal.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
-                    y -= 15;
-                    page.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
-                    y -= 15;
-                    page.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
-                    y -= 15;
-                    page.drawText(`Total: $${totals.total.toFixed(2)}`, { x: leftMargin, y, size: 12, font: boldFont });
+                    if (y < 150) {
+                        currentPage = originalPdfDoc.addPage([612, 792]);
+                        y = 750;
+                    }
 
-                    // Download the PDF
-                    const pdfBytes = await pdfDoc.save();
+                    currentPage.drawText('FINANCIAL SUMMARY', { x: leftMargin, y, size: 12, font: boldFont });
+                    y -= 20;
+                    currentPage.drawText(`Subtotal (Items): $${totals.subtotal.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    currentPage.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    currentPage.drawText(`Extra Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    y -= 15;
+                    currentPage.drawLine({
+                        start: { x: leftMargin, y },
+                        end: { x: 200, y },
+                        thickness: 1,
+                        color: rgb(0, 0, 0)
+                    });
+                    y -= 10;
+                    currentPage.drawText(`TOTAL: $${totals.total.toFixed(2)}`, { x: leftMargin, y, size: 12, font: boldFont });
+
+                    if (processingNotes) {
+                        y -= 30;
+                        currentPage.drawText('NOTES:', { x: leftMargin, y, size: 10, font: boldFont });
+                        y -= 15;
+                        const notes = processingNotes.length > 80 ? processingNotes.substring(0, 80) + '...' : processingNotes;
+                        currentPage.drawText(notes, { x: leftMargin, y, size: 9, font });
+                    }
+
+                    // Save the PDF with the original filename (minus extension) + suffix
+                    const originalName = pdfFile.name.replace(/\.pdf$/i, '');
+                    const pdfBytes = await originalPdfDoc.save();
                     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
                     link.href = url;
-                    link.download = `shipment-allocation-${Date.now()}.pdf`;
+                    link.download = `${originalName}-with-allocation.pdf`;
                     link.click();
                     URL.revokeObjectURL(url);
 
                 } catch (error) {
                     console.error('Error generating PDF report:', error);
-                    showSnackbar('Failed to generate PDF report', 'error');
+                    showSnackbar('Failed to append allocation report to PDF. Please try again.', 'error');
                 }
             };
 
@@ -4023,34 +4056,59 @@
                                     {/* Processing Options */}
                                     <MaterialCard elevation={2}>
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                                            <span className="material-icons mr-2 text-green-600">settings</span>
-                                            Processing Options
+                                            <span className="material-icons mr-2 text-blue-600">receipt_long</span>
+                                            Receipt Details
                                         </h3>
                                         <div className="space-y-4">
-
-                                            <div className="mat-input">
-                                                <input
-                                                    type="date"
-                                                    value={receiptDate}
-                                                    onChange={(e) => setReceiptDate(e.target.value)}
-                                                />
-                                                <label>Receipt Date</label>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Enter vendor name"
+                                                        value={vendorName}
+                                                        onChange={(e) => setVendorName(e.target.value)}
+                                                    />
+                                                    <label>Vendor Name</label>
+                                                </div>
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="date"
+                                                        value={receiptDate}
+                                                        onChange={(e) => setReceiptDate(e.target.value)}
+                                                    />
+                                                    <label>Receipt Date</label>
+                                                </div>
                                             </div>
 
-                                            <div className="mat-input">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Optional vendor name"
-                                                    value={vendorName}
-                                                    onChange={(e) => setVendorName(e.target.value)}
-                                                />
-                                                <label>Vendor Name</label>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        placeholder="0.00"
+                                                        value={taxAmount || ''}
+                                                        onChange={(e) => setTaxAmount(parseFloat(e.target.value) || 0)}
+                                                    />
+                                                    <label>Tax Amount ($)</label>
+                                                </div>
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        placeholder="0.00"
+                                                        value={extraFees || ''}
+                                                        onChange={(e) => setExtraFees(parseFloat(e.target.value) || 0)}
+                                                    />
+                                                    <label>Extra Fees (Shipping, etc.) ($)</label>
+                                                </div>
                                             </div>
 
                                             <div className="mat-input">
                                                 <textarea
-                                                    rows={3}
-                                                    placeholder="Processing notes or special instructions"
+                                                    rows={2}
+                                                    placeholder="Optional processing notes"
                                                     value={processingNotes}
                                                     onChange={(e) => setProcessingNotes(e.target.value)}
                                                 />
@@ -4071,8 +4129,8 @@
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <span className="material-icons mr-2">process</span>
-                                                        Process Receipt
+                                                        <span className="material-icons mr-2">inventory</span>
+                                                        Process Shipment & Update Inventory
                                                     </>
                                                 )}
                                             </MaterialButton>
