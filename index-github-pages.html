@@ -1349,20 +1349,88 @@
 
                                 {/* User Selection */}
                                 {checkoutMethod === 'user' && (
-                                    <div className="mat-input">
-                                        <select
-                                            value={selectedUser}
-                                            onChange={(e) => setSelectedUser(e.target.value)}
-                                            required
-                                        >
-                                            <option value="">Choose a user...</option>
-                                            {users.slice(0, 50).map(user => (
-                                                <option key={user.id} value={user.id}>
-                                                    {user.name || `${user.firstName} ${user.lastName}`} - {user.costCode || user.cost_code}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <label>Select User</label>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Select User
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Search users by name or cost code..."
+                                                value={userSearchQuery}
+                                                onChange={(e) => setUserSearchQuery(e.target.value)}
+                                                className="w-full px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                            <span className="material-icons absolute left-3 top-2.5 text-gray-400 text-sm">search</span>
+                                        </div>
+
+                                        {/* User Search Results */}
+                                        {userSearchQuery && userSearchQuery.length > 0 && (
+                                            <div className="mt-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                                {users
+                                                    .filter(user => {
+                                                        const name = user.name || `${user.firstName} ${user.lastName}`;
+                                                        const costCode = user.costCode || user.cost_code;
+                                                        return name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                                                               (costCode && costCode.toLowerCase().includes(userSearchQuery.toLowerCase()));
+                                                    })
+                                                    .slice(0, 20)
+                                                    .map(user => (
+                                                        <div
+                                                            key={user.id}
+                                                            onClick={() => {
+                                                                setSelectedUser(user.id);
+                                                                setUserSearchQuery('');
+                                                            }}
+                                                            className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer border-b border-gray-200 dark:border-gray-600 last:border-b-0"
+                                                        >
+                                                            <div className="font-medium text-gray-900 dark:text-white">
+                                                                {user.name || `${user.firstName} ${user.lastName}`}
+                                                            </div>
+                                                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                                Cost Code: {user.costCode || user.cost_code}
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                }
+                                                {users.filter(user => {
+                                                    const name = user.name || `${user.firstName} ${user.lastName}`;
+                                                    const costCode = user.costCode || user.cost_code;
+                                                    return name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                                                           (costCode && costCode.toLowerCase().includes(userSearchQuery.toLowerCase()));
+                                                }).length === 0 && (
+                                                    <div className="px-4 py-2 text-gray-500 dark:text-gray-400">No users found</div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Selected User Display */}
+                                        {selectedUser && (
+                                            <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className="font-medium text-blue-900 dark:text-blue-100">
+                                                            {(() => {
+                                                                const user = users.find(u => u.id === selectedUser);
+                                                                return user ? (user.name || `${user.firstName} ${user.lastName}`) : 'Unknown User';
+                                                            })()}
+                                                        </div>
+                                                        <div className="text-sm text-blue-700 dark:text-blue-300">
+                                                            Cost Code: {(() => {
+                                                                const user = users.find(u => u.id === selectedUser);
+                                                                return user ? (user.costCode || user.cost_code) : 'N/A';
+                                                            })()}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setSelectedUser('')}
+                                                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+                                                    >
+                                                        <span className="material-icons text-sm">close</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -1613,6 +1681,10 @@
             const [showQuantityModal, setShowQuantityModal] = useState(false);
             const [shipmentItemDetails, setShipmentItemDetails] = useState({});
 
+            // Shop search states
+            const [shopSearchQuery, setShopSearchQuery] = useState('');
+            const [userSearchQuery, setUserSearchQuery] = useState('');
+
             // Pagination handlers
             const handleInventoryPageChange = (page) => {
                 setInventoryPagination(prev => ({ ...prev, currentPage: page }));
@@ -1650,11 +1722,23 @@
                 }));
             };
 
+            // Get filtered items for shop
+            const getFilteredItems = () => {
+                return shopSearchQuery
+                    ? items.filter(item =>
+                        item.name.toLowerCase().includes(shopSearchQuery.toLowerCase()) ||
+                        item.category.toLowerCase().includes(shopSearchQuery.toLowerCase()) ||
+                        (item.asin && item.asin.toLowerCase().includes(shopSearchQuery.toLowerCase()))
+                    )
+                    : items;
+            };
+
             // Get paginated data
             const getPaginatedItems = () => {
+                const filteredItems = getFilteredItems();
                 const startIndex = (inventoryPagination.currentPage - 1) * inventoryPagination.itemsPerPage;
                 const endIndex = startIndex + inventoryPagination.itemsPerPage;
-                return items.slice(startIndex, endIndex);
+                return filteredItems.slice(startIndex, endIndex);
             };
 
             const getPaginatedUsers = () => {
@@ -1665,12 +1749,9 @@
 
             const getPaginatedCheckoutHistory = () => {
                 const dataSource = checkoutViewMode === 'archive' ? archivedCheckouts : checkoutHistory;
-                console.log(`getPaginatedCheckoutHistory: mode=${checkoutViewMode}, dataSource.length=${dataSource.length}, checkoutHistory.length=${checkoutHistory.length}, archivedCheckouts.length=${archivedCheckouts.length}`);
                 const startIndex = (checkoutPagination.currentPage - 1) * checkoutPagination.itemsPerPage;
                 const endIndex = startIndex + checkoutPagination.itemsPerPage;
-                const result = dataSource.slice(startIndex, endIndex);
-                console.log(`getPaginatedCheckoutHistory: returning ${result.length} items`);
-                return result;
+                return dataSource.slice(startIndex, endIndex);
             };
 
             // Process Shipment PDF handling
@@ -2995,6 +3076,34 @@
                                             <span className="material-icons mr-2">storefront</span>
                                             Shop Items
                                         </h2>
+
+                                        {/* Search Field */}
+                                        <div className="mb-6">
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search items by name, category, or ASIN..."
+                                                    value={shopSearchQuery}
+                                                    onChange={(e) => {
+                                                        setShopSearchQuery(e.target.value);
+                                                        setInventoryPagination(prev => ({ ...prev, currentPage: 1 }));
+                                                    }}
+                                                    className="w-full px-4 py-3 pl-12 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                />
+                                                <span className="material-icons absolute left-4 top-3.5 text-gray-400">search</span>
+                                                {shopSearchQuery && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setShopSearchQuery('');
+                                                            setInventoryPagination(prev => ({ ...prev, currentPage: 1 }));
+                                                        }}
+                                                        className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                                    >
+                                                        <span className="material-icons">clear</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
                                             {getPaginatedItems().map(item => (
                                                 <MaterialCard key={item.id} elevation={1} className="!p-3 lg:!p-4 hover:mat-elevation-4">
@@ -3048,7 +3157,7 @@
                                         {/* Inventory Pagination */}
                                         <MaterialPagination
                                             currentPage={inventoryPagination.currentPage}
-                                            totalItems={inventoryPagination.totalItems}
+                                            totalItems={getFilteredItems().length}
                                             itemsPerPage={inventoryPagination.itemsPerPage}
                                             onPageChange={handleInventoryPageChange}
                                             onItemsPerPageChange={handleInventoryItemsPerPageChange}
