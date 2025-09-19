@@ -1446,6 +1446,82 @@
             );
         };
 
+        // Material Barcode Scanner Component
+        const MaterialBarcodeScanner = ({ items, onItemScanned }) => {
+            const [scanInput, setScanInput] = useState('');
+            const [isExpanded, setIsExpanded] = useState(false);
+            const inputRef = useRef(null);
+
+            const handleScan = (input) => {
+                if (!input.trim()) return;
+
+                // Try to find item by name or ASIN
+                const foundItem = items.find(item =>
+                    item.name.toLowerCase().includes(input.toLowerCase()) ||
+                    (item.asin && item.asin.toLowerCase() === input.toLowerCase())
+                );
+
+                if (foundItem && onItemScanned) {
+                    onItemScanned(foundItem, 1);
+                    setScanInput('');
+                } else {
+                    console.log('Item not found:', input);
+                }
+            };
+
+            const handleKeyPress = (e) => {
+                if (e.key === 'Enter') {
+                    handleScan(scanInput);
+                }
+            };
+
+            return (
+                <MaterialCard elevation={2}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                            <span className="material-icons mr-2 text-blue-600">qr_code_scanner</span>
+                            Barcode Scanner
+                        </h3>
+                        <MaterialButton
+                            variant="outlined"
+                            onClick={() => setIsExpanded(!isExpanded)}
+                        >
+                            <span className="material-icons">
+                                {isExpanded ? 'expand_less' : 'expand_more'}
+                            </span>
+                        </MaterialButton>
+                    </div>
+
+                    {isExpanded && (
+                        <div className="space-y-4">
+                            <div className="mat-input">
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={scanInput}
+                                    onChange={(e) => setScanInput(e.target.value)}
+                                    onKeyPress={handleKeyPress}
+                                    placeholder="Scan barcode or type item name"
+                                    className="w-full"
+                                />
+                                <label>Scan Input</label>
+                            </div>
+                            <MaterialButton
+                                variant="contained"
+                                color="primary"
+                                onClick={() => handleScan(scanInput)}
+                                disabled={!scanInput.trim()}
+                                className="w-full"
+                            >
+                                <span className="material-icons mr-2">search</span>
+                                Find Item
+                            </MaterialButton>
+                        </div>
+                    )}
+                </MaterialCard>
+            );
+        };
+
         // Main Firebase App with Material Design
         const MaterialFirebaseApp = () => {
             const [user, setUser] = useState(null);
