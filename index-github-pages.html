@@ -1174,7 +1174,7 @@
         };
 
         // Shopping Cart Component with Material Design
-        const MaterialShoppingCart = ({ cart, addToCart, removeFromCart, clearCart, users, onCheckout }) => {
+        const MaterialShoppingCart = ({ cart, addToCart, removeFromCart, clearCart, users, onCheckout, userSearchQuery, setUserSearchQuery }) => {
             const [isCheckingOut, setIsCheckingOut] = useState(false);
             const [checkoutMethod, setCheckoutMethod] = useState('user');
             const [selectedUser, setSelectedUser] = useState('');
@@ -3262,6 +3262,8 @@
                                             removeFromCart={removeFromCart}
                                             clearCart={clearCart}
                                             users={users}
+                                            userSearchQuery={userSearchQuery}
+                                            setUserSearchQuery={setUserSearchQuery}
                                             onCheckout={() => {
                                                 showSnackbar('Checkout completed successfully!', 'success');
                                             }}
