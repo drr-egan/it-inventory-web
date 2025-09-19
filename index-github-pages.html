@@ -4027,35 +4027,6 @@
                                             Processing Options
                                         </h3>
                                         <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                    Cost Allocation Method
-                                                </label>
-                                                <div className="space-y-2">
-                                                    <label className="flex items-center">
-                                                        <input
-                                                            type="radio"
-                                                            name="allocation"
-                                                            value="auto"
-                                                            className="mr-2"
-                                                            checked={allocationMethod === 'auto'}
-                                                            onChange={(e) => setAllocationMethod(e.target.value)}
-                                                        />
-                                                        <span className="text-sm">Automatic - Match against checkout history</span>
-                                                    </label>
-                                                    <label className="flex items-center">
-                                                        <input
-                                                            type="radio"
-                                                            name="allocation"
-                                                            value="manual"
-                                                            className="mr-2"
-                                                            checked={allocationMethod === 'manual'}
-                                                            onChange={(e) => setAllocationMethod(e.target.value)}
-                                                        />
-                                                        <span className="text-sm">Manual - Review and assign costs</span>
-                                                    </label>
-                                                </div>
-                                            </div>
 
                                             <div className="mat-input">
                                                 <input
