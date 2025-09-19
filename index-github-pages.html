@@ -2007,13 +2007,10 @@
 
             // Process Shipment states
             const [pdfFile, setPdfFile] = useState(null);
-            const [pdfText, setPdfText] = useState('');
             const [isProcessing, setIsProcessing] = useState(false);
-            const [allocationMethod, setAllocationMethod] = useState('auto');
             const [receiptDate, setReceiptDate] = useState('');
             const [vendorName, setVendorName] = useState('');
             const [processingNotes, setProcessingNotes] = useState('');
-            const [matchedItems, setMatchedItems] = useState([]);
             const [processingResults, setProcessingResults] = useState([]);
 
             // Process Shipment item selection states
@@ -2089,73 +2086,9 @@
                 }
 
                 setPdfFile(file);
-                setIsProcessing(true);
-
-                try {
-                    // Extract text from PDF using PDF.js
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-
-                    let fullText = '';
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const textContent = await page.getTextContent();
-                        const pageText = textContent.items.map(item => item.str).join(' ');
-                        fullText += pageText + ' ';
-                    }
-
-                    setPdfText(fullText);
-                    showSnackbar(`PDF uploaded successfully! Extracted ${fullText.length} characters.`, 'success');
-
-                    // Auto-match items if automatic allocation is selected
-                    if (allocationMethod === 'auto') {
-                        await matchItemsFromPdf(fullText);
-                    }
-                } catch (error) {
-                    console.error('Error processing PDF:', error);
-                    showSnackbar(`Failed to process PDF: ${error.message}`, 'error');
-                } finally {
-                    setIsProcessing(false);
-                }
+                showSnackbar('PDF uploaded successfully! Ready for cost allocation.', 'success');
             };
 
-            const matchItemsFromPdf = async (text) => {
-                try {
-                    const matches = [];
-                    const textLower = text.toLowerCase();
-
-                    // Match against checkout history items
-                    for (const record of checkoutHistory) {
-                        const itemNameLower = record.itemName.toLowerCase();
-
-                        // Simple text matching - look for item names in the PDF
-                        if (textLower.includes(itemNameLower) ||
-                            itemNameLower.split(' ').some(word => word.length > 3 && textLower.includes(word))) {
-
-                            // Try to extract price and quantity from surrounding text
-                            const itemIndex = textLower.indexOf(itemNameLower);
-                            const surroundingText = text.substring(Math.max(0, itemIndex - 100), itemIndex + 200);
-
-                            // Simple regex patterns for price and quantity
-                            const priceMatch = surroundingText.match(/\$?(\d+\.?\d{0,2})/);
-                            const quantityMatch = surroundingText.match(/(\d+)\s*(?:ea|each|qty|quantity|pcs?|pieces?)?/i);
-
-                            matches.push({
-                                ...record,
-                                extractedPrice: priceMatch ? parseFloat(priceMatch[1]) : null,
-                                extractedQuantity: quantityMatch ? parseInt(quantityMatch[1]) : record.quantity,
-                                confidence: itemNameLower.length > 5 ? 'high' : 'medium'
-                            });
-                        }
-                    }
-
-                    setMatchedItems(matches);
-                    showSnackbar(`Found ${matches.length} potential item matches in PDF`, matches.length > 0 ? 'success' : 'info');
-                } catch (error) {
-                    console.error('Error matching items:', error);
-                    showSnackbar(`Error matching items: ${error.message}`, 'error');
-                }
-            };
 
             const formatDepartmentId = (deptId) => {
                 if (!deptId) return '';
@@ -2174,82 +2107,91 @@
                     return;
                 }
 
-                if (matchedItems.length === 0) {
-                    showSnackbar('No matched items found. Cannot generate cost allocation.', 'error');
+                if (!selectedShipmentItems || selectedShipmentItems.length === 0) {
+                    showSnackbar('Please select items to process first', 'error');
+                    return;
+                }
+
+                // Validate that all selected items have quantity and price set
+                const incompleteItems = selectedShipmentItems.filter(itemName => {
+                    const details = shipmentItemDetails[itemName];
+                    return !details || !details.quantity || details.quantity <= 0 || !details.price || details.price <= 0;
+                });
+
+                if (incompleteItems.length > 0) {
+                    showSnackbar(`Please set quantity and price for all items. Missing: ${incompleteItems.join(', ')}`, 'error');
                     return;
                 }
 
                 setIsProcessing(true);
 
                 try {
-                    // Calculate cost allocation
-                    const totalItems = matchedItems.reduce((sum, item) => sum + item.quantity, 0);
+                    // Create allocation data from manual selections
+                    const allocation = selectedShipmentItems.map(itemName => {
+                        const details = shipmentItemDetails[itemName];
+                        const item = items.find(i => i.name === itemName);
 
-                    // Extract financial data from PDF text
-                    const priceMatches = pdfText.match(/\$(\d+\.?\d{0,2})/g) || [];
-                    const prices = priceMatches.map(p => parseFloat(p.replace('$', ''))).filter(p => p > 0);
+                        return {
+                            itemName: itemName,
+                            quantity: details.quantity,
+                            unitPrice: details.price,
+                            totalCost: details.price * details.quantity,
+                            userName: 'Inventory Restock',
+                            departmentId: 'INVENTORY',
+                            costCode: 'INVENTORY-5770'
+                        };
+                    });
 
-                    let subtotal = 0;
-                    let tax = 0;
-                    let fees = 0;
-                    let total = 0;
+                    // Calculate totals
+                    const subtotal = allocation.reduce((sum, item) => sum + item.totalCost, 0);
+                    const tax = subtotal * 0.08; // 8% tax estimation
+                    const fees = 0; // No fees for manual entry
+                    const total = subtotal + tax + fees;
 
-                    if (prices.length > 0) {
-                        // Simple heuristic: largest number is likely the total
-                        total = Math.max(...prices);
+                    // Update inventory quantities
+                    for (const itemName of selectedShipmentItems) {
+                        const details = shipmentItemDetails[itemName];
+                        const item = items.find(i => i.name === itemName);
 
-                        // Look for tax patterns
-                        const taxMatch = pdfText.match(/tax[:\s]*\$?(\d+\.?\d{0,2})/i);
-                        tax = taxMatch ? parseFloat(taxMatch[1]) : total * 0.08; // Default 8% tax
+                        if (item) {
+                            const newQuantity = item.quantity + details.quantity;
+                            const newPrice = details.price;
 
-                        // Look for fee patterns
-                        const feeMatch = pdfText.match(/(?:fee|shipping|handling)[:\s]*\$?(\d+\.?\d{0,2})/i);
-                        fees = feeMatch ? parseFloat(feeMatch[1]) : 0;
+                            // Update item in database
+                            await dataAdapter.updateItem(item.id, {
+                                quantity: newQuantity,
+                                price: newPrice
+                            });
 
-                        subtotal = total - tax - fees;
-                    } else {
-                        // Fallback: estimate from matched items
-                        subtotal = matchedItems.reduce((sum, item) => sum + (item.extractedPrice || 0) * item.quantity, 0);
-                        tax = subtotal * 0.08;
-                        total = subtotal + tax + fees;
+                            // Update local state
+                            setItems(prevItems =>
+                                prevItems.map(i =>
+                                    i.id === item.id
+                                        ? { ...i, quantity: newQuantity, price: newPrice }
+                                        : i
+                                )
+                            );
+                        }
                     }
-
-                    // Distribute costs across items
-                    const costPerItem = subtotal / totalItems;
-                    const taxPerItem = tax / totalItems;
-                    const feePerItem = fees / totalItems;
-
-                    const allocation = matchedItems.map(item => ({
-                        ...item,
-                        unitPrice: item.extractedPrice || costPerItem,
-                        totalCost: (item.extractedPrice || costPerItem) * item.quantity +
-                                   (taxPerItem * item.quantity) + (feePerItem * item.quantity),
-                        taxAllocation: taxPerItem * item.quantity,
-                        feeAllocation: feePerItem * item.quantity,
-                        costCode: formatDepartmentId(item.departmentId)
-                    }));
 
                     // Generate PDF report
                     await generateCostAllocationReport(allocation, { subtotal, tax, fees, total });
-
-                    // Remove processed items from checkout history
-                    await removeProcessedItems(matchedItems);
 
                     // Update processing results
                     setProcessingResults(prev => [...prev, {
                         timestamp: new Date().toISOString(),
                         fileName: pdfFile.name,
-                        itemsProcessed: matchedItems.length,
+                        itemsProcessed: selectedShipmentItems.length,
                         totalAmount: total,
-                        vendor: vendorName || 'Unknown'
+                        vendor: vendorName || 'Manual Entry'
                     }]);
 
-                    showSnackbar(`Successfully processed ${matchedItems.length} items with cost allocation!`, 'success');
+                    showSnackbar(`Successfully processed ${selectedShipmentItems.length} items and updated inventory!`, 'success');
 
                     // Reset form
                     setPdfFile(null);
-                    setPdfText('');
-                    setMatchedItems([]);
+                    setSelectedShipmentItems([]);
+                    setShipmentItemDetails({});
                     document.getElementById('pdf-upload').value = '';
 
                 } catch (error) {
@@ -4013,15 +3955,26 @@
                                             </div>
 
                                             {selectedShipmentItems?.length > 0 && (
-                                                <MaterialButton
-                                                    onClick={() => setShowQuantityModal(true)}
-                                                    variant="contained"
-                                                    color="primary"
-                                                    className="w-full"
-                                                >
-                                                    <span className="material-icons mr-2">edit</span>
-                                                    Set Quantities & Prices ({selectedShipmentItems.length} items)
-                                                </MaterialButton>
+                                                <div className="space-y-2">
+                                                    <MaterialButton
+                                                        onClick={() => setShowQuantityModal(true)}
+                                                        variant="contained"
+                                                        color="primary"
+                                                        className="w-full"
+                                                    >
+                                                        <span className="material-icons mr-2">edit</span>
+                                                        Set Quantities & Prices ({selectedShipmentItems.length} items)
+                                                    </MaterialButton>
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                        <p className="font-medium mb-1">Instructions:</p>
+                                                        <ul className="list-disc list-inside space-y-1">
+                                                            <li>Set the quantity received for each item</li>
+                                                            <li>Enter the unit price from the receipt</li>
+                                                            <li>Items will be added to inventory automatically</li>
+                                                            <li>Cost allocation report will be generated</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     </MaterialCard>
@@ -4137,7 +4090,7 @@
                                                 variant="contained"
                                                 color="success"
                                                 className="w-full"
-                                                disabled={!pdfFile || isProcessing}
+                                                disabled={!pdfFile || isProcessing || !selectedShipmentItems || selectedShipmentItems.length === 0}
                                                 onClick={processShipment}
                                             >
                                                 {isProcessing ? (
@@ -4155,50 +4108,58 @@
                                         </div>
                                     </MaterialCard>
 
-                                    {/* Matched Items Preview */}
-                                    {matchedItems.length > 0 && (
+                                    {/* Selected Items Summary */}
+                                    {selectedShipmentItems && selectedShipmentItems.length > 0 && (
                                         <MaterialCard elevation={1} className="lg:col-span-2">
                                             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                                                <span className="material-icons mr-2 text-orange-600">assignment_turned_in</span>
-                                                Matched Items ({matchedItems.length})
+                                                <span className="material-icons mr-2 text-green-600">inventory</span>
+                                                Ready to Process ({selectedShipmentItems.length} items)
                                             </h3>
                                             <div className="overflow-x-auto">
                                                 <table className="min-w-full">
                                                     <thead className="bg-gray-50 dark:bg-gray-700">
                                                         <tr>
                                                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Item</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">User</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Qty</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Dept</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Confidence</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Current Stock</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Qty to Add</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Unit Price</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Total Cost</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                                        {matchedItems.slice(0, 5).map((item, index) => (
-                                                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                                                <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">
-                                                                    {item.itemName.length > 30 ? item.itemName.substring(0, 30) + '...' : item.itemName}
-                                                                </td>
-                                                                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{item.userName}</td>
-                                                                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{item.quantity}</td>
-                                                                <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{item.departmentId || '-'}</td>
-                                                                <td className="px-4 py-2">
-                                                                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                                                        item.confidence === 'high' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' :
-                                                                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
-                                                                    }`}>
-                                                                        {item.confidence}
-                                                                    </span>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
+                                                        {selectedShipmentItems.map((itemName, index) => {
+                                                            const item = items.find(i => i.name === itemName);
+                                                            const details = shipmentItemDetails[itemName];
+                                                            return (
+                                                                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                                                    <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                                                                        {itemName.length > 30 ? itemName.substring(0, 30) + '...' : itemName}
+                                                                    </td>
+                                                                    <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{item?.quantity || 0}</td>
+                                                                    <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                                                        {details?.quantity || '-'}
+                                                                    </td>
+                                                                    <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+                                                                        {details?.price ? `$${details.price.toFixed(2)}` : '-'}
+                                                                    </td>
+                                                                    <td className="px-4 py-2 text-sm font-medium text-green-600 dark:text-green-400">
+                                                                        {details?.quantity && details?.price ? `$${(details.quantity * details.price).toFixed(2)}` : '-'}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                     </tbody>
                                                 </table>
-                                                {matchedItems.length > 5 && (
-                                                    <div className="text-center py-2 text-sm text-gray-500 dark:text-gray-400">
-                                                        and {matchedItems.length - 5} more items...
+                                                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                                    <div className="text-sm font-medium text-green-900 dark:text-green-100">
+                                                        Total Shipment Value: ${
+                                                            selectedShipmentItems.reduce((sum, itemName) => {
+                                                                const details = shipmentItemDetails[itemName];
+                                                                return sum + (details?.quantity && details?.price ? details.quantity * details.price : 0);
+                                                            }, 0).toFixed(2)
+                                                        }
                                                     </div>
-                                                )}
+                                                </div>
                                             </div>
                                         </MaterialCard>
                                     )}
@@ -4513,38 +4474,66 @@
                                                 <div key={itemName} className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
                                                     <h4 className="font-medium text-gray-900 dark:text-white mb-3">{itemName}</h4>
                                                     <div className="grid grid-cols-2 gap-4">
-                                                        <MaterialInput
-                                                            type="number"
-                                                            label="Quantity"
-                                                            value={shipmentItemDetails[itemName]?.quantity || ''}
-                                                            onChange={(e) => setShipmentItemDetails(prev => ({
-                                                                ...prev,
-                                                                [itemName]: {
-                                                                    ...prev[itemName],
-                                                                    quantity: parseInt(e.target.value) || 0
-                                                                }
-                                                            }))}
-                                                            min="1"
-                                                            required
-                                                        />
-                                                        <MaterialInput
-                                                            type="number"
-                                                            label="Unit Price"
-                                                            value={shipmentItemDetails[itemName]?.price || ''}
-                                                            onChange={(e) => setShipmentItemDetails(prev => ({
-                                                                ...prev,
-                                                                [itemName]: {
-                                                                    ...prev[itemName],
-                                                                    price: parseFloat(e.target.value) || 0
-                                                                }
-                                                            }))}
-                                                            step="0.01"
-                                                            placeholder="0.00"
-                                                        />
+                                                        <div className="mat-input">
+                                                            <input
+                                                                type="number"
+                                                                value={shipmentItemDetails[itemName]?.quantity || ''}
+                                                                onChange={(e) => setShipmentItemDetails(prev => ({
+                                                                    ...prev,
+                                                                    [itemName]: {
+                                                                        ...prev[itemName],
+                                                                        quantity: parseInt(e.target.value) || 0
+                                                                    }
+                                                                }))}
+                                                                min="1"
+                                                                required
+                                                                placeholder="Enter quantity received"
+                                                            />
+                                                            <label>Quantity Received</label>
+                                                        </div>
+                                                        <div className="mat-input">
+                                                            <input
+                                                                type="number"
+                                                                value={shipmentItemDetails[itemName]?.price || ''}
+                                                                onChange={(e) => setShipmentItemDetails(prev => ({
+                                                                    ...prev,
+                                                                    [itemName]: {
+                                                                        ...prev[itemName],
+                                                                        price: parseFloat(e.target.value) || 0
+                                                                    }
+                                                                }))}
+                                                                step="0.01"
+                                                                placeholder="0.00"
+                                                                required
+                                                            />
+                                                            <label>Unit Price ($)</label>
+                                                        </div>
                                                     </div>
                                                     {item && (
-                                                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                                                            Current stock: {item.quantity} | Category: {item.category}
+                                                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
+                                                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                                <div className="grid grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <span className="font-medium">Current Stock:</span> {item.quantity}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">Category:</span> {item.category}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">Current Price:</span> {item.price > 0 ? `$${item.price.toFixed(2)}` : 'Not set'}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">New Stock:</span> {item.quantity + (shipmentItemDetails[itemName]?.quantity || 0)}
+                                                                    </div>
+                                                                </div>
+                                                                {shipmentItemDetails[itemName]?.quantity && shipmentItemDetails[itemName]?.price && (
+                                                                    <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-700">
+                                                                        <span className="font-medium text-green-600 dark:text-green-400">
+                                                                            Total Cost: ${(shipmentItemDetails[itemName].quantity * shipmentItemDetails[itemName].price).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -4565,6 +4554,17 @@
                                         variant="contained"
                                         color="primary"
                                         onClick={() => {
+                                            // Validate all items have quantity and price
+                                            const incompleteItems = selectedShipmentItems.filter(itemName => {
+                                                const details = shipmentItemDetails[itemName];
+                                                return !details || !details.quantity || details.quantity <= 0 || !details.price || details.price <= 0;
+                                            });
+
+                                            if (incompleteItems.length > 0) {
+                                                showSnackbar(`Please set quantity and price for: ${incompleteItems.join(', ')}`, 'error');
+                                                return;
+                                            }
+
                                             setShowQuantityModal(false);
                                             showSnackbar('Item details saved successfully', 'success');
                                         }}
