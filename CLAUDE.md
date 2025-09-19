@@ -45,7 +45,7 @@ The application consists of several main functional areas:
 - **Process Shipment**: Upload PDF receipts to match against checkout history
 - **Users**: Manage user database via CSV import
 - **Inventory Management**: Unified interface for comprehensive inventory control including manual creation, CSV import/export, barcode scanning, and price management
-- **Checkout History**: View and import historical checkout records
+- **Checkout History**: View and import historical checkout records with Current/Archive toggle for processed shipments
 - **Notifications**: Display low stock alerts and export functionality
 
 ## Deployment Commands
@@ -102,7 +102,8 @@ The production deployment uses Firebase for backend services:
 **Collections Structure:**
 - `items`: Inventory items with fields: name, asin, quantity, minThreshold, category, price
 - `users`: User profiles with authentication integration
-- `checkoutHistory`: Checkout records with user assignments and timestamps
+- `checkoutHistory`: Active checkout records with user assignments and timestamps
+- `archivedCheckouts`: Processed checkout records moved from active history during shipment processing with archivedAt timestamps
 
 **Authentication Flow:**
 1. User visits GitHub Pages URL
@@ -192,12 +193,44 @@ Department IDs are automatically formatted to follow the pattern `x-xx-xxx-5770`
   - `1-10-2000` → `1-10-200-5770`
   - `3-10-100` → `3-10-100-5770`
 
+## Checkout History Archive System
+
+The application features a comprehensive archive system for managing checkout history data through the shipment processing workflow:
+
+### Archive Functionality
+- **Current/Archive Toggle**: Toggle button interface to switch between active checkout history and archived records
+- **Automatic Archiving**: Items processed through shipment allocation are automatically moved from `checkoutHistory` to `archivedCheckouts` collection
+- **Audit Trail**: Archived records maintain original checkout data plus `archivedAt` timestamp for complete accountability
+- **Real-time Sync**: Both current and archived data use Firebase real-time listeners for immediate updates across all connected clients
+
+### User Interface Features
+- **Toggle Button UI**: Clean Material Design toggle with count badges showing record counts for both current and archived data
+- **Dynamic Table**: Table headers and columns adapt based on current view mode
+  - **Current View**: Standard checkout history table with Item, User, Quantity, Department, and Date columns
+  - **Archive View**: Extended table including additional "Archived Date" column showing when records were processed
+- **Visual Indicators**: Active view highlighted with blue styling and appropriate icons (`pending_actions` for current, `inventory` for archive)
+- **Dynamic Descriptions**: Context-appropriate help text based on selected view mode
+
+### Data Management
+- **Pagination**: Separate pagination handling for current and archived data sources with automatic reset on toggle
+- **Data Integrity**: Prevents double-allocation by moving processed records to archive collection
+- **Search and Filter**: Full search functionality available for both current and archived records
+- **Export Capability**: Archive data can be accessed and exported for reporting purposes
+
+### Technical Implementation
+- **State Management**: Uses `checkoutViewMode` state to track current view ('current' or 'archive')
+- **Firebase Integration**: Real-time listeners for both `checkoutHistory` and `archivedCheckouts` collections
+- **Responsive Design**: Toggle interface adapts to both desktop and mobile layouts
+- **Performance Optimization**: Limit 500 records for archived data with descending sort by archived date
+
 ## Key State Management
 
 The React app uses hooks for state management:
 - `items`: Inventory items array
-- `users`: User database array  
-- `checkoutHistory`: Historical checkout records
+- `users`: User database array
+- `checkoutHistory`: Active checkout records
+- `archivedCheckouts`: Archived checkout records from processed shipments
+- `checkoutViewMode`: Toggle state for Current/Archive view ('current' or 'archive')
 - `cart`: Shopping cart items
 - `notifications`: Low stock alerts
 - Multiple sort configurations for table sorting
@@ -250,7 +283,7 @@ The app provides comprehensive PDF receipt processing with advanced cost allocat
 - **Success**: `shipment-with-allocation-[timestamp].pdf` (original + appended report)
 - **Fallback**: `shipment-allocation-[timestamp].pdf` (standalone report)
 
-After processing, allocated items are automatically removed from checkout history to prevent double-allocation.
+After processing, allocated items are automatically removed from checkout history and archived in the `archivedCheckouts` collection with timestamps for audit trail and accountability.
 
 ## Inventory Management
 
@@ -300,7 +333,8 @@ The CSV template includes columns:
 Firestore collections:
 - **items**: Inventory management with real-time synchronization
 - **users**: User management with authentication
-- **checkoutHistory**: Checkout records with audit trail
+- **checkoutHistory**: Active checkout records with audit trail
+- **archivedCheckouts**: Processed checkout records from shipment allocation with archive timestamps
 
 **Authentication**: Firebase Auth with Google sign-in required
 **Real-time Updates**: Automatic synchronization across all connected clients
@@ -360,6 +394,7 @@ The application uses git branching for production vs beta development:
   - `items.json` - Default inventory items
   - `users.json` - Default user data
   - `checkoutHistory.json` - Initial checkout history
+  - `archivedCheckouts.json` - Sample archived checkout records (if needed for fallback mode)
 
 ### Fallback/Development Files
 - `github-pages-adapter.js` - **Client-side data adapter** for localStorage mode

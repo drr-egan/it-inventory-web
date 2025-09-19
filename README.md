@@ -49,7 +49,7 @@
 
 ### 📈 **Analytics & Reporting**
 - **Real-time Statistics**: Live counters and system health
-- **Checkout History**: Complete audit trail with CRUD operations
+- **Checkout History**: Complete audit trail with Current/Archive toggle and automatic archiving
 - **Low Stock Alerts**: Automated inventory threshold notifications
 - **User Activity**: Track all operations with timestamps
 
@@ -165,7 +165,7 @@ First Name,Last Name,Cost Code,Email,Department
 - **Firebase SDK**: Real-time database and authentication client
 
 ### Backend Infrastructure
-- **Firebase Firestore**: Serverless NoSQL database with real-time sync
+- **Firebase Firestore**: Serverless NoSQL database with real-time sync and archive collections
 - **Firebase Authentication**: Managed authentication service
 - **GitHub Pages**: Static hosting with global CDN
 - **GitHub Actions**: Automated deployment pipeline

@@ -73,7 +73,21 @@ const [activeTab, setActiveTab] = usePersistedState('inventory-activeTab', 'shop
 - Tab state recovery after refresh
 - Better user experience with data retention
 
-### 2. **Offline Detection & Operation Queuing**
+### 2. **Checkout History Archive System** ✅
+- Complete Current/Archive toggle functionality for checkout history
+- Automatic archiving of processed checkout records during shipment allocation
+- Material Design toggle UI with count badges and visual indicators
+- Real-time Firebase synchronization for both current and archived data
+- Enhanced table display with dynamic columns for archive timestamps
+- Audit trail preservation with archivedAt timestamps for accountability
+
+**Benefits:**
+- Complete audit trail for all processed shipments
+- Clean separation between active and processed checkout records
+- Enhanced reporting capabilities with historical data access
+- Improved user experience with organized data presentation
+
+### 3. **Offline Detection & Operation Queuing**
 **Priority:** Medium | **Effort:** 3-4 hours
 
 ```javascript

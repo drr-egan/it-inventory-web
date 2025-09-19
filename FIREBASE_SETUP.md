@@ -118,6 +118,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
 
+    // Archived checkouts - full access for authenticated users
+    match /archivedCheckouts/{document} {
+      allow read, write: if request.auth != null;
+    }
+
     // User profiles - users can only edit their own profile
     match /userProfiles/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
