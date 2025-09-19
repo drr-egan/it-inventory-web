@@ -1665,9 +1665,12 @@
 
             const getPaginatedCheckoutHistory = () => {
                 const dataSource = checkoutViewMode === 'archive' ? archivedCheckouts : checkoutHistory;
+                console.log(`getPaginatedCheckoutHistory: mode=${checkoutViewMode}, dataSource.length=${dataSource.length}, checkoutHistory.length=${checkoutHistory.length}, archivedCheckouts.length=${archivedCheckouts.length}`);
                 const startIndex = (checkoutPagination.currentPage - 1) * checkoutPagination.itemsPerPage;
                 const endIndex = startIndex + checkoutPagination.itemsPerPage;
-                return dataSource.slice(startIndex, endIndex);
+                const result = dataSource.slice(startIndex, endIndex);
+                console.log(`getPaginatedCheckoutHistory: returning ${result.length} items`);
+                return result;
             };
 
             // Process Shipment PDF handling
