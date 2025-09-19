@@ -3944,17 +3944,21 @@
                                                     Selected Items ({selectedShipmentItems?.length || 0})
                                                 </label>
                                                 <div className="space-y-2 max-h-32 overflow-y-auto">
-                                                    {selectedShipmentItems?.map(itemName => (
-                                                        <div key={itemName} className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
-                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">{itemName}</span>
-                                                            <button
-                                                                onClick={() => setSelectedShipmentItems(prev => prev.filter(name => name !== itemName))}
-                                                                className="text-red-600 hover:text-red-800 dark:text-red-400"
-                                                            >
-                                                                <span className="material-icons text-sm">close</span>
-                                                            </button>
-                                                        </div>
-                                                    )) || <div className="text-sm text-gray-500 dark:text-gray-400 italic">No items selected</div>}
+                                                    {selectedShipmentItems?.length > 0 ? (
+                                                        selectedShipmentItems.map(itemName => (
+                                                            <div key={itemName} className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
+                                                                <span className="text-sm font-medium text-gray-900 dark:text-white">{itemName}</span>
+                                                                <button
+                                                                    onClick={() => setSelectedShipmentItems(prev => prev.filter(name => name !== itemName))}
+                                                                    className="text-red-600 hover:text-red-800 dark:text-red-400"
+                                                                >
+                                                                    <span className="material-icons text-sm">close</span>
+                                                                </button>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="text-sm text-gray-500 dark:text-gray-400 italic">No items selected</div>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -4183,6 +4187,7 @@
                                         )})
                                     </MaterialCard>
                                 </div>
+                            </div>
                             </div>
                         )}
 
