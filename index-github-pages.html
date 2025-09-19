@@ -1874,6 +1874,27 @@
                     // Combine matched records and items without checkout
                     const allocation = [...matchedCheckoutRecords, ...itemsWithoutCheckout];
 
+                    // Calculate per-item tax and fee distribution
+                    const totalQuantity = allocation.reduce((sum, item) => sum + (item.allocatedQuantity || item.quantity), 0);
+                    const taxPerItem = totalQuantity > 0 ? (taxAmount || 0) / totalQuantity : 0;
+                    const feePerItem = totalQuantity > 0 ? (extraFees || 0) / totalQuantity : 0;
+
+                    // Update allocation with distributed taxes and fees
+                    const allocationWithDistribution = allocation.map(item => {
+                        const itemQuantity = item.allocatedQuantity || item.quantity;
+                        const itemTaxAllocation = taxPerItem * itemQuantity;
+                        const itemFeeAllocation = feePerItem * itemQuantity;
+                        const adjustedTotalCost = item.totalCost + itemTaxAllocation + itemFeeAllocation;
+
+                        return {
+                            ...item,
+                            taxAllocation: itemTaxAllocation,
+                            feeAllocation: itemFeeAllocation,
+                            adjustedTotalCost: adjustedTotalCost,
+                            originalTotalCost: item.totalCost // Keep original for reference
+                        };
+                    });
+
                     // Calculate totals using manual input
                     const subtotal = allocation.reduce((sum, item) => sum + item.totalCost, 0);
                     const tax = taxAmount || 0;
@@ -1907,7 +1928,7 @@
                     }
 
                     // Generate PDF report
-                    await generateCostAllocationReport(allocation, { subtotal, tax, fees, total });
+                    await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
 
                     // Archive processed checkout records and remove from checkout history
                     await archiveAndRemoveCheckoutRecords(matchedCheckoutRecords);
@@ -1959,30 +1980,39 @@
                     const leftMargin = 50;
 
                     // Title
-                    page.drawText('COST ALLOCATION REPORT', {
+                    page.drawText('Shipment Cost Allocation Report', {
                         x: leftMargin,
                         y,
                         size: 16,
                         font: boldFont,
                         color: rgb(0, 0, 0)
                     });
-                    y -= 30;
+                    y -= 25;
 
                     // Metadata
-                    page.drawText(`Date: ${new Date().toLocaleDateString()}`, { x: leftMargin, y, size: 10, font });
+                    const now = new Date();
+                    page.drawText(`Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, { x: leftMargin, y, size: 10, font });
                     y -= 15;
-                    page.drawText(`Vendor: ${vendorName || 'Unknown'}`, { x: leftMargin, y, size: 10, font });
-                    y -= 15;
-                    page.drawText(`Receipt Date: ${receiptDate || 'Not specified'}`, { x: leftMargin, y, size: 10, font });
+                    page.drawText(`Tax ($${totals.tax.toFixed(2)}) and Fees ($${totals.fees.toFixed(2)}) distributed evenly per item`, { x: leftMargin, y, size: 10, font });
                     y -= 30;
+
+                    // Cost Allocation Summary section title
+                    page.drawText('Cost Allocation Summary', {
+                        x: leftMargin,
+                        y,
+                        size: 14,
+                        font: boldFont,
+                        color: rgb(0, 0, 0)
+                    });
+                    y -= 25;
 
                     // Table header
                     page.drawText('Item Description', { x: leftMargin, y, size: 10, font: boldFont });
-                    page.drawText('User', { x: 200, y, size: 10, font: boldFont });
-                    page.drawText('Qty', { x: 250, y, size: 10, font: boldFont });
-                    page.drawText('Cost Code', { x: 300, y, size: 10, font: boldFont });
+                    page.drawText('Qty', { x: 220, y, size: 10, font: boldFont });
+                    page.drawText('Job/Cost Code', { x: 250, y, size: 10, font: boldFont });
+                    page.drawText('Units', { x: 360, y, size: 10, font: boldFont });
                     page.drawText('Unit Price', { x: 400, y, size: 10, font: boldFont });
-                    page.drawText('Total Cost', { x: 480, y, size: 10, font: boldFont });
+                    page.drawText('Total Cost', { x: 470, y, size: 10, font: boldFont });
                     y -= 20;
 
                     // Draw line
@@ -2007,12 +2037,17 @@
                             item.itemName.substring(0, 30) + '...' : item.itemName;
 
                         currentPage.drawText(itemName, { x: leftMargin, y, size: 9, font });
-                        const userText = item.displayUser || item.userName || 'Unknown';
-                        currentPage.drawText(userText.length > 15 ? userText.substring(0, 15) + '...' : userText, { x: 200, y, size: 8, font });
-                        currentPage.drawText((item.allocatedQuantity || item.quantity).toString(), { x: 250, y, size: 9, font });
-                        currentPage.drawText(item.costCode || item.departmentId || '-', { x: 300, y, size: 9, font });
+                        currentPage.drawText((item.allocatedQuantity || item.quantity).toString(), { x: 220, y, size: 9, font });
+
+                        const costCode = item.costCode || item.departmentId || '-';
+                        currentPage.drawText(costCode.length > 15 ? costCode.substring(0, 15) + '...' : costCode, { x: 250, y, size: 9, font });
+
+                        currentPage.drawText((item.allocatedQuantity || item.quantity).toString(), { x: 360, y, size: 9, font });
                         currentPage.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 400, y, size: 9, font });
-                        currentPage.drawText(`$${item.totalCost.toFixed(2)}`, { x: 480, y, size: 9, font });
+
+                        // Show adjusted total cost (includes tax and fees)
+                        const finalCost = item.adjustedTotalCost || item.totalCost;
+                        currentPage.drawText(`$${finalCost.toFixed(2)}`, { x: 470, y, size: 9, font });
                         y -= 15;
                     }
 
@@ -2024,13 +2059,13 @@
                         y = 750;
                     }
 
-                    currentPage.drawText('FINANCIAL SUMMARY', { x: leftMargin, y, size: 12, font: boldFont });
-                    y -= 20;
+                    // Financial summary without "FINANCIAL SUMMARY" header, just the numbers
+                    y -= 10;
                     currentPage.drawText(`Subtotal (Items): $${totals.subtotal.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
                     y -= 15;
                     currentPage.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
                     y -= 15;
-                    currentPage.drawText(`Extra Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
                     y -= 15;
                     currentPage.drawLine({
                         start: { x: leftMargin, y },
@@ -2039,10 +2074,63 @@
                         color: rgb(0, 0, 0)
                     });
                     y -= 10;
-                    currentPage.drawText(`TOTAL: $${totals.total.toFixed(2)}`, { x: leftMargin, y, size: 12, font: boldFont });
+                    currentPage.drawText(`Grand Total: $${totals.total.toFixed(2)}`, { x: leftMargin, y, size: 12, font: boldFont });
+
+                    // Individual Checkout Details section
+                    y -= 40;
+                    if (y < 200) {
+                        currentPage = originalPdfDoc.addPage([612, 792]);
+                        y = 750;
+                    }
+
+                    currentPage.drawText('Individual Checkout Details', {
+                        x: leftMargin,
+                        y,
+                        size: 14,
+                        font: boldFont,
+                        color: rgb(0, 0, 0)
+                    });
+                    y -= 25;
+
+                    // Individual checkout table header
+                    currentPage.drawText('Item Description', { x: leftMargin, y, size: 10, font: boldFont });
+                    currentPage.drawText('User', { x: 250, y, size: 10, font: boldFont });
+                    currentPage.drawText('Cost Code', { x: 400, y, size: 10, font: boldFont });
+                    y -= 20;
+
+                    // Draw line for individual checkout table
+                    currentPage.drawLine({
+                        start: { x: leftMargin, y },
+                        end: { x: 550, y },
+                        thickness: 1,
+                        color: rgb(0, 0, 0)
+                    });
+                    y -= 15;
+
+                    // Individual checkout details
+                    for (const item of allocation) {
+                        if (y < 100) {
+                            currentPage = originalPdfDoc.addPage([612, 792]);
+                            y = 750;
+                        }
+
+                        const itemName = item.itemName.length > 35 ?
+                            item.itemName.substring(0, 35) + '...' : item.itemName;
+                        const userName = (item.displayUser || item.userName || 'Unknown').toUpperCase();
+                        const costCode = item.costCode || item.departmentId || '-';
+
+                        currentPage.drawText(itemName, { x: leftMargin, y, size: 9, font });
+                        currentPage.drawText(userName, { x: 250, y, size: 9, font });
+                        currentPage.drawText(costCode, { x: 400, y, size: 9, font });
+                        y -= 15;
+                    }
 
                     if (processingNotes) {
                         y -= 30;
+                        if (y < 100) {
+                            currentPage = originalPdfDoc.addPage([612, 792]);
+                            y = 750;
+                        }
                         currentPage.drawText('NOTES:', { x: leftMargin, y, size: 10, font: boldFont });
                         y -= 15;
                         const notes = processingNotes.length > 80 ? processingNotes.substring(0, 80) + '...' : processingNotes;
