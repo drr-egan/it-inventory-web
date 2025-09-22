@@ -719,6 +719,82 @@
             }
         }
 
+        /* Edit mode specific styles */
+        .edit-mode-row {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(37, 99, 235, 0.1));
+            border-left: 4px solid #3b82f6;
+        }
+
+        .edit-mode-row .mat-input {
+            margin-bottom: 8px;
+        }
+
+        .edit-mode-row .mat-input input {
+            font-size: 14px;
+            padding: 8px 12px 4px 12px;
+        }
+
+        /* Mobile-specific edit styles */
+        @media (max-width: 768px) {
+            /* Larger edit buttons on mobile */
+            .edit-action-buttons .mat-button {
+                min-width: 40px;
+                min-height: 40px;
+                padding: 8px;
+            }
+
+            /* Better input sizing on mobile */
+            .edit-mode-row .mat-input input {
+                font-size: 16px; /* Prevent zoom on iOS */
+                padding: 12px 8px 6px 8px;
+            }
+
+            /* Responsive table columns for edit mode */
+            .edit-mode-row td {
+                vertical-align: top;
+                padding: 8px 4px;
+            }
+
+            /* Stack edit buttons vertically on very small screens */
+            @media (max-width: 480px) {
+                .edit-action-buttons {
+                    flex-direction: column;
+                    gap: 4px;
+                }
+
+                .edit-action-buttons .mat-button {
+                    width: 100%;
+                    min-width: auto;
+                }
+            }
+        }
+
+        /* Edit form validation styles */
+        .edit-form-error {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+        }
+
+        .edit-form-success {
+            border-color: #10b981 !important;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+        }
+
+        /* Edit mode animations */
+        .edit-mode-transition {
+            transition: all 0.3s ease-in-out;
+        }
+
+        .edit-row-highlight {
+            animation: edit-highlight 0.5s ease-in-out;
+        }
+
+        @keyframes edit-highlight {
+            0% { background-color: rgba(59, 130, 246, 0.1); }
+            50% { background-color: rgba(59, 130, 246, 0.2); }
+            100% { background-color: rgba(59, 130, 246, 0.1); }
+        }
+
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
@@ -1738,35 +1814,133 @@
                 }
             };
 
-            // Camera scanning functionality
+            // Detect iOS device
+            const isIOS = () => {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            };
+
+            // iOS-compatible camera scanning functionality
             const startCameraScanning = async () => {
                 try {
-                    const constraints = {
-                        video: {
-                            facingMode: 'environment', // Use back camera
-                            width: { ideal: 1280, max: 1920 },
-                            height: { ideal: 720, max: 1080 },
-                            focusMode: 'auto'
-                        }
-                    };
+                    // Check if camera is available
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        setScanFeedback('❌ Camera not supported in this browser');
+                        return;
+                    }
 
-                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    setScanFeedback('🔍 Requesting camera access...');
+
+                    // iOS-specific camera constraints
+                    let constraints;
+                    if (isIOS()) {
+                        constraints = {
+                            video: {
+                                facingMode: { exact: 'environment' }, // Force back camera on iOS
+                                width: { ideal: 640, max: 1280 }, // Lower resolution for iOS
+                                height: { ideal: 480, max: 720 },
+                                frameRate: { ideal: 15, max: 30 } // Lower frame rate for performance
+                            }
+                        };
+                    } else {
+                        constraints = {
+                            video: {
+                                facingMode: 'environment',
+                                width: { ideal: 1280, max: 1920 },
+                                height: { ideal: 720, max: 1080 }
+                            }
+                        };
+                    }
+
+                    let stream;
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    } catch (error) {
+                        // Fallback: Try without exact back camera requirement on iOS
+                        if (isIOS() && error.name === 'OverconstrainedError') {
+                            console.log('Falling back to any available camera on iOS');
+                            const fallbackConstraints = {
+                                video: {
+                                    facingMode: 'environment', // Prefer back camera but don't require
+                                    width: { ideal: 640 },
+                                    height: { ideal: 480 }
+                                }
+                            };
+                            stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                        } else {
+                            throw error;
+                        }
+                    }
+
                     setCameraStream(stream);
                     setScanMode('camera');
-                    setScanFeedback('📷 Camera active - Point at barcode');
+                    setScanFeedback('📷 Camera active - Point at barcode and tap to focus');
 
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
-                        videoRef.current.play();
+
+                        // iOS requires user interaction for video play
+                        videoRef.current.setAttribute('playsinline', true);
+                        videoRef.current.setAttribute('webkit-playsinline', true);
+                        videoRef.current.muted = true;
+
+                        try {
+                            await videoRef.current.play();
+                        } catch (playError) {
+                            console.log('Video autoplay failed, user interaction required');
+                            setScanFeedback('👆 Tap the camera view to start scanning');
+                        }
 
                         // Start barcode detection when video is ready
                         videoRef.current.onloadedmetadata = () => {
-                            startBarcodeDetection();
+                            setTimeout(() => {
+                                startBarcodeDetection();
+                            }, 500); // Give iOS time to initialize
+                        };
+
+                        // Add tap-to-focus for iOS
+                        videoRef.current.onclick = async (event) => {
+                            if (isIOS()) {
+                                const video = videoRef.current;
+                                if (video.paused) {
+                                    try {
+                                        await video.play();
+                                        setScanFeedback('📷 Camera active - Point at barcode');
+                                    } catch (error) {
+                                        console.log('Failed to start video:', error);
+                                    }
+                                }
+
+                                // Manual focus trigger for iOS
+                                vibrate([50]); // Haptic feedback
+                                setScanFeedback('🔍 Focusing... Point at barcode');
+                                setTimeout(() => {
+                                    setScanFeedback('📷 Camera active - Point at barcode');
+                                }, 1000);
+                            }
                         };
                     }
                 } catch (error) {
-                    setScanFeedback('❌ Camera access denied or not available');
                     console.error('Camera error:', error);
+
+                    let errorMessage = '❌ Camera access failed';
+                    if (error.name === 'NotAllowedError') {
+                        errorMessage = '❌ Camera permission denied. Please allow camera access and try again.';
+                    } else if (error.name === 'NotFoundError') {
+                        errorMessage = '❌ No camera found on this device.';
+                    } else if (error.name === 'NotSupportedError') {
+                        errorMessage = '❌ Camera not supported in this browser.';
+                    } else if (error.name === 'OverconstrainedError') {
+                        errorMessage = '❌ Camera constraints not supported. Try using Safari instead of Chrome on iOS.';
+                    }
+
+                    setScanFeedback(errorMessage);
+
+                    // Auto-switch to keyboard mode on camera failure
+                    setTimeout(() => {
+                        setScanMode('keyboard');
+                        setScanFeedback('⌨️ Switched to keyboard mode - Use a handheld scanner or type item names');
+                    }, 3000);
                 }
             };
 
@@ -1803,7 +1977,7 @@
                 }
             };
 
-            // Barcode detection using modern APIs
+            // Enhanced barcode detection with iOS compatibility
             const startBarcodeDetection = () => {
                 if (!videoRef.current || !canvasRef.current) return;
 
@@ -1811,31 +1985,70 @@
                     const video = videoRef.current;
                     const canvas = canvasRef.current;
 
-                    if (video.readyState === 4) {
+                    if (video.readyState === 4 && video.videoWidth > 0) {
                         canvas.width = video.videoWidth;
                         canvas.height = video.videoHeight;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(video, 0, 0);
 
-                        // Use BarcodeDetector API if available (Chrome/Edge)
-                        if ('BarcodeDetector' in window) {
+                        // Check for BarcodeDetector API (not available on iOS)
+                        if ('BarcodeDetector' in window && typeof BarcodeDetector !== 'undefined') {
                             try {
-                                const detector = new BarcodeDetector();
+                                const detector = new BarcodeDetector({
+                                    formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e']
+                                });
                                 const barcodes = await detector.detect(canvas);
 
                                 if (barcodes.length > 0 && !isScanning) {
                                     const barcode = barcodes[0];
                                     await handleScan(barcode.rawValue, true);
+                                    return; // Exit early on successful scan
                                 }
                             } catch (error) {
                                 console.log('Barcode detection failed:', error);
+                            }
+                        } else {
+                            // iOS fallback: Manual capture mode
+                            if (isIOS()) {
+                                // Show manual capture instructions for iOS
+                                if (!scanFeedback.includes('Tap')) {
+                                    setScanFeedback('📷 Point at barcode, then tap "Capture & Type" below');
+                                }
                             }
                         }
                     }
                 };
 
-                // Check for barcodes every 500ms to balance performance and responsiveness
-                detectionIntervalRef.current = setInterval(detectBarcodes, 500);
+                // Use different detection intervals based on device
+                const detectionDelay = isIOS() ? 1000 : 500; // Slower on iOS for performance
+                detectionIntervalRef.current = setInterval(detectBarcodes, detectionDelay);
+            };
+
+            // Manual capture function for iOS
+            const captureBarcode = () => {
+                if (!videoRef.current || !canvasRef.current) return;
+
+                const video = videoRef.current;
+                const canvas = canvasRef.current;
+
+                if (video.readyState === 4) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0);
+
+                    // Visual feedback
+                    setScanFeedback('📸 Image captured! Now type the barcode number below:');
+                    vibrate([100, 50, 100]); // Capture feedback
+
+                    // Auto-switch to keyboard for manual entry
+                    setTimeout(() => {
+                        setScanMode('keyboard');
+                        if (inputRef.current) {
+                            inputRef.current.focus();
+                        }
+                    }, 1500);
+                }
             };
 
             // Clean up camera on unmount
@@ -2006,9 +2219,28 @@
                                         </div>
                                     </div>
 
-                                    <p className="text-sm text-gray-600 text-center">
-                                        📱 Point camera at barcode • Detection is automatic
-                                    </p>
+                                    <div className="text-center space-y-2">
+                                        <p className="text-sm text-gray-600">
+                                            {isIOS() ? (
+                                                '📱 iPhone: Point at barcode, then use "Capture & Type" button'
+                                            ) : (
+                                                '📱 Point camera at barcode • Detection is automatic'
+                                            )}
+                                        </p>
+
+                                        {/* iOS Manual Capture Button */}
+                                        {isIOS() && cameraStream && (
+                                            <MaterialButton
+                                                onClick={captureBarcode}
+                                                variant="contained"
+                                                color="secondary"
+                                                className="w-full"
+                                            >
+                                                <span className="material-icons mr-2">camera_alt</span>
+                                                Capture & Type Barcode
+                                            </MaterialButton>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -2045,13 +2277,35 @@
                                 <div className="flex items-start">
                                     <span className="material-icons text-sm mr-2 mt-0.5">info</span>
                                     <div>
-                                        <div className="font-medium mb-1">📱 Mobile Tips:</div>
+                                        <div className="font-medium mb-1">
+                                            {isIOS() ? '🍎 iPhone Tips:' : '📱 Mobile Tips:'}
+                                        </div>
                                         <ul className="text-xs space-y-0.5 list-disc list-inside">
-                                            <li>Use camera mode for best mobile experience</li>
-                                            <li>Tap flashlight button in low light</li>
-                                            <li>Hold steady and center barcode in frame</li>
-                                            <li>Use keyboard mode with handheld scanners</li>
+                                            {isIOS() ? (
+                                                <>
+                                                    <li>Use Safari instead of Chrome for better camera support</li>
+                                                    <li>Tap "Capture & Type" button when barcode is visible</li>
+                                                    <li>Allow camera permissions when prompted</li>
+                                                    <li>Use keyboard mode with handheld scanners</li>
+                                                    <li>Tap camera view to focus on iPhone</li>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <li>Use camera mode for best mobile experience</li>
+                                                    <li>Tap flashlight button in low light</li>
+                                                    <li>Hold steady and center barcode in frame</li>
+                                                    <li>Use keyboard mode with handheld scanners</li>
+                                                </>
+                                            )}
                                         </ul>
+
+                                        {/* iOS-specific browser recommendation */}
+                                        {isIOS() && navigator.userAgent.includes('Chrome') && (
+                                            <div className="mt-2 p-2 bg-orange-100 rounded text-orange-700 text-xs">
+                                                <strong>⚠️ Chrome on iOS:</strong> Camera scanning may not work properly.
+                                                <br />Try opening this page in Safari for better barcode scanning.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -2088,6 +2342,11 @@
                 category: ''
             });
             const [isCreatingItem, setIsCreatingItem] = useState(false);
+
+            // Edit states for inventory items
+            const [editingItemId, setEditingItemId] = useState(null);
+            const [editFormData, setEditFormData] = useState({});
+            const [isSavingEdit, setIsSavingEdit] = useState(false);
 
             // Form states for Add New User
             const [newUserForm, setNewUserForm] = useState({
@@ -3051,6 +3310,74 @@
                 setCart([]);
             };
 
+            // Item edit functions
+            const startEditItem = (item) => {
+                setEditingItemId(item.id);
+                setEditFormData({
+                    name: item.name,
+                    price: item.price || '',
+                    quantity: item.quantity || 0,
+                    category: item.category || '',
+                    asin: item.asin || '',
+                    minThreshold: item.minThreshold || 5
+                });
+            };
+
+            const cancelEditItem = () => {
+                setEditingItemId(null);
+                setEditFormData({});
+            };
+
+            const saveEditItem = async () => {
+                if (!editingItemId || isSavingEdit) return;
+
+                // Validation
+                if (!editFormData.name?.trim()) {
+                    showSnackbar('Item name is required', 'error');
+                    return;
+                }
+
+                if (editFormData.quantity < 0) {
+                    showSnackbar('Quantity cannot be negative', 'error');
+                    return;
+                }
+
+                if (editFormData.price && editFormData.price < 0) {
+                    showSnackbar('Price cannot be negative', 'error');
+                    return;
+                }
+
+                setIsSavingEdit(true);
+
+                try {
+                    // Update item in Firebase
+                    await db.collection('items').doc(editingItemId).update({
+                        name: editFormData.name.trim(),
+                        price: parseFloat(editFormData.price) || 0,
+                        quantity: parseInt(editFormData.quantity) || 0,
+                        category: editFormData.category?.trim() || 'Uncategorized',
+                        asin: editFormData.asin?.trim() || '',
+                        minThreshold: parseInt(editFormData.minThreshold) || 5,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    showSnackbar('Item updated successfully', 'success');
+                    cancelEditItem();
+                } catch (error) {
+                    console.error('Error updating item:', error);
+                    showSnackbar('Failed to update item', 'error');
+                } finally {
+                    setIsSavingEdit(false);
+                }
+            };
+
+            const handleEditFormChange = (field, value) => {
+                setEditFormData(prev => ({
+                    ...prev,
+                    [field]: value
+                }));
+            };
+
             // Handle creating new item
             const handleCreateItem = async (e) => {
                 e.preventDefault();
@@ -3903,6 +4230,12 @@
                                                     </th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                                         <div className="flex items-center">
+                                                            <span className="material-icons mr-1 text-sm">qr_code</span>
+                                                            ASIN
+                                                        </div>
+                                                    </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                        <div className="flex items-center">
                                                             <span className="material-icons mr-1 text-sm">attach_money</span>
                                                             Price
                                                         </div>
@@ -3911,44 +4244,184 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                                {getPaginatedInventoryItems().map(item => (
-                                                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                                        <td className="px-6 py-4">
-                                                            <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                                                                item.quantity <= (item.minThreshold || 5)
-                                                                    ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300'
-                                                                    : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                                                            }`}>
-                                                                {item.quantity}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                                                            {item.category}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            {item.price > 0 ? (
-                                                                <span className="text-green-600 dark:text-green-400 font-medium">
-                                                                    ${item.price}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-gray-400">-</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <MaterialButton
-                                                                onClick={() => addToCart(item)}
-                                                                variant="text"
-                                                                color="primary"
-                                                                className="!p-2"
-                                                            >
-                                                                <span className="material-icons text-sm">add_shopping_cart</span>
-                                                            </MaterialButton>
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                {getPaginatedInventoryItems().map(item => {
+                                                    const isEditing = editingItemId === item.id;
+                                                    return (
+                                                        <tr key={item.id} className={`edit-mode-transition ${
+                                                            isEditing
+                                                                ? 'edit-mode-row bg-blue-50 dark:bg-blue-900/20'
+                                                                : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                                                        }`}>
+                                                            {/* Item Name */}
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="mat-input">
+                                                                        <input
+                                                                            type="text"
+                                                                            value={editFormData.name || ''}
+                                                                            onChange={(e) => handleEditFormChange('name', e.target.value)}
+                                                                            className="w-full font-medium"
+                                                                            placeholder=" "
+                                                                        />
+                                                                        <label>Item Name</label>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Quantity */}
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="mat-input">
+                                                                        <input
+                                                                            type="number"
+                                                                            value={editFormData.quantity || 0}
+                                                                            onChange={(e) => handleEditFormChange('quantity', e.target.value)}
+                                                                            className="w-20"
+                                                                            min="0"
+                                                                            placeholder=" "
+                                                                        />
+                                                                        <label>Qty</label>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                                                                        item.quantity <= (item.minThreshold || 5)
+                                                                            ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                                                                            : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                                                    }`}>
+                                                                        {item.quantity}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Category */}
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="mat-input">
+                                                                        <input
+                                                                            type="text"
+                                                                            value={editFormData.category || ''}
+                                                                            onChange={(e) => handleEditFormChange('category', e.target.value)}
+                                                                            className="w-32"
+                                                                            placeholder=" "
+                                                                        />
+                                                                        <label>Category</label>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                                        {item.category || 'Uncategorized'}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+
+                                                            {/* ASIN */}
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="mat-input">
+                                                                        <input
+                                                                            type="text"
+                                                                            value={editFormData.asin || ''}
+                                                                            onChange={(e) => handleEditFormChange('asin', e.target.value)}
+                                                                            className="w-28"
+                                                                            placeholder=" "
+                                                                        />
+                                                                        <label>ASIN</label>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-sm text-gray-600 dark:text-gray-400 font-mono">
+                                                                        {item.asin || '-'}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Price */}
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="mat-input">
+                                                                        <input
+                                                                            type="number"
+                                                                            value={editFormData.price || ''}
+                                                                            onChange={(e) => handleEditFormChange('price', e.target.value)}
+                                                                            className="w-24"
+                                                                            min="0"
+                                                                            step="0.01"
+                                                                            placeholder=" "
+                                                                        />
+                                                                        <label>Price</label>
+                                                                    </div>
+                                                                ) : (
+                                                                    item.price > 0 ? (
+                                                                        <span className="text-green-600 dark:text-green-400 font-medium">
+                                                                            ${item.price}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-gray-400">-</span>
+                                                                    )
+                                                                )}
+                                                            </td>
+
+                                                            {/* Actions */}
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center space-x-2 edit-action-buttons">
+                                                                    {isEditing ? (
+                                                                        <>
+                                                                            {/* Save Button */}
+                                                                            <MaterialButton
+                                                                                onClick={saveEditItem}
+                                                                                variant="contained"
+                                                                                color="primary"
+                                                                                disabled={isSavingEdit}
+                                                                                className="!p-2 !min-w-0"
+                                                                                title="Save changes"
+                                                                            >
+                                                                                <span className="material-icons text-sm">
+                                                                                    {isSavingEdit ? 'hourglass_empty' : 'save'}
+                                                                                </span>
+                                                                            </MaterialButton>
+
+                                                                            {/* Cancel Button */}
+                                                                            <MaterialButton
+                                                                                onClick={cancelEditItem}
+                                                                                variant="outlined"
+                                                                                color="secondary"
+                                                                                disabled={isSavingEdit}
+                                                                                className="!p-2 !min-w-0"
+                                                                                title="Cancel editing"
+                                                                            >
+                                                                                <span className="material-icons text-sm">cancel</span>
+                                                                            </MaterialButton>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            {/* Edit Button */}
+                                                                            <MaterialButton
+                                                                                onClick={() => startEditItem(item)}
+                                                                                variant="text"
+                                                                                color="primary"
+                                                                                className="!p-2 !min-w-0"
+                                                                                title="Edit item"
+                                                                            >
+                                                                                <span className="material-icons text-sm">edit</span>
+                                                                            </MaterialButton>
+
+                                                                            {/* Add to Cart Button */}
+                                                                            <MaterialButton
+                                                                                onClick={() => addToCart(item)}
+                                                                                variant="text"
+                                                                                color="primary"
+                                                                                className="!p-2 !min-w-0"
+                                                                                title="Add to cart"
+                                                                            >
+                                                                                <span className="material-icons text-sm">add_shopping_cart</span>
+                                                                            </MaterialButton>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
