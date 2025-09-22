@@ -1691,6 +1691,9 @@
             // Checkout history search state
             const [historySearchQuery, setHistorySearchQuery] = useState('');
 
+            // Inventory management search state
+            const [inventorySearchQuery, setInventorySearchQuery] = useState('');
+
             // Pagination handlers
             const handleInventoryPageChange = (page) => {
                 setInventoryPagination(prev => ({ ...prev, currentPage: page }));
@@ -1739,9 +1742,35 @@
                     : items;
             };
 
-            // Get paginated data
+            // Get filtered items for inventory management
+            const getFilteredInventoryItems = () => {
+                if (!inventorySearchQuery.trim()) {
+                    return items;
+                }
+
+                const searchTerm = inventorySearchQuery.toLowerCase();
+                return items.filter(item => {
+                    const name = (item.name || '').toLowerCase();
+                    const category = (item.category || '').toLowerCase();
+                    const asin = (item.asin || '').toLowerCase();
+
+                    return name.includes(searchTerm) ||
+                           category.includes(searchTerm) ||
+                           asin.includes(searchTerm);
+                });
+            };
+
+            // Get paginated data for shop
             const getPaginatedItems = () => {
                 const filteredItems = getFilteredItems();
+                const startIndex = (inventoryPagination.currentPage - 1) * inventoryPagination.itemsPerPage;
+                const endIndex = startIndex + inventoryPagination.itemsPerPage;
+                return filteredItems.slice(startIndex, endIndex);
+            };
+
+            // Get paginated data for inventory management
+            const getPaginatedInventoryItems = () => {
+                const filteredItems = getFilteredInventoryItems();
                 const startIndex = (inventoryPagination.currentPage - 1) * inventoryPagination.itemsPerPage;
                 const endIndex = startIndex + inventoryPagination.itemsPerPage;
                 return filteredItems.slice(startIndex, endIndex);
@@ -2645,8 +2674,13 @@
 
             // Update pagination totals when data changes
             useEffect(() => {
-                setInventoryPagination(prev => ({ ...prev, totalItems: items.length }));
-            }, [items]);
+                const filteredItems = getFilteredInventoryItems();
+                setInventoryPagination(prev => ({
+                    ...prev,
+                    totalItems: filteredItems.length,
+                    currentPage: 1 // Reset to first page when search changes
+                }));
+            }, [items, inventorySearchQuery]);
 
             useEffect(() => {
                 const filteredUsers = getFilteredUsers();
@@ -3350,6 +3384,29 @@
                                             <span className="text-sm text-gray-600 dark:text-gray-400">Real-time sync</span>
                                         </div>
                                     </div>
+
+                                    {/* Search Inventory */}
+                                    <div className="mb-6">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Search inventory by name, category, or ASIN..."
+                                                value={inventorySearchQuery}
+                                                onChange={(e) => setInventorySearchQuery(e.target.value)}
+                                                className="w-full px-4 py-3 pl-12 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                                            />
+                                            <span className="material-icons absolute left-4 top-3.5 text-gray-400">search</span>
+                                            {inventorySearchQuery && (
+                                                <button
+                                                    onClick={() => setInventorySearchQuery('')}
+                                                    className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                                >
+                                                    <span className="material-icons text-sm">clear</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full">
                                             <thead className="bg-gray-50 dark:bg-gray-700">
@@ -3382,7 +3439,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                                {getPaginatedItems().map(item => (
+                                                {getPaginatedInventoryItems().map(item => (
                                                     <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                                                         <td className="px-6 py-4">
                                                             <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
