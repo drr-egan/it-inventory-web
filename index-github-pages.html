@@ -1828,9 +1828,12 @@
                                 let displayUser = record.userName;
                                 let costCode = record.departmentId || record.costCode || '';
 
-                                // If costCode looks like a job number (contains numbers), format as job
-                                if (/\d/.test(costCode) && !costCode.includes('INVENTORY')) {
-                                    displayUser = `Job #${costCode}`;
+                                // Only show "Job #" if this record actually has a jobNumber field (indicating it was a job checkout)
+                                if (record.jobNumber && record.jobNumber.trim()) {
+                                    displayUser = `Job #${record.jobNumber}`;
+                                    costCode = formatDepartmentId(record.departmentId || record.costCode || '');
+                                } else {
+                                    // This is a user checkout, format the department ID properly
                                     costCode = formatDepartmentId(costCode);
                                 }
 
