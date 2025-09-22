@@ -1859,47 +1859,142 @@
                     setScanFeedback('🔍 Requesting camera access...');
                     console.log('Starting camera access attempt...');
 
-                    // Progressive constraint fallback strategy
-                    const constraintStrategies = [
-                        // Strategy 1: Basic mobile-optimized constraints
-                        {
-                            name: 'Basic mobile',
-                            constraints: {
-                                video: {
-                                    facingMode: 'environment',
-                                    width: { ideal: 640 },
-                                    height: { ideal: 480 }
+                    // Enhanced progressive constraint fallback strategy with device-specific optimizations
+                    const constraintStrategies = [];
+
+                    if (isIOS()) {
+                        // iOS-specific constraint strategies optimized for Safari and WebView compatibility
+                        constraintStrategies.push(
+                            // Strategy 1: iOS-optimized back camera with standard resolution
+                            {
+                                name: 'iOS back camera (standard)',
+                                constraints: {
+                                    video: {
+                                        facingMode: { exact: 'environment' },
+                                        width: { ideal: 640, max: 1280 },
+                                        height: { ideal: 480, max: 720 },
+                                        frameRate: { ideal: 15, max: 30 }
+                                    }
+                                }
+                            },
+                            // Strategy 2: iOS-optimized back camera (simple)
+                            {
+                                name: 'iOS back camera (simple)',
+                                constraints: {
+                                    video: {
+                                        facingMode: 'environment',
+                                        width: { ideal: 640 },
+                                        height: { ideal: 480 }
+                                    }
+                                }
+                            },
+                            // Strategy 3: iOS front camera fallback
+                            {
+                                name: 'iOS front camera',
+                                constraints: {
+                                    video: {
+                                        facingMode: 'user',
+                                        width: { ideal: 640 },
+                                        height: { ideal: 480 },
+                                        frameRate: { ideal: 15 }
+                                    }
                                 }
                             }
-                        },
-                        // Strategy 2: Even simpler constraints
+                        );
+                    } else if (isAndroid()) {
+                        // Android-specific constraint strategies optimized for Chrome compatibility
+                        constraintStrategies.push(
+                            // Strategy 1: Android-optimized back camera with higher resolution
+                            {
+                                name: 'Android back camera (HD)',
+                                constraints: {
+                                    video: {
+                                        facingMode: { ideal: 'environment' },
+                                        width: { ideal: 1280, min: 640 },
+                                        height: { ideal: 720, min: 480 },
+                                        frameRate: { ideal: 30, min: 15 }
+                                    }
+                                }
+                            },
+                            // Strategy 2: Android-optimized back camera (standard)
+                            {
+                                name: 'Android back camera (standard)',
+                                constraints: {
+                                    video: {
+                                        facingMode: 'environment',
+                                        width: { ideal: 640 },
+                                        height: { ideal: 480 },
+                                        frameRate: { ideal: 30 }
+                                    }
+                                }
+                            },
+                            // Strategy 3: Android front camera fallback
+                            {
+                                name: 'Android front camera',
+                                constraints: {
+                                    video: {
+                                        facingMode: 'user',
+                                        width: { ideal: 640 },
+                                        height: { ideal: 480 }
+                                    }
+                                }
+                            }
+                        );
+                    } else {
+                        // Desktop/other device strategies
+                        constraintStrategies.push(
+                            // Strategy 1: Desktop high-quality camera
+                            {
+                                name: 'Desktop camera (HD)',
+                                constraints: {
+                                    video: {
+                                        width: { ideal: 1280 },
+                                        height: { ideal: 720 },
+                                        frameRate: { ideal: 30 }
+                                    }
+                                }
+                            },
+                            // Strategy 2: Desktop basic camera
+                            {
+                                name: 'Desktop camera (basic)',
+                                constraints: {
+                                    video: {
+                                        width: { ideal: 640 },
+                                        height: { ideal: 480 }
+                                    }
+                                }
+                            }
+                        );
+                    }
+
+                    // Universal fallback strategies (apply to all devices)
+                    constraintStrategies.push(
+                        // Universal Strategy 1: Basic back camera
                         {
-                            name: 'Simple',
+                            name: 'Basic back camera',
                             constraints: {
                                 video: {
                                     facingMode: 'environment'
                                 }
                             }
                         },
-                        // Strategy 3: Front camera fallback
+                        // Universal Strategy 2: Basic front camera
                         {
-                            name: 'Front camera',
+                            name: 'Basic front camera',
                             constraints: {
                                 video: {
-                                    facingMode: 'user',
-                                    width: { ideal: 640 },
-                                    height: { ideal: 480 }
+                                    facingMode: 'user'
                                 }
                             }
                         },
-                        // Strategy 4: Any camera
+                        // Universal Strategy 3: Any available camera
                         {
-                            name: 'Any camera',
+                            name: 'Any available camera',
                             constraints: {
                                 video: true
                             }
                         }
-                    ];
+                    );
 
                     let stream = null;
                     let successfulStrategy = null;
@@ -1944,20 +2039,79 @@
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
 
-                        // Mobile video setup
+                        // Enhanced mobile video setup for iOS and Android compatibility
                         if (isMobile()) {
-                            videoRef.current.setAttribute('playsinline', true);
-                            videoRef.current.setAttribute('webkit-playsinline', true);
-                            videoRef.current.setAttribute('muted', true);
+                            // Critical iOS Safari attributes
+                            videoRef.current.setAttribute('playsinline', 'true');
+                            videoRef.current.setAttribute('webkit-playsinline', 'true');
+                            videoRef.current.setAttribute('muted', 'true');
+                            videoRef.current.setAttribute('autoplay', 'true');
+
+                            // Set properties directly for maximum compatibility
                             videoRef.current.muted = true;
+                            videoRef.current.playsInline = true;
+                            videoRef.current.defaultMuted = true;
+
+                            // iOS specific settings for better camera handling
+                            if (isIOS()) {
+                                videoRef.current.setAttribute('controls', 'false');
+                                videoRef.current.setAttribute('preload', 'metadata');
+                                // Disable picture-in-picture for iOS
+                                if (videoRef.current.disablePictureInPicture !== undefined) {
+                                    videoRef.current.disablePictureInPicture = true;
+                                }
+                            }
                         }
 
+                        // Enhanced iOS/Mobile video play handling
                         try {
-                            await videoRef.current.play();
-                            console.log('✅ Video playing successfully');
+                            if (isIOS()) {
+                                // iOS-specific play sequence for maximum compatibility
+                                console.log('🍎 Setting up iOS video playback...');
+
+                                // Load the video metadata first
+                                await new Promise((resolve, reject) => {
+                                    const onLoadedMetadata = () => {
+                                        videoRef.current.removeEventListener('loadedmetadata', onLoadedMetadata);
+                                        resolve();
+                                    };
+                                    const onError = (error) => {
+                                        videoRef.current.removeEventListener('error', onError);
+                                        reject(error);
+                                    };
+
+                                    if (videoRef.current.readyState >= 1) {
+                                        resolve(); // Already loaded
+                                    } else {
+                                        videoRef.current.addEventListener('loadedmetadata', onLoadedMetadata);
+                                        videoRef.current.addEventListener('error', onError);
+                                        videoRef.current.load();
+                                    }
+                                });
+
+                                // Attempt to play with iOS-specific handling
+                                const playPromise = videoRef.current.play();
+                                if (playPromise !== undefined) {
+                                    await playPromise;
+                                }
+                                console.log('✅ iOS video playing successfully');
+                                setScanFeedback('📷 Camera ready - Point at barcode');
+                            } else {
+                                // Standard play for Android and other devices
+                                await videoRef.current.play();
+                                console.log('✅ Video playing successfully');
+                                setScanFeedback('📷 Camera ready - Point at barcode');
+                            }
                         } catch (playError) {
                             console.log('⚠️ Video autoplay failed:', playError.message);
-                            setScanFeedback('👆 Tap the camera view to start video');
+
+                            if (isIOS()) {
+                                setScanFeedback('👆 iOS: Tap the camera view to start video playback');
+                            } else if (isAndroid()) {
+                                setScanFeedback('👆 Android: Tap the camera view to start video');
+                            } else {
+                                setScanFeedback('👆 Tap the camera view to start video');
+                            }
                         }
 
                         // Enhanced video event handlers
@@ -1978,26 +2132,75 @@
                             setScanFeedback('❌ Video playback error');
                         };
 
-                        // Universal tap handler for mobile
+                        // Enhanced universal tap handler for mobile with device-specific optimizations
                         videoRef.current.onclick = async (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+
                             const video = videoRef.current;
+                            console.log(`📱 Video tap detected - Device: ${isIOS() ? 'iOS' : isAndroid() ? 'Android' : 'Other'}, Paused: ${video.paused}`);
+
                             if (video.paused) {
                                 try {
-                                    await video.play();
-                                    setScanFeedback('📷 Camera active - Point at barcode');
-                                } catch (error) {
-                                    console.log('Manual play failed:', error);
-                                    setScanFeedback('❌ Cannot start camera - try reloading page');
-                                }
-                            }
+                                    if (isIOS()) {
+                                        // iOS-specific play sequence with user interaction
+                                        console.log('🍎 iOS user interaction - attempting video play...');
 
-                            // Haptic feedback on mobile
-                            if (isMobile()) {
-                                vibrate([50]);
-                                setScanFeedback('🔍 Focusing...');
-                                setTimeout(() => {
-                                    setScanFeedback('📷 Camera ready - Point at barcode');
-                                }, 1000);
+                                        // For iOS, ensure video is properly configured before play
+                                        video.muted = true;
+                                        video.playsInline = true;
+
+                                        const playPromise = video.play();
+                                        if (playPromise !== undefined) {
+                                            await playPromise;
+                                        }
+                                        setScanFeedback('📷 iOS camera active - Point at barcode');
+                                    } else if (isAndroid()) {
+                                        // Android-specific play handling
+                                        console.log('🤖 Android user interaction - attempting video play...');
+                                        await video.play();
+                                        setScanFeedback('📷 Android camera active - Point at barcode');
+                                    } else {
+                                        // Standard play for other devices
+                                        await video.play();
+                                        setScanFeedback('📷 Camera active - Point at barcode');
+                                    }
+
+                                    // Start or restart barcode detection after successful play
+                                    setTimeout(() => {
+                                        startBarcodeDetection();
+                                    }, 500);
+
+                                } catch (error) {
+                                    console.error('❌ Manual video play failed:', error);
+
+                                    if (isIOS()) {
+                                        setScanFeedback('❌ iOS camera failed - Try Safari instead of Chrome, or reload page');
+                                    } else if (isAndroid()) {
+                                        setScanFeedback('❌ Android camera failed - Check permissions or reload page');
+                                    } else {
+                                        setScanFeedback('❌ Cannot start camera - try reloading page');
+                                    }
+                                }
+                            } else {
+                                // Video is already playing - provide focus feedback
+                                if (isMobile()) {
+                                    // Haptic feedback on mobile for focus action
+                                    if (navigator.vibrate) {
+                                        navigator.vibrate(50);
+                                    }
+
+                                    setScanFeedback('🔍 Focusing camera...');
+                                    setTimeout(() => {
+                                        if (isIOS()) {
+                                            setScanFeedback('📷 iOS camera ready - Hold steady on barcode');
+                                        } else if (isAndroid()) {
+                                            setScanFeedback('📷 Android camera ready - Point at barcode');
+                                        } else {
+                                            setScanFeedback('📷 Camera ready - Point at barcode');
+                                        }
+                                    }, 1000);
+                                }
                             }
                         };
                     }
@@ -2008,34 +2211,91 @@
                     let errorMessage = '❌ Camera access failed';
                     let detailedMessage = '';
 
+                    // Enhanced device and browser-specific error handling
+                    const browserName = navigator.userAgent.includes('Chrome') ? 'Chrome' :
+                                       navigator.userAgent.includes('Firefox') ? 'Firefox' :
+                                       navigator.userAgent.includes('Safari') ? 'Safari' : 'Browser';
+
                     switch (error.name) {
                         case 'NotAllowedError':
                             errorMessage = '❌ Camera permission denied';
-                            detailedMessage = 'Please allow camera access in browser settings and reload the page.';
+                            if (isIOS()) {
+                                if (browserName === 'Chrome') {
+                                    detailedMessage = '🍎 iOS Chrome: Camera access is limited. Try using Safari instead, or open this site in Safari for full camera support.';
+                                } else {
+                                    detailedMessage = '🍎 iOS Safari: Please allow camera access when prompted, then reload the page. Check Settings > Safari > Camera if needed.';
+                                }
+                            } else if (isAndroid()) {
+                                detailedMessage = '🤖 Android: Please allow camera access when prompted. Check browser permissions in Settings > Apps > Chrome > Permissions if needed.';
+                            } else {
+                                detailedMessage = 'Please allow camera access in browser settings and reload the page.';
+                            }
                             break;
                         case 'NotFoundError':
                             errorMessage = '❌ No camera found';
-                            detailedMessage = 'This device does not have a camera or it is being used by another app.';
+                            if (isIOS()) {
+                                detailedMessage = '🍎 iOS: No camera detected. Ensure camera is not being used by another app, and try closing other camera apps.';
+                            } else if (isAndroid()) {
+                                detailedMessage = '🤖 Android: Camera not available. Close other camera apps or restart your browser.';
+                            } else {
+                                detailedMessage = 'This device does not have a camera or it is being used by another app.';
+                            }
                             break;
                         case 'NotSupportedError':
                             errorMessage = '❌ Camera not supported';
-                            detailedMessage = 'Camera access is not supported in this browser.';
+                            if (isIOS()) {
+                                if (browserName === 'Chrome') {
+                                    detailedMessage = '🍎 iOS Chrome: Camera access is limited in Chrome on iOS. Please use Safari instead for full camera support.';
+                                } else {
+                                    detailedMessage = '🍎 iOS: Camera access may be limited. Ensure you\'re using Safari, not a third-party browser.';
+                                }
+                            } else if (isAndroid()) {
+                                detailedMessage = '🤖 Android: Try enabling "Desktop site" mode in Chrome, or update your browser to the latest version.';
+                            } else {
+                                detailedMessage = 'Camera access is not supported in this browser. Try using Chrome, Firefox, or Safari.';
+                            }
                             break;
                         case 'OverconstrainedError':
                             errorMessage = '❌ Camera constraints not supported';
-                            detailedMessage = 'The requested camera configuration is not available.';
+                            if (isIOS()) {
+                                detailedMessage = '🍎 iOS: Camera resolution not supported. The app will try simpler settings automatically.';
+                            } else if (isAndroid()) {
+                                detailedMessage = '🤖 Android: Camera configuration not available. Trying alternative settings automatically.';
+                            } else {
+                                detailedMessage = 'The requested camera configuration is not available. Trying alternative settings.';
+                            }
                             break;
                         case 'NotReadableError':
                             errorMessage = '❌ Camera hardware error';
-                            detailedMessage = 'Camera is already in use or has a hardware problem.';
+                            if (isIOS()) {
+                                detailedMessage = '🍎 iOS: Camera is in use by another app. Close Camera, FaceTime, or other camera apps and try again.';
+                            } else if (isAndroid()) {
+                                detailedMessage = '🤖 Android: Camera hardware issue. Close other camera apps, restart browser, or restart device if needed.';
+                            } else {
+                                detailedMessage = 'Camera is already in use or has a hardware problem. Close other camera apps.';
+                            }
                             break;
                         case 'SecurityError':
                             errorMessage = '❌ Camera access blocked by security';
-                            detailedMessage = 'Camera access is blocked. Try refreshing or check site permissions.';
+                            if (!isHTTPS()) {
+                                detailedMessage = '🔒 HTTPS Required: Camera access requires a secure connection. Please access this site via HTTPS.';
+                            } else if (isIOS()) {
+                                detailedMessage = '🍎 iOS Security: Camera access blocked. Check Safari privacy settings and ensure this site is trusted.';
+                            } else if (isAndroid()) {
+                                detailedMessage = '🤖 Android Security: Camera access blocked. Check Chrome site permissions and clear browser cache if needed.';
+                            } else {
+                                detailedMessage = 'Camera access is blocked by security settings. Check site permissions and try refreshing.';
+                            }
                             break;
                         default:
                             errorMessage = `❌ Camera error: ${error.name || 'Unknown'}`;
-                            detailedMessage = error.message || 'Please try keyboard mode instead.';
+                            if (isIOS()) {
+                                detailedMessage = `🍎 iOS: ${error.message || 'Try using Safari instead of other browsers, or reload the page.'}`;
+                            } else if (isAndroid()) {
+                                detailedMessage = `🤖 Android: ${error.message || 'Try reloading the page or using keyboard mode instead.'}`;
+                            } else {
+                                detailedMessage = error.message || 'Please try keyboard mode instead.';
+                            }
                     }
 
                     setScanFeedback(`${errorMessage} - ${detailedMessage}`);
@@ -2160,8 +2420,42 @@
                 }
             };
 
-            // Camera diagnostic function
+            // Enhanced camera diagnostic function with mobile-specific details
             const runCameraDiagnostic = async () => {
+                const getBrowserVersion = () => {
+                    const ua = navigator.userAgent;
+                    if (ua.includes('Chrome')) {
+                        const match = ua.match(/Chrome\/(\d+\.\d+)/);
+                        return match ? match[1] : 'unknown';
+                    } else if (ua.includes('Safari')) {
+                        const match = ua.match(/Version\/(\d+\.\d+)/);
+                        return match ? match[1] : 'unknown';
+                    } else if (ua.includes('Firefox')) {
+                        const match = ua.match(/Firefox\/(\d+\.\d+)/);
+                        return match ? match[1] : 'unknown';
+                    }
+                    return 'unknown';
+                };
+
+                const getOSVersion = () => {
+                    const ua = navigator.userAgent;
+                    if (isIOS()) {
+                        const match = ua.match(/OS (\d+)_(\d+)/);
+                        return match ? `iOS ${match[1]}.${match[2]}` : 'iOS (unknown)';
+                    } else if (isAndroid()) {
+                        const match = ua.match(/Android (\d+\.\d+)/);
+                        return match ? `Android ${match[1]}` : 'Android (unknown)';
+                    }
+                    return 'Unknown OS';
+                };
+
+                const isWebView = () => {
+                    const ua = navigator.userAgent;
+                    if (isIOS() && !ua.includes('Safari/')) return true;
+                    if (isAndroid() && ua.includes('wv')) return true;
+                    return false;
+                };
+
                 const diagnostics = {
                     userAgent: navigator.userAgent,
                     platform: navigator.platform,
@@ -2171,9 +2465,28 @@
                     isIOS: isIOS(),
                     isAndroid: isAndroid(),
                     isMobile: isMobile(),
+                    isWebView: isWebView(),
                     browserName: getBrowserName(),
-                    currentUrl: window.location.href
+                    browserVersion: getBrowserVersion(),
+                    osVersion: getOSVersion(),
+                    deviceType: isIOS() ? (navigator.userAgent.includes('iPad') ? 'iPad' : 'iPhone') :
+                               isAndroid() ? (screen.width < 768 ? 'Android Phone' : 'Android Tablet') : 'Desktop',
+                    screenSize: `${screen.width}x${screen.height}`,
+                    windowSize: `${window.innerWidth}x${window.innerHeight}`,
+                    pixelRatio: window.devicePixelRatio || 1,
+                    currentUrl: window.location.href,
+                    permissions: { camera: 'unknown' }
                 };
+
+                // Check camera permissions if supported
+                try {
+                    if (navigator.permissions && navigator.permissions.query) {
+                        const permissionStatus = await navigator.permissions.query({ name: 'camera' });
+                        diagnostics.permissions.camera = permissionStatus.state;
+                    }
+                } catch (permError) {
+                    diagnostics.permissions.camera = 'query_failed';
+                }
 
                 // Check available cameras
                 try {
@@ -2183,20 +2496,46 @@
                         diagnostics.availableCameras = videoDevices.length;
                         diagnostics.cameraDevices = videoDevices.map(device => ({
                             label: device.label || 'Camera',
-                            deviceId: device.deviceId ? 'Present' : 'Missing'
+                            deviceId: device.deviceId ? 'Present' : 'Missing',
+                            facingMode: device.label.toLowerCase().includes('front') ? 'user' :
+                                       device.label.toLowerCase().includes('back') ? 'environment' : 'unknown'
                         }));
                     }
                 } catch (error) {
                     diagnostics.enumerateError = error.message;
                 }
 
-                // Test basic camera access
+                // Enhanced camera access test with device-specific constraints
                 try {
-                    const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    let testConstraints;
+                    if (isIOS()) {
+                        testConstraints = { video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } } };
+                    } else if (isAndroid()) {
+                        testConstraints = { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } };
+                    } else {
+                        testConstraints = { video: true };
+                    }
+
+                    const testStream = await navigator.mediaDevices.getUserMedia(testConstraints);
+                    const track = testStream.getVideoTracks()[0];
+                    const settings = track.getSettings();
+
                     diagnostics.basicCameraAccess = 'Success';
+                    diagnostics.testCameraSettings = {
+                        width: settings.width,
+                        height: settings.height,
+                        frameRate: settings.frameRate,
+                        facingMode: settings.facingMode
+                    };
+
                     testStream.getTracks().forEach(track => track.stop());
                 } catch (error) {
                     diagnostics.basicCameraAccess = `Failed: ${error.name} - ${error.message}`;
+                    diagnostics.cameraTestError = {
+                        name: error.name,
+                        message: error.message,
+                        constraint: error.constraint || 'none'
+                    };
                 }
 
                 console.log('📊 Camera Diagnostics:', diagnostics);
@@ -2205,14 +2544,27 @@
 📊 Camera Diagnostic Results:
 
 🌐 Connection: ${diagnostics.isHTTPS ? '✅ HTTPS' : '❌ HTTP (Camera requires HTTPS)'}
-📱 Device: ${diagnostics.isIOS ? 'iPhone/iPad' : diagnostics.isAndroid ? 'Android' : 'Desktop'}
-🌍 Browser: ${diagnostics.browserName}
-📷 Camera API: ${diagnostics.hasGetUserMedia ? '✅ Available' : '❌ Not Available'}
-📹 Available Cameras: ${diagnostics.availableCameras || 'Unknown'}
-🔍 Basic Access: ${diagnostics.basicCameraAccess}
+📱 Device Type: ${diagnostics.deviceType}
+🖥️ OS Version: ${diagnostics.osVersion}
+🌍 Browser: ${diagnostics.browserName} ${diagnostics.browserVersion}
+${diagnostics.isWebView ? '📦 WebView: ⚠️ Running in WebView (limited camera support)' : ''}
+📏 Screen: ${diagnostics.screenSize} (${diagnostics.pixelRatio}x pixel ratio)
+🎦 Window: ${diagnostics.windowSize}
 
-${!diagnostics.isHTTPS ? '⚠️  Camera requires HTTPS connection' : ''}
-${diagnostics.isIOS && diagnostics.browserName.includes('Chrome') ? '⚠️  Try Safari instead of Chrome on iOS' : ''}
+📷 Camera API: ${diagnostics.hasGetUserMedia ? '✅ Available' : '❌ Not Available'}
+🔐 Permissions: ${diagnostics.permissions.camera}
+📹 Available Cameras: ${diagnostics.availableCameras || 'Unknown'}
+${diagnostics.cameraDevices && diagnostics.cameraDevices.length > 0 ?
+  diagnostics.cameraDevices.map(cam => `  • ${cam.label} (${cam.facingMode})`).join('\n') : ''}
+
+🔍 Camera Test: ${diagnostics.basicCameraAccess}
+${diagnostics.testCameraSettings ?
+  `📐 Test Resolution: ${diagnostics.testCameraSettings.width}x${diagnostics.testCameraSettings.height} @ ${diagnostics.testCameraSettings.frameRate}fps` : ''}
+
+${!diagnostics.isHTTPS ? '⚠️ Camera requires HTTPS connection' : ''}
+${diagnostics.isIOS && diagnostics.browserName.includes('Chrome') ? '⚠️ iOS Chrome has limited camera support - try Safari instead' : ''}
+${diagnostics.isWebView ? '⚠️ WebView detected - full camera access may be limited' : ''}
+${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnostics.basicCameraAccess.includes('Failed') ? '⚠️ Android Chrome: Try enabling "Desktop site" mode or check permissions' : ''}
                 `.trim();
 
                 setScanFeedback(diagnosticText);
@@ -2378,8 +2730,13 @@ ${diagnostics.isIOS && diagnostics.browserName.includes('Chrome') ? '⚠️  Try
                                             ref={videoRef}
                                             className="w-full h-64 sm:h-80 object-cover"
                                             playsInline
+                                            webkit-playsinline="true"
                                             muted
                                             autoPlay
+                                            defaultMuted
+                                            controls={false}
+                                            preload="metadata"
+                                            disablePictureInPicture
                                         />
                                         <canvas ref={canvasRef} className="hidden" />
 
@@ -2474,26 +2831,30 @@ ${diagnostics.isIOS && diagnostics.browserName.includes('Chrome') ? '⚠️  Try
                                         <ul className="text-xs space-y-0.5 list-disc list-inside">
                                             {isIOS() ? (
                                                 <>
-                                                    <li>Use Safari instead of Chrome for better camera support</li>
-                                                    <li>Allow camera permissions when prompted</li>
-                                                    <li>Try refreshing page if camera doesn't start</li>
-                                                    <li>Use "Run Camera Diagnostic" button to troubleshoot</li>
-                                                    <li>Use keyboard mode with handheld scanners</li>
+                                                    <li><strong>Browser:</strong> Use Safari for best camera support (not Chrome)</li>
+                                                    <li><strong>Permissions:</strong> Allow camera access when prompted</li>
+                                                    <li><strong>Video Issues:</strong> Tap the camera view to start video playback</li>
+                                                    <li><strong>Troubleshooting:</strong> Try refreshing page or restart Safari</li>
+                                                    <li><strong>Alternative:</strong> Use keyboard mode with handheld scanners</li>
+                                                    <li><strong>Diagnostic:</strong> Run camera diagnostic to identify issues</li>
                                                 </>
                                             ) : isAndroid() ? (
                                                 <>
-                                                    <li>Allow camera permissions when prompted</li>
-                                                    <li>Try Chrome's "Desktop site" toggle if camera fails</li>
-                                                    <li>Use "Run Camera Diagnostic" button to troubleshoot</li>
-                                                    <li>Close other apps using camera</li>
-                                                    <li>Use keyboard mode with handheld scanners</li>
+                                                    <li><strong>Permissions:</strong> Allow camera access in Chrome permissions</li>
+                                                    <li><strong>Fallback:</strong> Try "Desktop site" mode if camera fails</li>
+                                                    <li><strong>Apps:</strong> Close other camera apps (Instagram, Snapchat, etc.)</li>
+                                                    <li><strong>Settings:</strong> Check Settings > Apps > Chrome > Permissions</li>
+                                                    <li><strong>Troubleshooting:</strong> Clear Chrome cache or restart browser</li>
+                                                    <li><strong>Alternative:</strong> Use keyboard mode with handheld scanners</li>
+                                                    <li><strong>Diagnostic:</strong> Run camera diagnostic for detailed info</li>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <li>Use camera mode for best mobile experience</li>
-                                                    <li>Tap flashlight button in low light</li>
-                                                    <li>Hold steady and center barcode in frame</li>
-                                                    <li>Use keyboard mode with handheld scanners</li>
+                                                    <li><strong>Camera Mode:</strong> Best for mobile barcode scanning</li>
+                                                    <li><strong>Lighting:</strong> Tap flashlight button in low light conditions</li>
+                                                    <li><strong>Positioning:</strong> Hold steady and center barcode in frame</li>
+                                                    <li><strong>Focus:</strong> Tap camera view to refocus</li>
+                                                    <li><strong>Alternative:</strong> Use keyboard mode with handheld scanners</li>
                                                 </>
                                             )}
                                         </ul>
@@ -2509,17 +2870,29 @@ ${diagnostics.isIOS && diagnostics.browserName.includes('Chrome') ? '⚠️  Try
                                         {/* iOS Chrome Warning */}
                                         {isIOS() && navigator.userAgent.includes('Chrome') && (
                                             <div className="mt-2 p-2 bg-orange-100 rounded text-orange-700 text-xs">
-                                                <strong>⚠️ Chrome on iOS:</strong> Camera may not work properly.
-                                                <br />Try Safari or use the diagnostic button above.
+                                                <strong>⚠️ Chrome on iOS:</strong> Camera access is severely limited in Chrome on iOS due to Apple's WebKit restrictions.
+                                                <br /><strong>Solution:</strong> Open this site in Safari for full camera support.
+                                                <br /><strong>Alternative:</strong> Use keyboard mode or run diagnostic for details.
+                                            </div>
+                                        )}
+
+                                        {/* iOS WebView Warning */}
+                                        {isIOS() && navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Version') && (
+                                            <div className="mt-2 p-2 bg-red-100 rounded text-red-700 text-xs">
+                                                <strong>⚠️ iOS WebView:</strong> You're viewing this in an app's embedded browser.
+                                                <br /><strong>Solution:</strong> Tap "Open in Safari" or copy URL to Safari app.
+                                                <br />Camera access is blocked in embedded browsers on iOS.
                                             </div>
                                         )}
 
                                         {/* Android Chrome Tips */}
                                         {isAndroid() && navigator.userAgent.includes('Chrome') && (
                                             <div className="mt-2 p-2 bg-blue-100 rounded text-blue-700 text-xs">
-                                                <strong>💡 Android Chrome:</strong> If camera fails, try:
-                                                <br />• Refreshing the page
-                                                <br />• Clearing Chrome's cache
+                                                <strong>💡 Android Chrome:</strong> If camera fails, try these solutions:
+                                                <br />• Enable "Desktop site" mode (⋮ menu → Desktop site)
+                                                <br />• Check permissions: Settings → Apps → Chrome → Permissions → Camera
+                                                <br />• Clear Chrome cache: Settings → Apps → Chrome → Storage → Clear Cache
+                                                <br />• Close other camera apps and restart browser
                                                 <br />• Using the diagnostic button above
                                             </div>
                                         )}
