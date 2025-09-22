@@ -2969,6 +2969,20 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 exportingUsers: false
             });
 
+            const [duplicateDialog, setDuplicateDialog] = useState({
+                open: false,
+                duplicates: [],
+                newItems: [],
+                choices: {}
+            });
+
+            const [cleanupDialog, setCleanupDialog] = useState({
+                open: false,
+                duplicateGroups: [],
+                mergeChoices: {},
+                scanning: false
+            });
+
             // Pagination states
             const [inventoryPagination, setInventoryPagination] = useState({
                 currentPage: 1,
@@ -4314,6 +4328,113 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 }
             };
 
+            // Duplicate Detection Functions
+            const findDuplicateItems = async (newItems) => {
+                try {
+                    const duplicates = [];
+                    const snapshot = await db.collection('items').get();
+                    const existingItems = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+
+                    for (const newItem of newItems) {
+                        const existingItem = existingItems.find(existing =>
+                            existing.name.toLowerCase().trim() === newItem.name.toLowerCase().trim() ||
+                            (newItem.asin && existing.asin && existing.asin.toLowerCase().trim() === newItem.asin.toLowerCase().trim())
+                        );
+
+                        if (existingItem) {
+                            duplicates.push({
+                                newItem,
+                                existingItem,
+                                matchType: existingItem.name.toLowerCase().trim() === newItem.name.toLowerCase().trim() ? 'name' : 'asin'
+                            });
+                        }
+                    }
+
+                    return duplicates;
+                } catch (error) {
+                    console.error('Error finding duplicates:', error);
+                    return [];
+                }
+            };
+
+            const processDuplicateChoices = async (newItems, duplicateChoices) => {
+                let successCount = 0;
+                let errorCount = 0;
+                const processedItems = new Set();
+
+                for (const newItem of newItems) {
+                    try {
+                        const itemKey = newItem.name.toLowerCase().trim();
+                        if (processedItems.has(itemKey)) continue;
+
+                        const choice = duplicateChoices[itemKey];
+
+                        if (choice?.action === 'skip') {
+                            continue;
+                        } else if (choice?.action === 'update') {
+                            const existingItem = choice.existingItem;
+                            const updateData = {
+                                quantity: (existingItem.quantity || 0) + (newItem.quantity || 0),
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: auth.currentUser?.email || 'csv-import'
+                            };
+
+                            if (newItem.price && newItem.price > 0) updateData.price = newItem.price;
+                            if (newItem.category) updateData.category = newItem.category;
+                            if (newItem.asin) updateData.asin = newItem.asin;
+                            if (newItem.minThreshold) updateData.minThreshold = newItem.minThreshold;
+
+                            await db.collection('items').doc(existingItem.id).update(updateData);
+                            successCount++;
+                        } else if (choice?.action === 'replace') {
+                            const existingItem = choice.existingItem;
+                            const replaceData = {
+                                ...newItem,
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedBy: auth.currentUser?.email || 'csv-import',
+                                createdAt: existingItem.createdAt,
+                                createdBy: existingItem.createdBy
+                            };
+
+                            await db.collection('items').doc(existingItem.id).update(replaceData);
+                            successCount++;
+                        } else if (choice?.action === 'create') {
+                            const createData = {
+                                ...newItem,
+                                name: choice.newName || newItem.name,
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                createdBy: auth.currentUser?.email || 'csv-import'
+                            };
+
+                            await db.collection('items').add(createData);
+                            successCount++;
+                        } else {
+                            // No duplicate, create new item
+                            const createData = {
+                                ...newItem,
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                createdBy: auth.currentUser?.email || 'csv-import'
+                            };
+
+                            await db.collection('items').add(createData);
+                            successCount++;
+                        }
+
+                        processedItems.add(itemKey);
+                    } catch (error) {
+                        errorCount++;
+                        console.error('Error processing item:', error);
+                    }
+                }
+
+                return { successCount, errorCount };
+            };
+
             // CSV Import Functions
             const handleItemsImport = (event) => {
                 const file = event.target.files[0];
@@ -4328,8 +4449,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         const lines = csv.split('\n');
                         const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
 
-                        let successCount = 0;
-                        let errorCount = 0;
+                        // Parse all items first
+                        const newItems = [];
+                        let parseErrors = 0;
 
                         for (let i = 1; i < lines.length; i++) {
                             if (!lines[i].trim()) continue;
@@ -4340,6 +4462,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                                 headers.forEach((header, index) => {
                                     switch(header.toLowerCase()) {
+                                        case 'item':
                                         case 'item name':
                                         case 'name':
                                             item.name = values[index];
@@ -4348,40 +4471,91 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                             item.category = values[index] || 'Uncategorized';
                                             break;
                                         case 'quantity':
+                                        case 'stock quantity':
                                             item.quantity = parseInt(values[index]) || 0;
                                             break;
                                         case 'price':
                                             item.price = parseFloat(values[index]) || 0;
                                             break;
+                                        case 'asin':
+                                            item.asin = values[index];
+                                            break;
                                         case 'min threshold':
+                                        case 'minimum threshold':
                                             item.minThreshold = parseInt(values[index]) || 5;
                                             break;
                                     }
                                 });
 
-                                if (!item.name) {
-                                    errorCount++;
+                                if (!item.name?.trim()) {
+                                    parseErrors++;
                                     continue;
                                 }
 
-                                item.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                                item.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-                                item.createdBy = auth.currentUser?.email || 'csv-import';
+                                // Set defaults
+                                item.category = item.category || 'Uncategorized';
+                                item.quantity = item.quantity || 0;
+                                item.price = item.price || 0;
+                                item.minThreshold = item.minThreshold || 5;
 
-                                await db.collection('items').add(item);
-                                successCount++;
+                                newItems.push(item);
                             } catch (itemError) {
-                                errorCount++;
-                                console.error('Error importing item:', itemError);
+                                parseErrors++;
+                                console.error('Error parsing item:', itemError);
                             }
                         }
 
-                        showSnackbar(`Import completed: ${successCount} items added, ${errorCount} errors`, successCount > 0 ? 'success' : 'warning');
+                        if (newItems.length === 0) {
+                            showSnackbar(
+                                parseErrors > 0
+                                    ? `No valid items found. ${parseErrors} parsing errors.`
+                                    : 'No items found in CSV file.',
+                                'warning'
+                            );
+                            setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                            event.target.value = '';
+                            return;
+                        }
+
+                        // Check for duplicates
+                        const duplicates = await findDuplicateItems(newItems);
+
+                        if (duplicates.length > 0) {
+                            // Show duplicate dialog
+                            const initialChoices = {};
+                            duplicates.forEach(duplicate => {
+                                const itemKey = duplicate.newItem.name.toLowerCase().trim();
+                                initialChoices[itemKey] = {
+                                    action: 'skip',
+                                    existingItem: duplicate.existingItem
+                                };
+                            });
+
+                            setDuplicateDialog({
+                                open: true,
+                                duplicates,
+                                newItems,
+                                choices: initialChoices
+                            });
+
+                            setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                        } else {
+                            // No duplicates, proceed with direct import
+                            const { successCount, errorCount } = await processDuplicateChoices(newItems, {});
+
+                            showSnackbar(
+                                `Import completed: ${successCount} items added, ${errorCount} errors`,
+                                successCount > 0 ? 'success' : 'warning'
+                            );
+
+                            setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                        }
+
+                        event.target.value = ''; // Reset file input
                     } catch (error) {
                         showSnackbar(`Import failed: ${error.message}`, 'error');
-                    } finally {
                         setCsvOperations(prev => ({ ...prev, importingItems: false }));
-                        event.target.value = ''; // Reset file input
+                        event.target.value = '';
                     }
                 };
 
@@ -4460,6 +4634,85 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 };
 
                 reader.readAsText(file);
+            };
+
+            // Duplicate Cleanup Functions
+            const findExistingDuplicates = async () => {
+                try {
+                    const snapshot = await db.collection('items').get();
+                    const allItems = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+
+                    const duplicateGroups = [];
+                    const processed = new Set();
+
+                    for (const item of allItems) {
+                        if (processed.has(item.id)) continue;
+
+                        const duplicates = allItems.filter(other =>
+                            other.id !== item.id &&
+                            !processed.has(other.id) &&
+                            (
+                                other.name.toLowerCase().trim() === item.name.toLowerCase().trim() ||
+                                (item.asin && other.asin && item.asin.toLowerCase().trim() === other.asin.toLowerCase().trim())
+                            )
+                        );
+
+                        if (duplicates.length > 0) {
+                            const group = [item, ...duplicates];
+                            group.forEach(dup => processed.add(dup.id));
+                            duplicateGroups.push({
+                                name: item.name,
+                                items: group,
+                                totalQuantity: group.reduce((sum, dup) => sum + (dup.quantity || 0), 0),
+                                matchType: duplicates.some(dup => dup.name.toLowerCase().trim() === item.name.toLowerCase().trim()) ? 'name' : 'asin'
+                            });
+                        }
+                    }
+
+                    return duplicateGroups;
+                } catch (error) {
+                    console.error('Error finding existing duplicates:', error);
+                    return [];
+                }
+            };
+
+            const mergeDuplicateGroup = async (group, keepItemId, deleteOtherIds) => {
+                try {
+                    const keepItem = group.items.find(item => item.id === keepItemId);
+                    const otherItems = group.items.filter(item => item.id !== keepItemId);
+
+                    // Calculate merged quantities and data
+                    const mergedQuantity = group.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+                    const highestPrice = Math.max(...group.items.map(item => item.price || 0));
+                    const mostRecentCategory = group.items
+                        .filter(item => item.category)
+                        .sort((a, b) => (b.lastUpdated?.toDate() || new Date(0)) - (a.lastUpdated?.toDate() || new Date(0)))[0]?.category || keepItem.category;
+
+                    // Update the kept item with merged data
+                    await db.collection('items').doc(keepItemId).update({
+                        quantity: mergedQuantity,
+                        price: highestPrice,
+                        category: mostRecentCategory,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedBy: auth.currentUser?.email || 'duplicate-cleanup',
+                        mergedFrom: otherItems.map(item => ({ id: item.id, name: item.name, quantity: item.quantity }))
+                    });
+
+                    // Delete the duplicate items
+                    const batch = db.batch();
+                    deleteOtherIds.forEach(id => {
+                        batch.delete(db.collection('items').doc(id));
+                    });
+                    await batch.commit();
+
+                    return { success: true, mergedQuantity, deletedCount: deleteOtherIds.length };
+                } catch (error) {
+                    console.error('Error merging duplicate group:', error);
+                    return { success: false, error: error.message };
+                }
             };
 
             // Bulk Operations
@@ -5587,6 +5840,70 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         </div>
                                     </MaterialCard>
 
+                                    {/* Duplicate Cleanup */}
+                                    <MaterialCard elevation={2}>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                            <span className="material-icons mr-2 text-red-600">content_copy</span>
+                                            Duplicate Cleanup
+                                        </h3>
+                                        <div className="space-y-4">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                Scan inventory for duplicate items and merge them to clean up your database.
+                                            </p>
+                                            <MaterialButton
+                                                onClick={async () => {
+                                                    setCleanupDialog(prev => ({ ...prev, scanning: true }));
+                                                    try {
+                                                        const duplicateGroups = await findExistingDuplicates();
+                                                        if (duplicateGroups.length === 0) {
+                                                            showSnackbar('No duplicate items found in inventory!', 'success');
+                                                        } else {
+                                                            const initialChoices = {};
+                                                            duplicateGroups.forEach(group => {
+                                                                initialChoices[group.name] = {
+                                                                    keepItemId: group.items[0].id,
+                                                                    deleteItemIds: group.items.slice(1).map(item => item.id)
+                                                                };
+                                                            });
+                                                            setCleanupDialog({
+                                                                open: true,
+                                                                duplicateGroups,
+                                                                mergeChoices: initialChoices,
+                                                                scanning: false
+                                                            });
+                                                        }
+                                                    } catch (error) {
+                                                        showSnackbar(`Error scanning for duplicates: ${error.message}`, 'error');
+                                                    } finally {
+                                                        setCleanupDialog(prev => ({ ...prev, scanning: false }));
+                                                    }
+                                                }}
+                                                variant="outlined"
+                                                color="warning"
+                                                className="w-full"
+                                                disabled={cleanupDialog.scanning}
+                                            >
+                                                {cleanupDialog.scanning ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full mr-2"></div>
+                                                        Scanning for Duplicates...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="material-icons mr-2">search</span>
+                                                        Scan & Clean Duplicates
+                                                    </>
+                                                )}
+                                            </MaterialButton>
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                                <p className="font-medium mb-1">💡 How it works:</p>
+                                                <p><strong>Detection:</strong> Finds items with identical names or ASINs</p>
+                                                <p><strong>Merging:</strong> Combines quantities, preserves highest price, keeps most recent category</p>
+                                                <p><strong>Safety:</strong> Preview all changes before applying them</p>
+                                            </div>
+                                        </div>
+                                    </MaterialCard>
+
                                     {/* System Stats */}
                                     <MaterialCard elevation={2} className="lg:col-span-2">
                                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
@@ -6127,6 +6444,399 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     >
                         <span className="material-icons">add_shopping_cart</span>
                     </button>
+
+                    {/* Duplicate Items Dialog */}
+                    {duplicateDialog.open && (
+                        <div className="md-modal-overlay" onClick={() => setDuplicateDialog(prev => ({...prev, open: false}))}>
+                            <div className="md-modal" style={{maxWidth: '800px', width: '95%'}} onClick={(e) => e.stopPropagation()}>
+                                <button className="md-modal-close" onClick={() => setDuplicateDialog(prev => ({...prev, open: false}))}>
+                                    <span className="material-icons">close</span>
+                                </button>
+
+                                <div className="md-modal-header">
+                                    <h2 className="md-modal-title">
+                                        <span className="material-icons" style={{ color: 'var(--md-sys-color-warning)' }}>
+                                            warning
+                                        </span>
+                                        Duplicate Items Found
+                                    </h2>
+                                </div>
+
+                                <div className="md-modal-body">
+                                    <p style={{
+                                        color: 'var(--md-sys-color-on-surface-variant)',
+                                        marginBottom: '16px',
+                                        font: 'var(--md-sys-typescale-body-large)'
+                                    }}>
+                                        Found {duplicateDialog.duplicates.length} potential duplicate{duplicateDialog.duplicates.length !== 1 ? 's' : ''}.
+                                        Choose how to handle each one:
+                                    </p>
+
+                                    <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                        <div className="flex items-center mb-2">
+                                            <span className="material-icons text-blue-600 mr-2">settings</span>
+                                            <span className="font-medium text-gray-900 dark:text-gray-100">Batch Actions:</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                            {[
+                                                { action: 'skip', label: 'Skip All', icon: 'block', color: 'bg-red-100 hover:bg-red-200 text-red-700' },
+                                                { action: 'update', label: 'Add All Quantities', icon: 'add', color: 'bg-green-100 hover:bg-green-200 text-green-700' },
+                                                { action: 'replace', label: 'Replace All', icon: 'swap_horiz', color: 'bg-blue-100 hover:bg-blue-200 text-blue-700' },
+                                                { action: 'create', label: 'Create All New', icon: 'add_circle', color: 'bg-purple-100 hover:bg-purple-200 text-purple-700' }
+                                            ].map(batchOption => (
+                                                <button
+                                                    key={batchOption.action}
+                                                    className={`p-2 rounded border text-xs font-medium transition-colors ${batchOption.color} border-transparent`}
+                                                    onClick={() => {
+                                                        const newChoices = {};
+                                                        duplicateDialog.duplicates.forEach(duplicate => {
+                                                            const itemKey = duplicate.newItem.name.toLowerCase().trim();
+                                                            newChoices[itemKey] = {
+                                                                action: batchOption.action,
+                                                                existingItem: duplicate.existingItem,
+                                                                newName: batchOption.action === 'create' ? `${duplicate.newItem.name} (Import)` : undefined
+                                                            };
+                                                        });
+                                                        setDuplicateDialog(prev => ({
+                                                            ...prev,
+                                                            choices: { ...prev.choices, ...newChoices }
+                                                        }));
+                                                    }}
+                                                >
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="material-icons text-sm">{batchOption.icon}</span>
+                                                        <span className="mt-1">{batchOption.label}</span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                                        {duplicateDialog.duplicates.map((duplicate, index) => {
+                                            const itemKey = duplicate.newItem.name.toLowerCase().trim();
+                                            const choice = duplicateDialog.choices[itemKey] || { action: 'skip' };
+
+                                            return (
+                                                <div key={index} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="flex-1">
+                                                            <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                                                                {duplicate.newItem.name}
+                                                            </h4>
+                                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                                Match found by: {duplicate.matchType}
+                                                                {duplicate.matchType === 'asin' && ` (${duplicate.newItem.asin})`}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
+                                                            <h5 className="font-medium text-blue-900 dark:text-blue-100 mb-2">New Item (CSV)</h5>
+                                                            <div className="text-sm space-y-1 text-blue-800 dark:text-blue-200">
+                                                                <div>Quantity: {duplicate.newItem.quantity || 0}</div>
+                                                                {duplicate.newItem.price > 0 && <div>Price: ${duplicate.newItem.price}</div>}
+                                                                {duplicate.newItem.category && <div>Category: {duplicate.newItem.category}</div>}
+                                                                {duplicate.newItem.asin && <div>ASIN: {duplicate.newItem.asin}</div>}
+                                                            </div>
+                                                        </div>
+                                                        <div className="bg-gray-100 dark:bg-gray-600 p-3 rounded">
+                                                            <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Existing Item</h5>
+                                                            <div className="text-sm space-y-1 text-gray-700 dark:text-gray-300">
+                                                                <div>Quantity: {duplicate.existingItem.quantity || 0}</div>
+                                                                {duplicate.existingItem.price > 0 && <div>Price: ${duplicate.existingItem.price}</div>}
+                                                                {duplicate.existingItem.category && <div>Category: {duplicate.existingItem.category}</div>}
+                                                                {duplicate.existingItem.asin && <div>ASIN: {duplicate.existingItem.asin}</div>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Choose Action:</label>
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                            {[
+                                                                { value: 'skip', label: 'Skip Import', icon: 'block', color: 'text-red-600' },
+                                                                { value: 'update', label: 'Add Quantities', icon: 'add', color: 'text-green-600' },
+                                                                { value: 'replace', label: 'Replace Existing', icon: 'swap_horiz', color: 'text-blue-600' },
+                                                                { value: 'create', label: 'Create New', icon: 'add_circle', color: 'text-purple-600' }
+                                                            ].map(option => (
+                                                                <button
+                                                                    key={option.value}
+                                                                    className={`p-2 rounded border text-xs font-medium transition-colors ${
+                                                                        choice.action === option.value
+                                                                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                                                                            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                                                                    }`}
+                                                                    onClick={() => {
+                                                                        setDuplicateDialog(prev => ({
+                                                                            ...prev,
+                                                                            choices: {
+                                                                                ...prev.choices,
+                                                                                [itemKey]: {
+                                                                                    action: option.value,
+                                                                                    existingItem: duplicate.existingItem,
+                                                                                    newName: option.value === 'create' ? `${duplicate.newItem.name} (Import)` : undefined
+                                                                                }
+                                                                            }
+                                                                        }));
+                                                                    }}
+                                                                >
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className={`material-icons text-sm ${option.color}`}>{option.icon}</span>
+                                                                        <span className="mt-1">{option.label}</span>
+                                                                    </div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        {choice.action === 'create' && (
+                                                            <input
+                                                                type="text"
+                                                                placeholder="New item name"
+                                                                className="w-full mt-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                                                value={choice.newName || `${duplicate.newItem.name} (Import)`}
+                                                                onChange={(e) => {
+                                                                    setDuplicateDialog(prev => ({
+                                                                        ...prev,
+                                                                        choices: {
+                                                                            ...prev.choices,
+                                                                            [itemKey]: { ...choice, newName: e.target.value }
+                                                                        }
+                                                                    }));
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                                        <div className="flex items-center mb-2">
+                                            <span className="material-icons text-amber-600 mr-2">info</span>
+                                            <span className="font-medium text-amber-800 dark:text-amber-200">Action Explanations:</span>
+                                        </div>
+                                        <div className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                                            <div><strong>Skip:</strong> Don't import this item, keep existing unchanged</div>
+                                            <div><strong>Add Quantities:</strong> Add new quantity to existing quantity, update other fields</div>
+                                            <div><strong>Replace:</strong> Completely replace existing item with new data</div>
+                                            <div><strong>Create New:</strong> Create as a separate item with different name</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="md-modal-actions">
+                                    <button
+                                        type="button"
+                                        className="md-button secondary"
+                                        onClick={() => setDuplicateDialog(prev => ({...prev, open: false}))}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="md-button primary"
+                                        onClick={async () => {
+                                            try {
+                                                setCsvOperations(prev => ({ ...prev, importingItems: true }));
+                                                const { successCount, errorCount } = await processDuplicateChoices(
+                                                    duplicateDialog.newItems,
+                                                    duplicateDialog.choices
+                                                );
+
+                                                showSnackbar(
+                                                    `Import completed: ${successCount} items processed, ${errorCount} errors`,
+                                                    successCount > 0 ? 'success' : 'warning'
+                                                );
+
+                                                setDuplicateDialog({ open: false, duplicates: [], newItems: [], choices: {} });
+                                            } catch (error) {
+                                                showSnackbar(`Import failed: ${error.message}`, 'error');
+                                            } finally {
+                                                setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                                            }
+                                        }}
+                                    >
+                                        Proceed with Import
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Duplicate Cleanup Dialog */}
+                    {cleanupDialog.open && (
+                        <div className="md-modal-overlay" onClick={() => setCleanupDialog(prev => ({...prev, open: false}))}>
+                            <div className="md-modal" style={{maxWidth: '900px', width: '95%'}} onClick={(e) => e.stopPropagation()}>
+                                <button className="md-modal-close" onClick={() => setCleanupDialog(prev => ({...prev, open: false}))}>
+                                    <span className="material-icons">close</span>
+                                </button>
+
+                                <div className="md-modal-header">
+                                    <h2 className="md-modal-title">
+                                        <span className="material-icons" style={{ color: 'var(--md-sys-color-error)' }}>
+                                            content_copy
+                                        </span>
+                                        Duplicate Items Found - Cleanup Required
+                                    </h2>
+                                </div>
+
+                                <div className="md-modal-body">
+                                    <p style={{
+                                        color: 'var(--md-sys-color-on-surface-variant)',
+                                        marginBottom: '16px',
+                                        font: 'var(--md-sys-typescale-body-large)'
+                                    }}>
+                                        Found {cleanupDialog.duplicateGroups.length} group{cleanupDialog.duplicateGroups.length !== 1 ? 's' : ''} of duplicate items.
+                                        Review and choose which items to keep:
+                                    </p>
+
+                                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                                        {cleanupDialog.duplicateGroups.map((group, groupIndex) => {
+                                            const choice = cleanupDialog.mergeChoices[group.name] || { keepItemId: group.items[0].id, deleteItemIds: [] };
+
+                                            return (
+                                                <div key={groupIndex} className="border border-red-200 dark:border-red-600 rounded-lg p-4 bg-red-50 dark:bg-red-900/20">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="flex-1">
+                                                            <h4 className="font-medium text-red-900 dark:text-red-100 flex items-center">
+                                                                <span className="material-icons mr-2 text-red-600">warning</span>
+                                                                {group.name}
+                                                            </h4>
+                                                            <p className="text-sm text-red-700 dark:text-red-300">
+                                                                {group.items.length} duplicates found | Total quantity: {group.totalQuantity} | Match by: {group.matchType}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-3">
+                                                        <label className="text-sm font-medium text-red-800 dark:text-red-200">Choose which item to keep (others will be deleted):</label>
+                                                        <div className="grid gap-3">
+                                                            {group.items.map((item, itemIndex) => (
+                                                                <div
+                                                                    key={item.id}
+                                                                    className={`p-3 rounded border cursor-pointer transition-colors ${
+                                                                        choice.keepItemId === item.id
+                                                                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                                                            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+                                                                    }`}
+                                                                    onClick={() => {
+                                                                        setCleanupDialog(prev => ({
+                                                                            ...prev,
+                                                                            mergeChoices: {
+                                                                                ...prev.mergeChoices,
+                                                                                [group.name]: {
+                                                                                    keepItemId: item.id,
+                                                                                    deleteItemIds: group.items.filter(i => i.id !== item.id).map(i => i.id)
+                                                                                }
+                                                                            }
+                                                                        }));
+                                                                    }}
+                                                                >
+                                                                    <div className="flex items-center">
+                                                                        <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${
+                                                                            choice.keepItemId === item.id
+                                                                                ? 'border-green-500 bg-green-500'
+                                                                                : 'border-gray-400'
+                                                                        }`}>
+                                                                            {choice.keepItemId === item.id && (
+                                                                                <span className="material-icons text-white text-xs">check</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex-1">
+                                                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                                                                                <div><strong>Quantity:</strong> {item.quantity || 0}</div>
+                                                                                <div><strong>Price:</strong> {item.price > 0 ? `$${item.price}` : 'N/A'}</div>
+                                                                                <div><strong>Category:</strong> {item.category || 'N/A'}</div>
+                                                                                <div><strong>ASIN:</strong> {item.asin || 'N/A'}</div>
+                                                                            </div>
+                                                                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                                                                ID: {item.id} | Created: {item.createdAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 rounded text-xs text-amber-800 dark:text-amber-200">
+                                                        <strong>After merge:</strong> Quantities will be combined ({group.totalQuantity} total),
+                                                        highest price kept, most recent category preserved, audit trail maintained.
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                                        <div className="flex items-center mb-2">
+                                            <span className="material-icons text-red-600 mr-2">warning</span>
+                                            <span className="font-medium text-red-800 dark:text-red-200">⚠️ Important Safety Information:</span>
+                                        </div>
+                                        <div className="text-xs text-red-700 dark:text-red-300 space-y-1">
+                                            <div><strong>Merge Process:</strong> Selected items will be kept with combined quantities and best attributes</div>
+                                            <div><strong>Deletion:</strong> Non-selected duplicates will be permanently deleted from database</div>
+                                            <div><strong>Audit Trail:</strong> All changes are logged with timestamps and user attribution</div>
+                                            <div><strong>Irreversible:</strong> This action cannot be undone - please review carefully!</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="md-modal-actions">
+                                    <button
+                                        type="button"
+                                        className="md-button secondary"
+                                        onClick={() => setCleanupDialog(prev => ({...prev, open: false}))}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="md-button error"
+                                        onClick={async () => {
+                                            if (!confirm(`Are you sure you want to merge ${cleanupDialog.duplicateGroups.length} duplicate groups? This will permanently delete ${cleanupDialog.duplicateGroups.reduce((total, group) => total + group.items.length - 1, 0)} items and cannot be undone.`)) {
+                                                return;
+                                            }
+
+                                            try {
+                                                let totalMerged = 0;
+                                                let totalDeleted = 0;
+                                                let errors = 0;
+
+                                                for (const group of cleanupDialog.duplicateGroups) {
+                                                    const choice = cleanupDialog.mergeChoices[group.name];
+                                                    if (choice) {
+                                                        const result = await mergeDuplicateGroup(group, choice.keepItemId, choice.deleteItemIds);
+                                                        if (result.success) {
+                                                            totalMerged++;
+                                                            totalDeleted += result.deletedCount;
+                                                        } else {
+                                                            errors++;
+                                                            console.error('Merge failed:', result.error);
+                                                        }
+                                                    }
+                                                }
+
+                                                showSnackbar(
+                                                    `Cleanup completed: ${totalMerged} groups merged, ${totalDeleted} duplicates removed${errors > 0 ? `, ${errors} errors` : ''}`,
+                                                    errors === 0 ? 'success' : 'warning'
+                                                );
+
+                                                setCleanupDialog({ open: false, duplicateGroups: [], mergeChoices: {}, scanning: false });
+                                            } catch (error) {
+                                                showSnackbar(`Cleanup failed: ${error.message}`, 'error');
+                                            }
+                                        }}
+                                    >
+                                        <span className="material-icons mr-2">merge</span>
+                                        Merge All Duplicates
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Low Stock Popup Modal */}
                     {showLowStockPopup && notifications.length > 0 && (
