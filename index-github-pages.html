@@ -1814,133 +1814,242 @@
                 }
             };
 
-            // Detect iOS device
+            // Detect mobile device types
             const isIOS = () => {
                 return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
             };
 
-            // iOS-compatible camera scanning functionality
+            const isAndroid = () => {
+                return /Android/.test(navigator.userAgent);
+            };
+
+            const isMobile = () => {
+                return isIOS() || isAndroid() || /Mobi|Android/i.test(navigator.userAgent);
+            };
+
+            // Check HTTPS requirement
+            const isHTTPS = () => {
+                return location.protocol === 'https:' || location.hostname === 'localhost';
+            };
+
+            // Enhanced camera scanning with progressive fallback
             const startCameraScanning = async () => {
                 try {
-                    // Check if camera is available
+                    // Check basic requirements
                     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        setScanFeedback('❌ Camera not supported in this browser');
+                        setScanFeedback('❌ Camera API not supported in this browser');
+                        setTimeout(() => {
+                            setScanMode('keyboard');
+                            setScanFeedback('⌨️ Use keyboard mode instead');
+                        }, 2000);
+                        return;
+                    }
+
+                    // Check HTTPS requirement (required for camera access)
+                    if (!isHTTPS()) {
+                        setScanFeedback('❌ Camera requires HTTPS connection. Use keyboard mode instead.');
+                        setTimeout(() => {
+                            setScanMode('keyboard');
+                            setScanFeedback('⌨️ Switched to keyboard mode');
+                        }, 3000);
                         return;
                     }
 
                     setScanFeedback('🔍 Requesting camera access...');
+                    console.log('Starting camera access attempt...');
 
-                    // iOS-specific camera constraints
-                    let constraints;
-                    if (isIOS()) {
-                        constraints = {
-                            video: {
-                                facingMode: { exact: 'environment' }, // Force back camera on iOS
-                                width: { ideal: 640, max: 1280 }, // Lower resolution for iOS
-                                height: { ideal: 480, max: 720 },
-                                frameRate: { ideal: 15, max: 30 } // Lower frame rate for performance
-                            }
-                        };
-                    } else {
-                        constraints = {
-                            video: {
-                                facingMode: 'environment',
-                                width: { ideal: 1280, max: 1920 },
-                                height: { ideal: 720, max: 1080 }
-                            }
-                        };
-                    }
-
-                    let stream;
-                    try {
-                        stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    } catch (error) {
-                        // Fallback: Try without exact back camera requirement on iOS
-                        if (isIOS() && error.name === 'OverconstrainedError') {
-                            console.log('Falling back to any available camera on iOS');
-                            const fallbackConstraints = {
+                    // Progressive constraint fallback strategy
+                    const constraintStrategies = [
+                        // Strategy 1: Basic mobile-optimized constraints
+                        {
+                            name: 'Basic mobile',
+                            constraints: {
                                 video: {
-                                    facingMode: 'environment', // Prefer back camera but don't require
+                                    facingMode: 'environment',
                                     width: { ideal: 640 },
                                     height: { ideal: 480 }
                                 }
-                            };
-                            stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-                        } else {
-                            throw error;
+                            }
+                        },
+                        // Strategy 2: Even simpler constraints
+                        {
+                            name: 'Simple',
+                            constraints: {
+                                video: {
+                                    facingMode: 'environment'
+                                }
+                            }
+                        },
+                        // Strategy 3: Front camera fallback
+                        {
+                            name: 'Front camera',
+                            constraints: {
+                                video: {
+                                    facingMode: 'user',
+                                    width: { ideal: 640 },
+                                    height: { ideal: 480 }
+                                }
+                            }
+                        },
+                        // Strategy 4: Any camera
+                        {
+                            name: 'Any camera',
+                            constraints: {
+                                video: true
+                            }
+                        }
+                    ];
+
+                    let stream = null;
+                    let successfulStrategy = null;
+
+                    for (const strategy of constraintStrategies) {
+                        try {
+                            console.log(`Trying camera strategy: ${strategy.name}`, strategy.constraints);
+                            setScanFeedback(`🔍 Trying ${strategy.name} camera...`);
+
+                            stream = await navigator.mediaDevices.getUserMedia(strategy.constraints);
+                            successfulStrategy = strategy;
+                            console.log(`✅ Camera access successful with: ${strategy.name}`);
+                            break;
+                        } catch (error) {
+                            console.log(`❌ Strategy "${strategy.name}" failed:`, error.name, error.message);
+
+                            // If permission denied, don't try other strategies
+                            if (error.name === 'NotAllowedError') {
+                                throw error;
+                            }
+
+                            // Continue to next strategy for other errors
+                            continue;
                         }
                     }
 
+                    if (!stream) {
+                        throw new Error('All camera access strategies failed');
+                    }
+
+                    // Success! Set up the camera
                     setCameraStream(stream);
                     setScanMode('camera');
-                    setScanFeedback('📷 Camera active - Point at barcode and tap to focus');
+
+                    const cameraType = successfulStrategy.name;
+                    const tracks = stream.getVideoTracks();
+                    const settings = tracks[0]?.getSettings();
+
+                    console.log('Camera settings:', settings);
+                    setScanFeedback(`📷 ${cameraType} camera active - ${isMobile() ? 'Tap to focus' : 'Point at barcode'}`);
 
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
 
-                        // iOS requires user interaction for video play
-                        videoRef.current.setAttribute('playsinline', true);
-                        videoRef.current.setAttribute('webkit-playsinline', true);
-                        videoRef.current.muted = true;
+                        // Mobile video setup
+                        if (isMobile()) {
+                            videoRef.current.setAttribute('playsinline', true);
+                            videoRef.current.setAttribute('webkit-playsinline', true);
+                            videoRef.current.setAttribute('muted', true);
+                            videoRef.current.muted = true;
+                        }
 
                         try {
                             await videoRef.current.play();
+                            console.log('✅ Video playing successfully');
                         } catch (playError) {
-                            console.log('Video autoplay failed, user interaction required');
-                            setScanFeedback('👆 Tap the camera view to start scanning');
+                            console.log('⚠️ Video autoplay failed:', playError.message);
+                            setScanFeedback('👆 Tap the camera view to start video');
                         }
 
-                        // Start barcode detection when video is ready
+                        // Enhanced video event handlers
                         videoRef.current.onloadedmetadata = () => {
+                            console.log('Video metadata loaded');
                             setTimeout(() => {
                                 startBarcodeDetection();
-                            }, 500); // Give iOS time to initialize
+                            }, isMobile() ? 1000 : 500);
                         };
 
-                        // Add tap-to-focus for iOS
-                        videoRef.current.onclick = async (event) => {
-                            if (isIOS()) {
-                                const video = videoRef.current;
-                                if (video.paused) {
-                                    try {
-                                        await video.play();
-                                        setScanFeedback('📷 Camera active - Point at barcode');
-                                    } catch (error) {
-                                        console.log('Failed to start video:', error);
-                                    }
-                                }
+                        videoRef.current.onplay = () => {
+                            console.log('Video started playing');
+                            setScanFeedback('📷 Camera ready - Point at barcode');
+                        };
 
-                                // Manual focus trigger for iOS
-                                vibrate([50]); // Haptic feedback
-                                setScanFeedback('🔍 Focusing... Point at barcode');
-                                setTimeout(() => {
+                        videoRef.current.onerror = (error) => {
+                            console.error('Video error:', error);
+                            setScanFeedback('❌ Video playback error');
+                        };
+
+                        // Universal tap handler for mobile
+                        videoRef.current.onclick = async (event) => {
+                            const video = videoRef.current;
+                            if (video.paused) {
+                                try {
+                                    await video.play();
                                     setScanFeedback('📷 Camera active - Point at barcode');
+                                } catch (error) {
+                                    console.log('Manual play failed:', error);
+                                    setScanFeedback('❌ Cannot start camera - try reloading page');
+                                }
+                            }
+
+                            // Haptic feedback on mobile
+                            if (isMobile()) {
+                                vibrate([50]);
+                                setScanFeedback('🔍 Focusing...');
+                                setTimeout(() => {
+                                    setScanFeedback('📷 Camera ready - Point at barcode');
                                 }, 1000);
                             }
                         };
                     }
+
                 } catch (error) {
-                    console.error('Camera error:', error);
+                    console.error('Camera access failed:', error);
 
                     let errorMessage = '❌ Camera access failed';
-                    if (error.name === 'NotAllowedError') {
-                        errorMessage = '❌ Camera permission denied. Please allow camera access and try again.';
-                    } else if (error.name === 'NotFoundError') {
-                        errorMessage = '❌ No camera found on this device.';
-                    } else if (error.name === 'NotSupportedError') {
-                        errorMessage = '❌ Camera not supported in this browser.';
-                    } else if (error.name === 'OverconstrainedError') {
-                        errorMessage = '❌ Camera constraints not supported. Try using Safari instead of Chrome on iOS.';
+                    let detailedMessage = '';
+
+                    switch (error.name) {
+                        case 'NotAllowedError':
+                            errorMessage = '❌ Camera permission denied';
+                            detailedMessage = 'Please allow camera access in browser settings and reload the page.';
+                            break;
+                        case 'NotFoundError':
+                            errorMessage = '❌ No camera found';
+                            detailedMessage = 'This device does not have a camera or it is being used by another app.';
+                            break;
+                        case 'NotSupportedError':
+                            errorMessage = '❌ Camera not supported';
+                            detailedMessage = 'Camera access is not supported in this browser.';
+                            break;
+                        case 'OverconstrainedError':
+                            errorMessage = '❌ Camera constraints not supported';
+                            detailedMessage = 'The requested camera configuration is not available.';
+                            break;
+                        case 'NotReadableError':
+                            errorMessage = '❌ Camera hardware error';
+                            detailedMessage = 'Camera is already in use or has a hardware problem.';
+                            break;
+                        case 'SecurityError':
+                            errorMessage = '❌ Camera access blocked by security';
+                            detailedMessage = 'Camera access is blocked. Try refreshing or check site permissions.';
+                            break;
+                        default:
+                            errorMessage = `❌ Camera error: ${error.name || 'Unknown'}`;
+                            detailedMessage = error.message || 'Please try keyboard mode instead.';
                     }
 
-                    setScanFeedback(errorMessage);
+                    setScanFeedback(`${errorMessage} - ${detailedMessage}`);
 
-                    // Auto-switch to keyboard mode on camera failure
+                    // Auto-switch to keyboard mode after showing error
                     setTimeout(() => {
                         setScanMode('keyboard');
-                        setScanFeedback('⌨️ Switched to keyboard mode - Use a handheld scanner or type item names');
-                    }, 3000);
+                        setScanFeedback('⌨️ Switched to keyboard mode - Use handheld scanner or type item names');
+
+                        // Focus input for immediate use
+                        if (inputRef.current) {
+                            inputRef.current.focus();
+                        }
+                    }, 4000);
                 }
             };
 
@@ -2051,6 +2160,73 @@
                 }
             };
 
+            // Camera diagnostic function
+            const runCameraDiagnostic = async () => {
+                const diagnostics = {
+                    userAgent: navigator.userAgent,
+                    platform: navigator.platform,
+                    isHTTPS: isHTTPS(),
+                    hasMediaDevices: !!navigator.mediaDevices,
+                    hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+                    isIOS: isIOS(),
+                    isAndroid: isAndroid(),
+                    isMobile: isMobile(),
+                    browserName: getBrowserName(),
+                    currentUrl: window.location.href
+                };
+
+                // Check available cameras
+                try {
+                    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                        diagnostics.availableCameras = videoDevices.length;
+                        diagnostics.cameraDevices = videoDevices.map(device => ({
+                            label: device.label || 'Camera',
+                            deviceId: device.deviceId ? 'Present' : 'Missing'
+                        }));
+                    }
+                } catch (error) {
+                    diagnostics.enumerateError = error.message;
+                }
+
+                // Test basic camera access
+                try {
+                    const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    diagnostics.basicCameraAccess = 'Success';
+                    testStream.getTracks().forEach(track => track.stop());
+                } catch (error) {
+                    diagnostics.basicCameraAccess = `Failed: ${error.name} - ${error.message}`;
+                }
+
+                console.log('📊 Camera Diagnostics:', diagnostics);
+
+                const diagnosticText = `
+📊 Camera Diagnostic Results:
+
+🌐 Connection: ${diagnostics.isHTTPS ? '✅ HTTPS' : '❌ HTTP (Camera requires HTTPS)'}
+📱 Device: ${diagnostics.isIOS ? 'iPhone/iPad' : diagnostics.isAndroid ? 'Android' : 'Desktop'}
+🌍 Browser: ${diagnostics.browserName}
+📷 Camera API: ${diagnostics.hasGetUserMedia ? '✅ Available' : '❌ Not Available'}
+📹 Available Cameras: ${diagnostics.availableCameras || 'Unknown'}
+🔍 Basic Access: ${diagnostics.basicCameraAccess}
+
+${!diagnostics.isHTTPS ? '⚠️  Camera requires HTTPS connection' : ''}
+${diagnostics.isIOS && diagnostics.browserName.includes('Chrome') ? '⚠️  Try Safari instead of Chrome on iOS' : ''}
+                `.trim();
+
+                setScanFeedback(diagnosticText);
+            };
+
+            const getBrowserName = () => {
+                const ua = navigator.userAgent;
+                if (ua.includes('Chrome') && !ua.includes('Edg')) return 'Chrome';
+                if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+                if (ua.includes('Firefox')) return 'Firefox';
+                if (ua.includes('Edg')) return 'Edge';
+                return 'Unknown';
+            };
+
             // Clean up camera on unmount
             useEffect(() => {
                 return () => {
@@ -2143,6 +2319,21 @@
                                     </span>
                                 </MaterialButton>
                             </div>
+
+                            {/* Camera Diagnostic Button - Show when camera issues likely */}
+                            {(isMobile() || !isHTTPS()) && (
+                                <div className="mb-4">
+                                    <MaterialButton
+                                        onClick={runCameraDiagnostic}
+                                        variant="outlined"
+                                        color="secondary"
+                                        className="w-full"
+                                    >
+                                        <span className="material-icons mr-2">bug_report</span>
+                                        Run Camera Diagnostic
+                                    </MaterialButton>
+                                </div>
+                            )}
 
                             {/* Keyboard Scanning Mode */}
                             {scanMode === 'keyboard' && (
@@ -2284,10 +2475,18 @@
                                             {isIOS() ? (
                                                 <>
                                                     <li>Use Safari instead of Chrome for better camera support</li>
-                                                    <li>Tap "Capture & Type" button when barcode is visible</li>
                                                     <li>Allow camera permissions when prompted</li>
+                                                    <li>Try refreshing page if camera doesn't start</li>
+                                                    <li>Use "Run Camera Diagnostic" button to troubleshoot</li>
                                                     <li>Use keyboard mode with handheld scanners</li>
-                                                    <li>Tap camera view to focus on iPhone</li>
+                                                </>
+                                            ) : isAndroid() ? (
+                                                <>
+                                                    <li>Allow camera permissions when prompted</li>
+                                                    <li>Try Chrome's "Desktop site" toggle if camera fails</li>
+                                                    <li>Use "Run Camera Diagnostic" button to troubleshoot</li>
+                                                    <li>Close other apps using camera</li>
+                                                    <li>Use keyboard mode with handheld scanners</li>
                                                 </>
                                             ) : (
                                                 <>
@@ -2299,11 +2498,29 @@
                                             )}
                                         </ul>
 
-                                        {/* iOS-specific browser recommendation */}
+                                        {/* HTTPS Warning */}
+                                        {!isHTTPS() && (
+                                            <div className="mt-2 p-2 bg-red-100 rounded text-red-700 text-xs">
+                                                <strong>⚠️ HTTPS Required:</strong> Camera access requires a secure connection.
+                                                <br />Please use HTTPS or keyboard mode instead.
+                                            </div>
+                                        )}
+
+                                        {/* iOS Chrome Warning */}
                                         {isIOS() && navigator.userAgent.includes('Chrome') && (
                                             <div className="mt-2 p-2 bg-orange-100 rounded text-orange-700 text-xs">
-                                                <strong>⚠️ Chrome on iOS:</strong> Camera scanning may not work properly.
-                                                <br />Try opening this page in Safari for better barcode scanning.
+                                                <strong>⚠️ Chrome on iOS:</strong> Camera may not work properly.
+                                                <br />Try Safari or use the diagnostic button above.
+                                            </div>
+                                        )}
+
+                                        {/* Android Chrome Tips */}
+                                        {isAndroid() && navigator.userAgent.includes('Chrome') && (
+                                            <div className="mt-2 p-2 bg-blue-100 rounded text-blue-700 text-xs">
+                                                <strong>💡 Android Chrome:</strong> If camera fails, try:
+                                                <br />• Refreshing the page
+                                                <br />• Clearing Chrome's cache
+                                                <br />• Using the diagnostic button above
                                             </div>
                                         )}
                                     </div>
@@ -2347,6 +2564,10 @@
             const [editingItemId, setEditingItemId] = useState(null);
             const [editFormData, setEditFormData] = useState({});
             const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+            // Delete states for inventory items
+            const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+            const [isDeletingItem, setIsDeletingItem] = useState(false);
 
             // Form states for Add New User
             const [newUserForm, setNewUserForm] = useState({
@@ -3377,6 +3598,52 @@
                     [field]: value
                 }));
             };
+
+            // Item delete functions
+            const confirmDeleteItem = (item) => {
+                // Cancel any ongoing edit
+                if (editingItemId) {
+                    cancelEditItem();
+                }
+                setDeleteConfirmItem(item);
+            };
+
+            const cancelDeleteItem = () => {
+                setDeleteConfirmItem(null);
+            };
+
+            const deleteItem = async () => {
+                if (!deleteConfirmItem || isDeletingItem) return;
+
+                setIsDeletingItem(true);
+
+                try {
+                    // Delete item from Firebase
+                    await db.collection('items').doc(deleteConfirmItem.id).delete();
+
+                    showSnackbar(`Deleted ${deleteConfirmItem.name} successfully`, 'success');
+                    cancelDeleteItem();
+                } catch (error) {
+                    console.error('Error deleting item:', error);
+                    showSnackbar('Failed to delete item', 'error');
+                } finally {
+                    setIsDeletingItem(false);
+                }
+            };
+
+            // Handle ESC key for delete dialog
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (e.key === 'Escape' && deleteConfirmItem && !isDeletingItem) {
+                        cancelDeleteItem();
+                    }
+                };
+
+                if (deleteConfirmItem) {
+                    document.addEventListener('keydown', handleKeyDown);
+                    return () => document.removeEventListener('keydown', handleKeyDown);
+                }
+            }, [deleteConfirmItem, isDeletingItem]);
 
             // Handle creating new item
             const handleCreateItem = async (e) => {
@@ -4415,6 +4682,17 @@
                                                                             >
                                                                                 <span className="material-icons text-sm">add_shopping_cart</span>
                                                                             </MaterialButton>
+
+                                                                            {/* Delete Button */}
+                                                                            <MaterialButton
+                                                                                onClick={() => confirmDeleteItem(item)}
+                                                                                variant="text"
+                                                                                color="error"
+                                                                                className="!p-2 !min-w-0"
+                                                                                title="Delete item"
+                                                                            >
+                                                                                <span className="material-icons text-sm">delete</span>
+                                                                            </MaterialButton>
                                                                         </>
                                                                     )}
                                                                 </div>
@@ -4434,6 +4712,88 @@
                                         onPageChange={handleInventoryPageChange}
                                         onItemsPerPageChange={handleInventoryItemsPerPageChange}
                                     />
+                                </MaterialCard>
+                            </div>
+                        )}
+
+                        {/* Delete Confirmation Dialog */}
+                        {deleteConfirmItem && (
+                            <div
+                                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                                onClick={(e) => e.target === e.currentTarget && cancelDeleteItem()}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') cancelDeleteItem();
+                                }}
+                                tabIndex={-1}
+                            >
+                                <MaterialCard elevation={3} className="max-w-md w-full">
+                                    <div className="p-6">
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                            <span className="material-icons mr-2 text-red-600">warning</span>
+                                            Confirm Delete
+                                        </h3>
+
+                                        <div className="mb-6">
+                                            <p className="text-gray-700 dark:text-gray-300 mb-3">
+                                                Are you sure you want to delete this item? This action cannot be undone.
+                                            </p>
+
+                                            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-medium text-gray-900 dark:text-white">
+                                                        {deleteConfirmItem.name}
+                                                    </span>
+                                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                                        deleteConfirmItem.quantity <= (deleteConfirmItem.minThreshold || 5)
+                                                            ? 'bg-red-100 text-red-700'
+                                                            : 'bg-green-100 text-green-700'
+                                                    }`}>
+                                                        Qty: {deleteConfirmItem.quantity}
+                                                    </span>
+                                                </div>
+                                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                    <div>Category: {deleteConfirmItem.category || 'Uncategorized'}</div>
+                                                    {deleteConfirmItem.asin && (
+                                                        <div>ASIN: {deleteConfirmItem.asin}</div>
+                                                    )}
+                                                    {deleteConfirmItem.price > 0 && (
+                                                        <div>Price: ${deleteConfirmItem.price}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex space-x-3">
+                                            <MaterialButton
+                                                onClick={cancelDeleteItem}
+                                                variant="outlined"
+                                                color="secondary"
+                                                disabled={isDeletingItem}
+                                                className="flex-1"
+                                            >
+                                                Cancel
+                                            </MaterialButton>
+                                            <MaterialButton
+                                                onClick={deleteItem}
+                                                variant="contained"
+                                                color="error"
+                                                disabled={isDeletingItem}
+                                                className="flex-1"
+                                            >
+                                                {isDeletingItem ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                                        Deleting...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="material-icons mr-2">delete</span>
+                                                        Delete
+                                                    </>
+                                                )}
+                                            </MaterialButton>
+                                        </div>
+                                    </div>
                                 </MaterialCard>
                             </div>
                         )}
