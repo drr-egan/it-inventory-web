@@ -3033,6 +3033,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             // Users management search state
             const [usersSearchQuery, setUsersSearchQuery] = useState('');
 
+            // Users sorting state
+            const [usersSortConfig, setUsersSortConfig] = useState({
+                field: 'name',
+                direction: 'asc'
+            });
+
             // Checkout history search state
             const [historySearchQuery, setHistorySearchQuery] = useState('');
 
@@ -3138,7 +3144,44 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     });
                 }
 
+                // Apply sorting
+                if (usersSortConfig.field) {
+                    filteredUsers.sort((a, b) => {
+                        let aValue = '';
+                        let bValue = '';
+
+                        switch (usersSortConfig.field) {
+                            case 'name':
+                                aValue = (a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim()).toLowerCase();
+                                bValue = (b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim()).toLowerCase();
+                                break;
+                            case 'costCode':
+                                aValue = (a.costCode || a.cost_code || '').toLowerCase();
+                                bValue = (b.costCode || b.cost_code || '').toLowerCase();
+                                break;
+                            case 'employeeId':
+                                aValue = (a.employeeId || a.employee_id || '').toLowerCase();
+                                bValue = (b.employeeId || b.employee_id || '').toLowerCase();
+                                break;
+                            default:
+                                return 0;
+                        }
+
+                        if (aValue < bValue) return usersSortConfig.direction === 'asc' ? -1 : 1;
+                        if (aValue > bValue) return usersSortConfig.direction === 'asc' ? 1 : -1;
+                        return 0;
+                    });
+                }
+
                 return filteredUsers;
+            };
+
+            // Handle users sorting
+            const handleSort = (field) => {
+                setUsersSortConfig(prev => ({
+                    field,
+                    direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc'
+                }));
             };
 
             const getPaginatedUsers = () => {
@@ -4095,7 +4138,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         name: `${newUserForm.firstName.trim()} ${newUserForm.lastName.trim()}`,
                         costCode: newUserForm.costCode.trim() || `${Date.now()}-5770`,
                         employeeId: newUserForm.employeeId.trim(),
-                        status: 'active',
                         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                         createdBy: auth.currentUser?.email || 'unknown'
                     };
@@ -4230,9 +4272,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             const exportUsersToCSV = async () => {
                 setCsvOperations(prev => ({ ...prev, exportingUsers: true }));
                 try {
-                    const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Employee ID,Status\n';
+                    const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Employee ID\n';
                     const csvRows = users.map(user =>
-                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.employeeId || user.employee_id || '').replace(/"/g, '""')}","${user.status || 'active'}"`
+                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.employeeId || user.employee_id || '').replace(/"/g, '""')}"`
                     ).join('\n');
 
                     const csvContent = csvHeader + csvRows;
@@ -4621,7 +4663,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                 }
 
                                 user.name = `${user.firstName} ${user.lastName}`;
-                                user.status = 'active';
 
                                 newUsers.push(user);
                             } catch (userError) {
@@ -4655,37 +4696,104 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                             const totalDuplicates = duplicateGroups.reduce((sum, group) =>
                                 sum + group.users.filter(u => u.tempId).length, 0);
 
-                            const proceed = confirm(
+                            const action = prompt(
                                 `⚠️ Duplicate Detection Results:\n\n` +
                                 `Found ${duplicateGroups.length} duplicate groups affecting ${totalDuplicates} users from CSV:\n\n` +
                                 duplicateInfo.map(info =>
                                     `• ${info.name}: ${info.csvDuplicates} CSV duplicates, ${info.existing} existing users\n` +
                                     `  Match: ${info.matchType === 'costCode' ? 'Cost Code' :
-                                             info.matchType === 'name' ? 'Full Name' : 'Email'}\n` +
+                                             info.matchType === 'name' ? 'Full Name' : 'Employee ID'}\n` +
                                     `  Cost Codes: ${info.costCodes.join(', ')}`
                                 ).join('\n\n') +
                                 `\n\nOptions:\n` +
-                                `✅ OK = Skip duplicates, import only new users (${newUsers.length - totalDuplicates} users)\n` +
-                                `❌ Cancel = Review CSV file and remove duplicates manually\n\n` +
-                                `Continue with import?`
+                                `1 = UPDATE existing users with CSV data (recommended for adding missing Employee IDs)\n` +
+                                `2 = SKIP duplicates, import only new users (${newUsers.length - totalDuplicates} users)\n` +
+                                `3 = CANCEL and review CSV file manually\n\n` +
+                                `Enter your choice (1, 2, or 3):`
                             );
 
-                            if (!proceed) {
+                            if (action === '3' || action === null) {
                                 showSnackbar('Import cancelled. Please review CSV for duplicates.', 'info');
                                 return;
                             }
 
-                            // Filter out duplicates
-                            const duplicateIds = new Set();
-                            duplicateGroups.forEach(group => {
-                                group.users.filter(u => u.tempId).forEach(u => duplicateIds.add(u.tempId));
-                            });
+                            if (action === '1') {
+                                // UPDATE existing users with CSV data
+                                showSnackbar(`Updating ${totalDuplicates} existing users with CSV data...`, 'info');
 
-                            const usersToImport = newUsers.filter(user => !duplicateIds.has(user.tempId));
-                            showSnackbar(`Skipping ${totalDuplicates} duplicates. Importing ${usersToImport.length} unique users...`, 'info');
+                                let updatedCount = 0;
+                                let errorCount = 0;
 
-                            newUsers.length = 0; // Clear original array
-                            newUsers.push(...usersToImport); // Replace with filtered users
+                                for (const group of duplicateGroups) {
+                                    const existingUsers = group.users.filter(u => u.id);
+                                    const csvUsers = group.users.filter(u => u.tempId);
+
+                                    for (const csvUser of csvUsers) {
+                                        try {
+                                            // Find the matching existing user (first match)
+                                            const existingUser = existingUsers[0];
+                                            if (existingUser) {
+                                                // Prepare update data - only update fields that have values in CSV
+                                                const updateData = {
+                                                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                                                    updatedBy: auth.currentUser?.email || 'csv-import'
+                                                };
+
+                                                // Update fields only if CSV has values
+                                                if (csvUser.firstName && csvUser.firstName.trim()) {
+                                                    updateData.firstName = csvUser.firstName.trim();
+                                                }
+                                                if (csvUser.lastName && csvUser.lastName.trim()) {
+                                                    updateData.lastName = csvUser.lastName.trim();
+                                                }
+                                                if (csvUser.firstName && csvUser.lastName) {
+                                                    updateData.name = `${csvUser.firstName.trim()} ${csvUser.lastName.trim()}`;
+                                                }
+                                                if (csvUser.costCode && csvUser.costCode.trim()) {
+                                                    updateData.costCode = csvUser.costCode.trim();
+                                                }
+                                                if (csvUser.employeeId && csvUser.employeeId.trim()) {
+                                                    updateData.employeeId = csvUser.employeeId.trim();
+                                                }
+
+                                                await db.collection('users').doc(existingUser.id).update(updateData);
+                                                updatedCount++;
+                                            }
+                                        } catch (error) {
+                                            console.error('Error updating user:', error);
+                                            errorCount++;
+                                        }
+                                    }
+                                }
+
+                                // Filter out users that were updated (remove from import list)
+                                const duplicateIds = new Set();
+                                duplicateGroups.forEach(group => {
+                                    group.users.filter(u => u.tempId).forEach(u => duplicateIds.add(u.tempId));
+                                });
+
+                                const usersToImport = newUsers.filter(user => !duplicateIds.has(user.tempId));
+                                newUsers.length = 0; // Clear original array
+                                newUsers.push(...usersToImport); // Replace with filtered users
+
+                                showSnackbar(`Updated ${updatedCount} existing users${errorCount > 0 ? `, ${errorCount} errors` : ''}. Importing ${usersToImport.length} new users...`, 'success');
+
+                            } else if (action === '2') {
+                                // SKIP duplicates (original behavior)
+                                const duplicateIds = new Set();
+                                duplicateGroups.forEach(group => {
+                                    group.users.filter(u => u.tempId).forEach(u => duplicateIds.add(u.tempId));
+                                });
+
+                                const usersToImport = newUsers.filter(user => !duplicateIds.has(user.tempId));
+                                showSnackbar(`Skipping ${totalDuplicates} duplicates. Importing ${usersToImport.length} unique users...`, 'info');
+
+                                newUsers.length = 0; // Clear original array
+                                newUsers.push(...usersToImport); // Replace with filtered users
+                            } else {
+                                showSnackbar('Invalid choice. Import cancelled.', 'error');
+                                return;
+                            }
                         }
 
                         // Import users (no duplicates at this point)
@@ -4938,7 +5046,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         costCode: keepUser.costCode || otherUsers.find(u => u.costCode)?.costCode || '',
                         employeeId: keepUser.employeeId || keepUser.employee_id || otherUsers.find(u => u.employeeId || u.employee_id)?.employeeId || otherUsers.find(u => u.employeeId || u.employee_id)?.employee_id || '',
                         // Merge any other fields
-                        status: keepUser.status || 'active',
                         mergedFrom: otherUsers.map(u => u.id),
                         mergedAt: firebase.firestore.FieldValue.serverTimestamp(),
                         mergedBy: auth.currentUser?.email || 'system'
@@ -5735,25 +5842,42 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         <table className="min-w-full">
                                             <thead className="bg-gray-50 dark:bg-gray-700">
                                                 <tr>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                                        onClick={() => handleSort('name')}>
                                                         <div className="flex items-center">
                                                             <span className="material-icons mr-1 text-sm">person</span>
                                                             Name
+                                                            {usersSortConfig.field === 'name' && (
+                                                                <span className="material-icons text-sm ml-1">
+                                                                    {usersSortConfig.direction === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                                        onClick={() => handleSort('costCode')}>
                                                         <div className="flex items-center">
                                                             <span className="material-icons mr-1 text-sm">business</span>
                                                             Cost Code
+                                                            {usersSortConfig.field === 'costCode' && (
+                                                                <span className="material-icons text-sm ml-1">
+                                                                    {usersSortConfig.direction === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                                        onClick={() => handleSort('employeeId')}>
                                                         <div className="flex items-center">
                                                             <span className="material-icons mr-1 text-sm">badge</span>
                                                             Employee ID
+                                                            {usersSortConfig.field === 'employeeId' && (
+                                                                <span className="material-icons text-sm ml-1">
+                                                                    {usersSortConfig.direction === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                                                 </tr>
                                             </thead>
@@ -5774,12 +5898,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             <code className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                                                                 {user.employeeId || user.employee_id || 'N/A'}
                                                             </code>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300">
-                                                                <span className="material-icons mr-1 text-xs">check_circle</span>
-                                                                Active
-                                                            </div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <MaterialButton
@@ -6241,6 +6359,70 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                 <p className="font-medium mb-1">💡 How it works:</p>
                                                 <p><strong>Detection:</strong> Finds items with identical names or ASINs</p>
                                                 <p><strong>Merging:</strong> Combines quantities, preserves highest price, keeps most recent category</p>
+                                                <p><strong>Safety:</strong> Preview all changes before applying them</p>
+                                            </div>
+                                        </div>
+                                    </MaterialCard>
+
+                                    {/* User Duplicate Cleanup */}
+                                    <MaterialCard elevation={2}>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                            <span className="material-icons mr-2 text-purple-600">people</span>
+                                            User Duplicate Cleanup
+                                        </h3>
+                                        <div className="space-y-4">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                Scan user database for duplicate users and merge them to clean up your database.
+                                            </p>
+                                            <MaterialButton
+                                                onClick={async () => {
+                                                    setUserDuplicateDialog(prev => ({ ...prev, scanning: true }));
+                                                    try {
+                                                        const duplicateGroups = await findExistingUserDuplicates();
+                                                        if (duplicateGroups.length === 0) {
+                                                            showSnackbar('No duplicate users found in database!', 'success');
+                                                        } else {
+                                                            const initialChoices = {};
+                                                            duplicateGroups.forEach(group => {
+                                                                initialChoices[group.name] = {
+                                                                    keepUserId: group.users[0].id,
+                                                                    deleteUserIds: group.users.slice(1).map(user => user.id)
+                                                                };
+                                                            });
+                                                            setUserDuplicateDialog({
+                                                                open: true,
+                                                                duplicates: duplicateGroups,
+                                                                choices: initialChoices,
+                                                                scanning: false
+                                                            });
+                                                        }
+                                                    } catch (error) {
+                                                        showSnackbar(`Error scanning for user duplicates: ${error.message}`, 'error');
+                                                    } finally {
+                                                        setUserDuplicateDialog(prev => ({ ...prev, scanning: false }));
+                                                    }
+                                                }}
+                                                variant="outlined"
+                                                color="secondary"
+                                                className="w-full"
+                                                disabled={userDuplicateDialog.scanning}
+                                            >
+                                                {userDuplicateDialog.scanning ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full mr-2"></div>
+                                                        Scanning for User Duplicates...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="material-icons mr-2">person_search</span>
+                                                        Scan & Clean User Duplicates
+                                                    </>
+                                                )}
+                                            </MaterialButton>
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                                                <p className="font-medium mb-1">💡 How it works:</p>
+                                                <p><strong>Detection:</strong> Finds users with matching cost codes, names, or employee IDs</p>
+                                                <p><strong>Merging:</strong> Combines user data and removes duplicates</p>
                                                 <p><strong>Safety:</strong> Preview all changes before applying them</p>
                                             </div>
                                         </div>
@@ -7529,8 +7711,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                 </div>
                                                                 <div className="text-sm text-gray-600 dark:text-gray-400">
                                                                     Cost Code: {user.costCode || 'None'} |
-                                                                    Employee ID: {user.employeeId || user.employee_id || 'N/A'} |
-                                                                    Status: {user.status || 'active'}
+                                                                    Employee ID: {user.employeeId || user.employee_id || 'N/A'}
                                                                 </div>
                                                                 <div className="text-xs text-gray-500 dark:text-gray-500">
                                                                     Created: {user.createdAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
