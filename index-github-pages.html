@@ -2947,7 +2947,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 firstName: '',
                 lastName: '',
                 costCode: '',
-                department: ''
+                employeeId: ''
             });
 
             // Edit User Modal
@@ -2956,7 +2956,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 firstName: '',
                 lastName: '',
                 costCode: '',
-                department: ''
+                employeeId: ''
             });
             const [isCreatingUser, setIsCreatingUser] = useState(false);
             const [isUpdatingUser, setIsUpdatingUser] = useState(false);
@@ -3129,12 +3129,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     filteredUsers = users.filter(user => {
                         const name = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
                         const costCode = user.costCode || user.cost_code || '';
-                        const department = costCode.split('-')[0] || '';
+                        const employeeId = user.employeeId || user.employee_id || '';
 
                         const searchTerm = usersSearchQuery.toLowerCase();
                         return name.toLowerCase().includes(searchTerm) ||
                                costCode.toLowerCase().includes(searchTerm) ||
-                               department.toLowerCase().includes(searchTerm);
+                               employeeId.toLowerCase().includes(searchTerm);
                     });
                 }
 
@@ -4094,7 +4094,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         lastName: newUserForm.lastName.trim(),
                         name: `${newUserForm.firstName.trim()} ${newUserForm.lastName.trim()}`,
                         costCode: newUserForm.costCode.trim() || `${Date.now()}-5770`,
-                        department: newUserForm.department.trim(),
+                        employeeId: newUserForm.employeeId.trim(),
                         status: 'active',
                         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                         createdBy: auth.currentUser?.email || 'unknown'
@@ -4107,7 +4107,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         firstName: '',
                         lastName: '',
                         costCode: '',
-                        department: ''
+                        employeeId: ''
                     });
 
                     showSnackbar(`User "${userData.name}" created successfully!`, 'success');
@@ -4126,7 +4126,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         firstName: editingUser.firstName || '',
                         lastName: editingUser.lastName || '',
                         costCode: editingUser.costCode || editingUser.cost_code || '',
-                        department: editingUser.department || (editingUser.costCode || editingUser.cost_code || '').split('-')[0] || ''
+                        employeeId: editingUser.employeeId || editingUser.employee_id || ''
                     });
                 }
             }, [editingUser]);
@@ -4174,7 +4174,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         lastName: editUserForm.lastName.trim(),
                         name: `${editUserForm.firstName.trim()} ${editUserForm.lastName.trim()}`,
                         costCode: editUserForm.costCode.trim() || `${Date.now()}-5770`,
-                        department: editUserForm.department.trim(),
+                        employeeId: editUserForm.employeeId.trim(),
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                         updatedBy: user?.email || 'anonymous'
                     };
@@ -4230,9 +4230,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             const exportUsersToCSV = async () => {
                 setCsvOperations(prev => ({ ...prev, exportingUsers: true }));
                 try {
-                    const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Department,Status\n';
+                    const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Employee ID,Status\n';
                     const csvRows = users.map(user =>
-                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.department || '').replace(/"/g, '""')}","${user.status || 'active'}"`
+                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.employeeId || user.employee_id || '').replace(/"/g, '""')}","${user.status || 'active'}"`
                     ).join('\n');
 
                     const csvContent = csvHeader + csvRows;
@@ -4607,23 +4607,21 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         case 'costcode':
                                             user.costCode = values[index];
                                             break;
-                                        case 'department':
-                                            user.department = values[index];
-                                            break;
-                                        case 'email':
-                                            user.email = values[index];
+                                        case 'employee id':
+                                        case 'employeeid':
+                                        case 'employee_id':
+                                            user.employeeId = values[index];
                                             break;
                                     }
                                 });
 
-                                if (!user.firstName || !user.lastName) {
+                                if (!user.firstName || !user.lastName || !user.costCode) {
                                     parseErrorCount++;
                                     continue;
                                 }
 
                                 user.name = `${user.firstName} ${user.lastName}`;
                                 user.status = 'active';
-                                user.costCode = user.costCode || `${Date.now()}-${Math.floor(Math.random() * 1000)}-5770`;
 
                                 newUsers.push(user);
                             } catch (userError) {
@@ -4938,7 +4936,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         email: keepUser.email || otherUsers.find(u => u.email)?.email || '',
                         // Prefer most complete cost code
                         costCode: keepUser.costCode || otherUsers.find(u => u.costCode)?.costCode || '',
-                        department: keepUser.department || otherUsers.find(u => u.department)?.department || '',
+                        employeeId: keepUser.employeeId || keepUser.employee_id || otherUsers.find(u => u.employeeId || u.employee_id)?.employeeId || otherUsers.find(u => u.employeeId || u.employee_id)?.employee_id || '',
                         // Merge any other fields
                         status: keepUser.status || 'active',
                         mergedFrom: otherUsers.map(u => u.id),
@@ -5717,7 +5715,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         <div className="relative">
                                             <input
                                                 type="text"
-                                                placeholder="Search users by name, cost code, or department..."
+                                                placeholder="Search users by name, cost code, or employee ID..."
                                                 value={usersSearchQuery}
                                                 onChange={(e) => setUsersSearchQuery(e.target.value)}
                                                 className="w-full px-4 py-3 pl-12 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
@@ -5745,14 +5743,14 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                     </th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                                         <div className="flex items-center">
-                                                            <span className="material-icons mr-1 text-sm">badge</span>
+                                                            <span className="material-icons mr-1 text-sm">business</span>
                                                             Cost Code
                                                         </div>
                                                     </th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                                         <div className="flex items-center">
-                                                            <span className="material-icons mr-1 text-sm">business</span>
-                                                            Department
+                                                            <span className="material-icons mr-1 text-sm">badge</span>
+                                                            Employee ID
                                                         </div>
                                                     </th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
@@ -5772,8 +5770,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                 {user.costCode || user.cost_code}
                                                             </code>
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                                                            {(user.costCode || user.cost_code || '').split('-')[0] || 'Unknown'}
+                                                        <td className="px-6 py-4">
+                                                            <code className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                                                                {user.employeeId || user.employee_id || 'N/A'}
+                                                            </code>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300">
@@ -5980,10 +5980,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                 placeholder="e.g., 1-10-100-5770 (auto-generated if empty)"
                                             />
                                             <MaterialInput
-                                                label="Department"
-                                                value={newUserForm.department}
-                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, department: e.target.value }))}
-                                                placeholder="e.g., IT, Finance, Operations"
+                                                label="Employee ID"
+                                                value={newUserForm.employeeId}
+                                                onChange={(e) => setNewUserForm(prev => ({ ...prev, employeeId: e.target.value }))}
+                                                placeholder="e.g., EMP001, 12345"
                                             />
                                             <MaterialButton
                                                 type="submit"
@@ -6121,7 +6121,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                             <div className="text-xs text-gray-600 dark:text-gray-400 mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                                                 <p className="font-medium mb-1">📋 CSV Format Tips:</p>
                                                 <p><strong>Items:</strong> Item Name, Category, Quantity, Price, ASIN, Min Threshold</p>
-                                                <p><strong>Users:</strong> First Name, Last Name, Cost Code, Email, Department</p>
+                                                <p><strong>Users:</strong> First Name, Last Name, Cost Code, Employee ID</p>
                                             </div>
                                         </div>
                                     </MaterialCard>
@@ -7291,10 +7291,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                 placeholder="e.g., 1-10-100-5770"
                                             />
                                             <MaterialInput
-                                                label="Department"
-                                                value={editUserForm.department}
-                                                onChange={(e) => setEditUserForm(prev => ({ ...prev, department: e.target.value }))}
-                                                placeholder="e.g., IT, Finance, Operations"
+                                                label="Employee ID"
+                                                value={editUserForm.employeeId}
+                                                onChange={(e) => setEditUserForm(prev => ({ ...prev, employeeId: e.target.value }))}
+                                                placeholder="e.g., EMP001, 12345"
                                             />
                                         </div>
                                     </div>
@@ -7529,8 +7529,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                 </div>
                                                                 <div className="text-sm text-gray-600 dark:text-gray-400">
                                                                     Cost Code: {user.costCode || 'None'} |
-                                                                    Department: {user.department || 'Unknown'} |
-                                                                    {user.email && ` Email: ${user.email} |`}
+                                                                    Employee ID: {user.employeeId || user.employee_id || 'N/A'} |
                                                                     Status: {user.status || 'active'}
                                                                 </div>
                                                                 <div className="text-xs text-gray-500 dark:text-gray-500">
