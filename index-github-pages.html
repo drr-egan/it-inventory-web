@@ -1685,6 +1685,12 @@
             const [shopSearchQuery, setShopSearchQuery] = useState('');
             const [userSearchQuery, setUserSearchQuery] = useState('');
 
+            // Users management search state
+            const [usersSearchQuery, setUsersSearchQuery] = useState('');
+
+            // Checkout history search state
+            const [historySearchQuery, setHistorySearchQuery] = useState('');
+
             // Pagination handlers
             const handleInventoryPageChange = (page) => {
                 setInventoryPagination(prev => ({ ...prev, currentPage: page }));
@@ -1741,17 +1747,59 @@
                 return filteredItems.slice(startIndex, endIndex);
             };
 
+            const getFilteredUsers = () => {
+                let filteredUsers = users;
+
+                // Apply search filter if search query exists
+                if (usersSearchQuery.trim()) {
+                    filteredUsers = users.filter(user => {
+                        const name = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
+                        const costCode = user.costCode || user.cost_code || '';
+                        const department = costCode.split('-')[0] || '';
+
+                        const searchTerm = usersSearchQuery.toLowerCase();
+                        return name.toLowerCase().includes(searchTerm) ||
+                               costCode.toLowerCase().includes(searchTerm) ||
+                               department.toLowerCase().includes(searchTerm);
+                    });
+                }
+
+                return filteredUsers;
+            };
+
             const getPaginatedUsers = () => {
+                const filteredUsers = getFilteredUsers();
                 const startIndex = (usersPagination.currentPage - 1) * usersPagination.itemsPerPage;
                 const endIndex = startIndex + usersPagination.itemsPerPage;
-                return users.slice(startIndex, endIndex);
+                return filteredUsers.slice(startIndex, endIndex);
+            };
+
+            const getFilteredCheckoutHistory = () => {
+                const dataSource = checkoutViewMode === 'archive' ? archivedCheckouts : checkoutHistory;
+
+                if (!historySearchQuery.trim()) {
+                    return dataSource;
+                }
+
+                const searchTerm = historySearchQuery.toLowerCase();
+                return dataSource.filter(record => {
+                    const itemName = (record.itemName || '').toLowerCase();
+                    const userName = (record.userName || '').toLowerCase();
+                    const departmentId = (record.departmentId || '').toLowerCase();
+                    const jobNum = (record.jobNum || '').toLowerCase();
+
+                    return itemName.includes(searchTerm) ||
+                           userName.includes(searchTerm) ||
+                           departmentId.includes(searchTerm) ||
+                           jobNum.includes(searchTerm);
+                });
             };
 
             const getPaginatedCheckoutHistory = () => {
-                const dataSource = checkoutViewMode === 'archive' ? archivedCheckouts : checkoutHistory;
+                const filteredData = getFilteredCheckoutHistory();
                 const startIndex = (checkoutPagination.currentPage - 1) * checkoutPagination.itemsPerPage;
                 const endIndex = startIndex + checkoutPagination.itemsPerPage;
-                return dataSource.slice(startIndex, endIndex);
+                return filteredData.slice(startIndex, endIndex);
             };
 
             // Process Shipment PDF handling
@@ -2601,13 +2649,22 @@
             }, [items]);
 
             useEffect(() => {
-                setUsersPagination(prev => ({ ...prev, totalItems: users.length }));
-            }, [users]);
+                const filteredUsers = getFilteredUsers();
+                setUsersPagination(prev => ({
+                    ...prev,
+                    totalItems: filteredUsers.length,
+                    currentPage: 1 // Reset to first page when search changes
+                }));
+            }, [users, usersSearchQuery]);
 
             useEffect(() => {
-                const dataSource = checkoutViewMode === 'archive' ? archivedCheckouts : checkoutHistory;
-                setCheckoutPagination(prev => ({ ...prev, totalItems: dataSource.length, currentPage: 1 }));
-            }, [checkoutHistory, archivedCheckouts, checkoutViewMode]);
+                const filteredData = getFilteredCheckoutHistory();
+                setCheckoutPagination(prev => ({
+                    ...prev,
+                    totalItems: filteredData.length,
+                    currentPage: 1 // Reset to first page when data or search changes
+                }));
+            }, [checkoutHistory, archivedCheckouts, checkoutViewMode, historySearchQuery]);
 
             // Handle Edit User
             const handleUpdateUser = async (e) => {
@@ -3390,6 +3447,28 @@
                                         <p className="text-sm text-gray-600 dark:text-gray-400">
                                             Manage user accounts with pagination for better performance
                                         </p>
+                                    </div>
+
+                                    {/* Search Users */}
+                                    <div className="mb-6">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Search users by name, cost code, or department..."
+                                                value={usersSearchQuery}
+                                                onChange={(e) => setUsersSearchQuery(e.target.value)}
+                                                className="w-full px-4 py-3 pl-12 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                                            />
+                                            <span className="material-icons absolute left-4 top-3.5 text-gray-400">search</span>
+                                            {usersSearchQuery && (
+                                                <button
+                                                    onClick={() => setUsersSearchQuery('')}
+                                                    className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                                >
+                                                    <span className="material-icons text-sm">clear</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full">
@@ -4193,6 +4272,28 @@
                                                 : 'View current checkout history with pagination for better performance'
                                             }
                                         </p>
+                                    </div>
+
+                                    {/* Search History */}
+                                    <div className="mb-6">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Search history by item, user, department, or job number..."
+                                                value={historySearchQuery}
+                                                onChange={(e) => setHistorySearchQuery(e.target.value)}
+                                                className="w-full px-4 py-3 pl-12 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                                            />
+                                            <span className="material-icons absolute left-4 top-3.5 text-gray-400">search</span>
+                                            {historySearchQuery && (
+                                                <button
+                                                    onClick={() => setHistorySearchQuery('')}
+                                                    className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                                >
+                                                    <span className="material-icons text-sm">clear</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full">
