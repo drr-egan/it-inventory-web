@@ -599,6 +599,126 @@
             }
         }
 
+        /* Enhanced mobile optimizations for barcode scanner */
+        @media (max-width: 768px) {
+            /* Large touch targets for mobile */
+            .mat-button {
+                min-height: 44px;
+                padding: 12px 24px;
+                font-size: 16px;
+            }
+
+            /* Camera video full-width on mobile */
+            video {
+                width: 100% !important;
+                height: auto !important;
+                max-height: 60vh;
+            }
+
+            /* Prevent zoom when focusing inputs */
+            input[type="text"],
+            input[type="number"],
+            select,
+            textarea {
+                font-size: 16px !important;
+            }
+
+            /* Scanner feedback messages larger on mobile */
+            .scanner-feedback {
+                font-size: 16px;
+                padding: 16px;
+                text-align: center;
+            }
+
+            /* Scan history optimized for mobile */
+            .scan-history-item {
+                padding: 12px;
+                font-size: 14px;
+            }
+        }
+
+        /* Touch-specific optimizations */
+        @media (pointer: coarse) {
+            /* Larger touch targets for touch devices */
+            .mat-button,
+            button {
+                min-height: 48px;
+                min-width: 48px;
+                padding: 12px 16px;
+            }
+
+            /* Increase spacing for better touch targets */
+            .space-x-2 > * + * {
+                margin-left: 12px;
+            }
+
+            .space-y-2 > * + * {
+                margin-top: 12px;
+            }
+        }
+
+        /* Mobile scanner specific styles */
+        .mobile-scanner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Camera focus frame animation */
+        @keyframes scanner-pulse {
+            0% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { opacity: 0.6; transform: scale(1); }
+        }
+
+        .scanner-frame {
+            animation: scanner-pulse 2s infinite;
+        }
+
+        /* Vibration and feedback animations */
+        @keyframes scan-success {
+            0% { background-color: rgba(34, 197, 94, 0.1); }
+            50% { background-color: rgba(34, 197, 94, 0.3); }
+            100% { background-color: rgba(34, 197, 94, 0.1); }
+        }
+
+        @keyframes scan-error {
+            0% { background-color: rgba(239, 68, 68, 0.1); }
+            50% { background-color: rgba(239, 68, 68, 0.3); }
+            100% { background-color: rgba(239, 68, 68, 0.1); }
+        }
+
+        .scan-success-animation {
+            animation: scan-success 0.5s ease-in-out;
+        }
+
+        .scan-error-animation {
+            animation: scan-error 0.5s ease-in-out;
+        }
+
+        /* PWA-specific optimizations */
+        @media (display-mode: standalone) {
+            /* App is running as PWA */
+            body {
+                padding-top: env(safe-area-inset-top);
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+
+            /* Account for notches and safe areas */
+            .mat-card {
+                margin-left: env(safe-area-inset-left);
+                margin-right: env(safe-area-inset-right);
+            }
+        }
+
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
@@ -1514,34 +1634,223 @@
             );
         };
 
-        // Material Barcode Scanner Component
+        // Enhanced Mobile-Optimized Barcode Scanner Component
         const MaterialBarcodeScanner = ({ items, onItemScanned }) => {
             const [scanInput, setScanInput] = useState('');
-            const [isExpanded, setIsExpanded] = useState(false);
-            const inputRef = useRef(null);
+            const [isExpanded, setIsExpanded] = useState(true); // Default expanded for better UX
+            const [scanMode, setScanMode] = useState('keyboard'); // 'keyboard' or 'camera'
+            const [cameraStream, setCameraStream] = useState(null);
+            const [scanHistory, setScanHistory] = useState([]);
+            const [scanFeedback, setScanFeedback] = useState('');
+            const [isScanning, setIsScanning] = useState(false);
+            const [flashlightOn, setFlashlightOn] = useState(false);
 
-            const handleScan = (input) => {
+            const inputRef = useRef(null);
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const detectionIntervalRef = useRef(null);
+
+            // Mobile vibration feedback
+            const vibrate = (pattern = [100]) => {
+                if (navigator.vibrate && 'ontouchstart' in window) {
+                    navigator.vibrate(pattern);
+                }
+            };
+
+            // Audio feedback for scans
+            const playBeep = (success = true) => {
+                try {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+
+                    oscillator.frequency.setValueAtTime(success ? 800 : 400, audioContext.currentTime);
+                    oscillator.type = 'square';
+
+                    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.1);
+                } catch (error) {
+                    console.log('Audio feedback not available');
+                }
+            };
+
+            const handleScan = async (input, fromCamera = false) => {
                 if (!input.trim()) return;
 
-                // Try to find item by name or ASIN
+                setIsScanning(true);
+
+                // Try to find item by name, ASIN, or exact barcode match
                 const foundItem = items.find(item =>
                     item.name.toLowerCase().includes(input.toLowerCase()) ||
-                    (item.asin && item.asin.toLowerCase() === input.toLowerCase())
+                    (item.asin && item.asin.toLowerCase() === input.toLowerCase()) ||
+                    (item.barcode && item.barcode === input) ||
+                    item.id === input
                 );
 
                 if (foundItem && onItemScanned) {
+                    // Add to scan history
+                    const scanRecord = {
+                        id: Date.now().toString(),
+                        itemName: foundItem.name,
+                        timestamp: new Date(),
+                        method: fromCamera ? 'camera' : 'keyboard'
+                    };
+                    setScanHistory(prev => [scanRecord, ...prev.slice(0, 4)]); // Keep last 5 scans
+
+                    // Success feedback
+                    setScanFeedback(`✅ Added ${foundItem.name} to cart`);
+                    playBeep(true);
+                    vibrate([100]);
+
+                    // Call the callback to add to cart
                     onItemScanned(foundItem, 1);
                     setScanInput('');
+
+                    // Clear feedback after 3 seconds
+                    setTimeout(() => setScanFeedback(''), 3000);
                 } else {
-                    console.log('Item not found:', input);
+                    // Error feedback
+                    setScanFeedback(`❌ Item not found: ${input}`);
+                    playBeep(false);
+                    vibrate([200, 100, 200]); // Error vibration pattern
+
+                    setTimeout(() => setScanFeedback(''), 3000);
+                }
+
+                setIsScanning(false);
+
+                // Keep focus on input for rapid scanning
+                if (!fromCamera && inputRef.current) {
+                    setTimeout(() => inputRef.current?.focus(), 100);
                 }
             };
 
             const handleKeyPress = (e) => {
                 if (e.key === 'Enter') {
+                    e.preventDefault();
                     handleScan(scanInput);
                 }
             };
+
+            // Camera scanning functionality
+            const startCameraScanning = async () => {
+                try {
+                    const constraints = {
+                        video: {
+                            facingMode: 'environment', // Use back camera
+                            width: { ideal: 1280, max: 1920 },
+                            height: { ideal: 720, max: 1080 },
+                            focusMode: 'auto'
+                        }
+                    };
+
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    setCameraStream(stream);
+                    setScanMode('camera');
+                    setScanFeedback('📷 Camera active - Point at barcode');
+
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        videoRef.current.play();
+
+                        // Start barcode detection when video is ready
+                        videoRef.current.onloadedmetadata = () => {
+                            startBarcodeDetection();
+                        };
+                    }
+                } catch (error) {
+                    setScanFeedback('❌ Camera access denied or not available');
+                    console.error('Camera error:', error);
+                }
+            };
+
+            const stopCameraScanning = () => {
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => {
+                        track.stop();
+                    });
+                    setCameraStream(null);
+                    setScanMode('keyboard');
+                    setScanFeedback('');
+                    setFlashlightOn(false);
+                }
+
+                if (detectionIntervalRef.current) {
+                    clearInterval(detectionIntervalRef.current);
+                }
+            };
+
+            // Toggle flashlight (torch)
+            const toggleFlashlight = async () => {
+                if (cameraStream) {
+                    const videoTrack = cameraStream.getVideoTracks()[0];
+                    if (videoTrack && 'torch' in videoTrack.getCapabilities()) {
+                        try {
+                            await videoTrack.applyConstraints({
+                                advanced: [{ torch: !flashlightOn }]
+                            });
+                            setFlashlightOn(!flashlightOn);
+                        } catch (error) {
+                            console.log('Flashlight not supported');
+                        }
+                    }
+                }
+            };
+
+            // Barcode detection using modern APIs
+            const startBarcodeDetection = () => {
+                if (!videoRef.current || !canvasRef.current) return;
+
+                const detectBarcodes = async () => {
+                    const video = videoRef.current;
+                    const canvas = canvasRef.current;
+
+                    if (video.readyState === 4) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0);
+
+                        // Use BarcodeDetector API if available (Chrome/Edge)
+                        if ('BarcodeDetector' in window) {
+                            try {
+                                const detector = new BarcodeDetector();
+                                const barcodes = await detector.detect(canvas);
+
+                                if (barcodes.length > 0 && !isScanning) {
+                                    const barcode = barcodes[0];
+                                    await handleScan(barcode.rawValue, true);
+                                }
+                            } catch (error) {
+                                console.log('Barcode detection failed:', error);
+                            }
+                        }
+                    }
+                };
+
+                // Check for barcodes every 500ms to balance performance and responsiveness
+                detectionIntervalRef.current = setInterval(detectBarcodes, 500);
+            };
+
+            // Clean up camera on unmount
+            useEffect(() => {
+                return () => {
+                    stopCameraScanning();
+                };
+            }, []);
+
+            // Auto-focus input when in keyboard mode
+            useEffect(() => {
+                if (scanMode === 'keyboard' && inputRef.current && isExpanded) {
+                    inputRef.current.focus();
+                }
+            }, [scanMode, isExpanded]);
 
             return (
                 <MaterialCard elevation={2}>
@@ -1549,6 +1858,11 @@
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
                             <span className="material-icons mr-2 text-blue-600">qr_code_scanner</span>
                             Barcode Scanner
+                            {scanHistory.length > 0 && (
+                                <span className="ml-2 bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                                    {scanHistory.length} scanned
+                                </span>
+                            )}
                         </h3>
                         <MaterialButton
                             variant="outlined"
@@ -1560,30 +1874,187 @@
                         </MaterialButton>
                     </div>
 
+                    {/* Feedback Display */}
+                    {scanFeedback && (
+                        <div className={`mb-4 p-3 rounded-lg border-l-4 ${
+                            scanFeedback.includes('✅')
+                                ? 'bg-green-50 border-green-400 text-green-700'
+                                : 'bg-red-50 border-red-400 text-red-700'
+                        }`}>
+                            <div className="flex items-center">
+                                <span className="font-medium">{scanFeedback}</span>
+                                {isScanning && (
+                                    <span className="ml-2 material-icons animate-spin text-sm">refresh</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {isExpanded && (
                         <div className="space-y-4">
-                            <div className="mat-input">
-                                <input
-                                    ref={inputRef}
-                                    type="text"
-                                    value={scanInput}
-                                    onChange={(e) => setScanInput(e.target.value)}
-                                    onKeyPress={handleKeyPress}
-                                    placeholder="Scan barcode or type item name"
-                                    className="w-full"
-                                />
-                                <label>Scan Input</label>
+                            {/* Scanning Mode Toggle */}
+                            <div className="flex space-x-2 mb-4">
+                                <MaterialButton
+                                    variant={scanMode === 'keyboard' ? 'contained' : 'outlined'}
+                                    color="primary"
+                                    onClick={() => {
+                                        if (scanMode === 'camera') stopCameraScanning();
+                                        setScanMode('keyboard');
+                                    }}
+                                    className="flex-1"
+                                >
+                                    <span className="material-icons mr-2">keyboard</span>
+                                    <span className="hidden sm:inline">Keyboard</span>
+                                    <span className="sm:hidden">Key</span>
+                                </MaterialButton>
+                                <MaterialButton
+                                    variant={scanMode === 'camera' ? 'contained' : 'outlined'}
+                                    color="primary"
+                                    onClick={() => {
+                                        if (scanMode === 'camera') {
+                                            stopCameraScanning();
+                                        } else {
+                                            startCameraScanning();
+                                        }
+                                    }}
+                                    className="flex-1"
+                                >
+                                    <span className="material-icons mr-2">
+                                        {scanMode === 'camera' ? 'videocam_off' : 'videocam'}
+                                    </span>
+                                    <span className="hidden sm:inline">
+                                        {scanMode === 'camera' ? 'Stop Camera' : 'Camera'}
+                                    </span>
+                                    <span className="sm:hidden">
+                                        {scanMode === 'camera' ? 'Stop' : 'Cam'}
+                                    </span>
+                                </MaterialButton>
                             </div>
-                            <MaterialButton
-                                variant="contained"
-                                color="primary"
-                                onClick={() => handleScan(scanInput)}
-                                disabled={!scanInput.trim()}
-                                className="w-full"
-                            >
-                                <span className="material-icons mr-2">search</span>
-                                Find Item
-                            </MaterialButton>
+
+                            {/* Keyboard Scanning Mode */}
+                            {scanMode === 'keyboard' && (
+                                <div className="space-y-3">
+                                    <div className="mat-input">
+                                        <input
+                                            ref={inputRef}
+                                            type="text"
+                                            value={scanInput}
+                                            onChange={(e) => setScanInput(e.target.value)}
+                                            onKeyPress={handleKeyPress}
+                                            placeholder="Scan barcode or type item name"
+                                            className="w-full text-lg"
+                                            disabled={isScanning}
+                                            autoComplete="off"
+                                            autoCorrect="off"
+                                            autoCapitalize="off"
+                                            spellCheck="false"
+                                        />
+                                        <label>Scan Input</label>
+                                    </div>
+                                    <MaterialButton
+                                        variant="contained"
+                                        color="primary"
+                                        onClick={() => handleScan(scanInput)}
+                                        disabled={!scanInput.trim() || isScanning}
+                                        className="w-full py-3"
+                                    >
+                                        <span className="material-icons mr-2">
+                                            {isScanning ? 'hourglass_empty' : 'search'}
+                                        </span>
+                                        {isScanning ? 'Scanning...' : 'Find & Add to Cart'}
+                                    </MaterialButton>
+                                </div>
+                            )}
+
+                            {/* Camera Scanning Mode */}
+                            {scanMode === 'camera' && (
+                                <div className="space-y-3">
+                                    <div className="relative bg-black rounded-lg overflow-hidden">
+                                        <video
+                                            ref={videoRef}
+                                            className="w-full h-64 sm:h-80 object-cover"
+                                            playsInline
+                                            muted
+                                            autoPlay
+                                        />
+                                        <canvas ref={canvasRef} className="hidden" />
+
+                                        {/* Camera Controls Overlay */}
+                                        <div className="absolute bottom-4 left-4 right-4 flex justify-center space-x-4">
+                                            {/* Flashlight Toggle */}
+                                            <MaterialButton
+                                                variant="contained"
+                                                color={flashlightOn ? 'secondary' : 'primary'}
+                                                onClick={toggleFlashlight}
+                                                className="!min-w-0 !w-12 !h-12 !p-0 bg-black bg-opacity-50"
+                                            >
+                                                <span className="material-icons text-white">
+                                                    {flashlightOn ? 'flash_off' : 'flash_on'}
+                                                </span>
+                                            </MaterialButton>
+
+                                            {/* Focus indicator */}
+                                            <div className="flex items-center px-3 py-2 bg-black bg-opacity-50 rounded-full">
+                                                <span className="material-icons text-white text-sm mr-1">center_focus_strong</span>
+                                                <span className="text-white text-sm">Auto-detecting</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Scanning frame overlay */}
+                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                            <div className="w-64 h-32 border-2 border-blue-400 border-dashed rounded-lg bg-blue-400 bg-opacity-10"></div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-sm text-gray-600 text-center">
+                                        📱 Point camera at barcode • Detection is automatic
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Recent Scans History */}
+                            {scanHistory.length > 0 && (
+                                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                                    <h4 className="font-medium text-sm text-gray-700 mb-2 flex items-center">
+                                        <span className="material-icons text-sm mr-1">history</span>
+                                        Recent Scans
+                                    </h4>
+                                    <div className="space-y-1">
+                                        {scanHistory.map((scan, index) => (
+                                            <div
+                                                key={scan.id}
+                                                className={`flex justify-between items-center text-sm p-2 rounded ${
+                                                    index === 0 ? 'bg-green-100 text-green-800' : 'bg-white text-gray-600'
+                                                }`}
+                                            >
+                                                <span className="font-medium truncate mr-2">{scan.itemName}</span>
+                                                <div className="flex items-center text-xs space-x-2">
+                                                    <span className="material-icons text-xs">
+                                                        {scan.method === 'camera' ? 'videocam' : 'keyboard'}
+                                                    </span>
+                                                    <span>{scan.timestamp.toLocaleTimeString()}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Mobile Tips */}
+                            <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+                                <div className="flex items-start">
+                                    <span className="material-icons text-sm mr-2 mt-0.5">info</span>
+                                    <div>
+                                        <div className="font-medium mb-1">📱 Mobile Tips:</div>
+                                        <ul className="text-xs space-y-0.5 list-disc list-inside">
+                                            <li>Use camera mode for best mobile experience</li>
+                                            <li>Tap flashlight button in low light</li>
+                                            <li>Hold steady and center barcode in frame</li>
+                                            <li>Use keyboard mode with handheld scanners</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </MaterialCard>
@@ -3248,7 +3719,8 @@
                                     <MaterialBarcodeScanner
                                         items={items}
                                         onItemScanned={(item, quantity) => {
-                                            console.log(`Scanned: ${item.name} +${quantity}`);
+                                            addToCart(item, quantity);
+                                            console.log(`✅ Scanned and added to cart: ${item.name} +${quantity}`);
                                         }}
                                     />
 
