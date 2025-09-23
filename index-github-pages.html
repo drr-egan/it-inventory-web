@@ -1419,7 +1419,7 @@
                                 userId: checkoutMethod === 'user' ? selectedUser : '',
                                 userName: checkoutMethod === 'user' ? (user?.name || `${user?.firstName} ${user?.lastName}`) : 'Job Checkout',
                                 quantity: cartItem.cartQuantity,
-                                departmentId: checkoutMethod === 'user' ? (user?.costCode || user?.cost_code) : jobNumber,
+                                departmentId: checkoutMethod === 'user' ? formatDepartmentId(user?.costCode || user?.cost_code) : jobNumber,
                                 jobNumber: checkoutMethod === 'job' ? jobNumber : '',
                                 notes: notes,
                                 status: 'active',
@@ -4942,8 +4942,8 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                             const otherId = other.id || other.tempId;
                             if (otherId === (user.id || user.tempId) || processed.has(otherId)) return false;
 
-                            // Check for cost code match (primary identifier)
-                            if (user.costCode && other.costCode && formatDepartmentId(user.costCode) === formatDepartmentId(other.costCode)) {
+                            // Check for employee ID match (primary identifier)
+                            if (user.employeeId && other.employeeId && user.employeeId.toLowerCase().trim() === other.employeeId.toLowerCase().trim()) {
                                 return true;
                             }
 
@@ -5002,8 +5002,8 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                             other.id !== user.id &&
                             !processed.has(other.id) &&
                             (
-                                // Primary: Cost code match
-                                (user.costCode && other.costCode && formatDepartmentId(user.costCode) === formatDepartmentId(other.costCode)) ||
+                                // Primary: Employee ID match
+                                (user.employeeId && other.employeeId && user.employeeId.toLowerCase().trim() === other.employeeId.toLowerCase().trim()) ||
                                 // Secondary: Exact name match
                                 (user.name && other.name && user.name.toLowerCase().trim() === other.name.toLowerCase().trim()) ||
                                 // Tertiary: First + Last name match
@@ -5049,7 +5049,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         lastName: keepUser.lastName || otherUsers.find(u => u.lastName)?.lastName || '',
                         email: keepUser.email || otherUsers.find(u => u.email)?.email || '',
                         // Prefer most complete cost code
-                        costCode: keepUser.costCode || otherUsers.find(u => u.costCode)?.costCode || '',
+                        costCode: formatDepartmentId(keepUser.costCode || otherUsers.find(u => u.costCode)?.costCode || ''),
                         employeeId: keepUser.employeeId || keepUser.employee_id || otherUsers.find(u => u.employeeId || u.employee_id)?.employeeId || otherUsers.find(u => u.employeeId || u.employee_id)?.employee_id || '',
                         // Merge any other fields
                         mergedFrom: otherUsers.map(u => u.id),
@@ -5931,72 +5931,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     />
                                 </MaterialCard>
 
-                                {/* User Duplicate Cleanup Section */}
-                                <MaterialCard elevation={2} className="mt-6">
-                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                                        <span className="material-icons mr-2 text-orange-600">content_copy</span>
-                                        User Duplicate Cleanup
-                                    </h3>
-                                    <div className="space-y-4">
-                                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                                            Scan user database for duplicate users and merge them to clean up your database. Users are considered duplicates if they have matching cost codes, names, or email addresses.
-                                        </p>
-                                        <MaterialButton
-                                            onClick={async () => {
-                                                setUserDuplicateDialog(prev => ({ ...prev, scanning: true }));
-                                                try {
-                                                    const duplicateGroups = await findExistingUserDuplicates();
-                                                    if (duplicateGroups.length === 0) {
-                                                        showSnackbar('No duplicate users found in database!', 'success');
-                                                    } else {
-                                                        const initialChoices = {};
-                                                        duplicateGroups.forEach(group => {
-                                                            initialChoices[group.name] = {
-                                                                keepUserId: group.users[0].id,
-                                                                deleteUserIds: group.users.slice(1).map(user => user.id)
-                                                            };
-                                                        });
-
-                                                        setUserDuplicateDialog(prev => ({
-                                                            ...prev,
-                                                            open: true,
-                                                            duplicates: duplicateGroups,
-                                                            choices: initialChoices
-                                                        }));
-                                                    }
-                                                } catch (error) {
-                                                    showSnackbar(`Error scanning for user duplicates: ${error.message}`, 'error');
-                                                } finally {
-                                                    setUserDuplicateDialog(prev => ({ ...prev, scanning: false }));
-                                                }
-                                            }}
-                                            variant="outlined"
-                                            color="warning"
-                                            className="w-full"
-                                            disabled={userDuplicateDialog.scanning}
-                                        >
-                                            {userDuplicateDialog.scanning ? (
-                                                <>
-                                                    <div className="mat-spinner w-4 h-4 border-2 border-orange-600 border-t-transparent rounded-full mr-2"></div>
-                                                    Scanning for User Duplicates...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <span className="material-icons mr-2">search</span>
-                                                    Find User Duplicates
-                                                </>
-                                            )}
-                                        </MaterialButton>
-
-                                        <div className="text-xs text-gray-600 dark:text-gray-400 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                                            <p className="font-medium mb-1">⚠️ Duplicate Detection Criteria:</p>
-                                            <p><strong>Primary:</strong> Matching cost codes (exact match)</p>
-                                            <p><strong>Secondary:</strong> Matching full names (case insensitive)</p>
-                                            <p><strong>Tertiary:</strong> Matching email addresses (if available)</p>
-                                            <p className="mt-2"><strong>Note:</strong> Merging users will update all related checkout history records.</p>
-                                        </div>
-                                    </div>
-                                </MaterialCard>
                             </div>
                         )}
 
@@ -6388,7 +6322,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         </h3>
                                         <div className="space-y-4">
                                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                Scan user database for duplicate users and merge them to clean up your database.
+                                                Scan user database for duplicate users and merge them to clean up your database. Users are considered duplicates if they have matching employee IDs, names, or email addresses.
                                             </p>
                                             <MaterialButton
                                                 onClick={async () => {
@@ -6437,7 +6371,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                             </MaterialButton>
                                             <div className="text-xs text-gray-600 dark:text-gray-400 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                                                 <p className="font-medium mb-1">💡 How it works:</p>
-                                                <p><strong>Detection:</strong> Finds users with matching cost codes, names, or employee IDs</p>
+                                                <p><strong>Detection:</strong> Finds users with matching employee IDs, names, or email addresses</p>
                                                 <p><strong>Merging:</strong> Combines user data and removes duplicates</p>
                                                 <p><strong>Safety:</strong> Preview all changes before applying them</p>
                                             </div>

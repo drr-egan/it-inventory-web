@@ -1223,7 +1223,7 @@
                                 userId: checkoutMethod === 'user' ? selectedUser : '',
                                 userName: checkoutMethod === 'user' ? (user?.name || `${user?.firstName} ${user?.lastName}`) : 'Job Checkout',
                                 quantity: cartItem.cartQuantity,
-                                departmentId: checkoutMethod === 'user' ? (user?.costCode || user?.cost_code) : jobNumber,
+                                departmentId: checkoutMethod === 'user' ? formatDepartmentId(user?.costCode || user?.cost_code) : jobNumber,
                                 jobNumber: checkoutMethod === 'job' ? jobNumber : '',
                                 notes: notes,
                                 status: 'active',
@@ -1358,7 +1358,7 @@
                                             <option value="">Choose a user...</option>
                                             {users.slice(0, 50).map(user => (
                                                 <option key={user.id} value={user.id}>
-                                                    {user.name || `${user.firstName} ${user.lastName}`} - {user.costCode || user.cost_code}
+                                                    {user.name || `${user.firstName} ${user.lastName}`} - {formatDepartmentId(user.costCode || user.cost_code)}
                                                 </option>
                                             ))}
                                         </select>
@@ -2821,7 +2821,7 @@
                 try {
                     const csvHeader = 'First Name,Last Name,Full Name,Cost Code,Department,Status\n';
                     const csvRows = users.map(user =>
-                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.department || '').replace(/"/g, '""')}","${user.status || 'active'}"`
+                        `"${(user.firstName || '').replace(/"/g, '""')}","${(user.lastName || '').replace(/"/g, '""')}","${(user.name || '').replace(/"/g, '""')}","${formatDepartmentId(user.costCode || user.cost_code || '').replace(/"/g, '""')}","${(user.department || '').replace(/"/g, '""')}","${user.status || 'active'}"`
                     ).join('\n');
 
                     const csvContent = csvHeader + csvRows;
@@ -3551,11 +3551,11 @@
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <code className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                                                                {user.costCode || user.cost_code}
+                                                                {formatDepartmentId(user.costCode || user.cost_code)}
                                                             </code>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                                                            {(user.costCode || user.cost_code || '').split('-')[0] || 'Unknown'}
+                                                            {(formatDepartmentId(user.costCode || user.cost_code) || '').split('-')[0] || 'Unknown'}
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300">
@@ -4304,7 +4304,7 @@
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                                                            {record.departmentId || record.costCode || '-'}
+                                                            {formatDepartmentId(record.departmentId || record.costCode) || '-'}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                                                             {record.dateEntered?.toDate?.()?.toLocaleDateString() ||
