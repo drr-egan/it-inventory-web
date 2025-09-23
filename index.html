@@ -645,6 +645,18 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
+        // Utility function to format department IDs
+        const formatDepartmentId = (deptId) => {
+            if (!deptId) return '';
+            const parts = deptId.split('-');
+            if (parts.length >= 3) {
+                const [first, second, third, ...rest] = parts;
+                const formattedThird = third.padStart(3, '0');
+                return `${first}-${second}-${formattedThird}-5770`;
+            }
+            return deptId;
+        };
+
         // Material Design Hook for Snackbar
         const useSnackbar = () => {
             const [snackbar, setSnackbar] = useState(null);
@@ -1982,7 +1994,9 @@
                 importingItems: false,
                 importingUsers: false,
                 exportingItems: false,
-                exportingUsers: false
+                exportingUsers: false,
+                itemImportStatus: '',
+                userImportStatus: ''
             });
 
             // Pagination states
@@ -2157,16 +2171,6 @@
                 }
             };
 
-            const formatDepartmentId = (deptId) => {
-                if (!deptId) return '';
-                const parts = deptId.split('-');
-                if (parts.length >= 3) {
-                    const [first, second, third, ...rest] = parts;
-                    const formattedThird = third.padStart(3, '0');
-                    return `${first}-${second}-${formattedThird}-5770`;
-                }
-                return deptId;
-            };
 
             const processShipment = async () => {
                 if (!pdfFile) {
@@ -2929,7 +2933,7 @@
                 const file = event.target.files[0];
                 if (!file) return;
 
-                setCsvOperations(prev => ({ ...prev, importingItems: true }));
+                setCsvOperations(prev => ({ ...prev, importingItems: true, itemImportStatus: 'Reading file...' }));
                 const reader = new FileReader();
 
                 reader.onload = async (e) => {
@@ -3002,7 +3006,7 @@
                 const file = event.target.files[0];
                 if (!file) return;
 
-                setCsvOperations(prev => ({ ...prev, importingUsers: true }));
+                setCsvOperations(prev => ({ ...prev, importingUsers: true, userImportStatus: 'Reading file...' }));
                 const reader = new FileReader();
 
                 reader.onload = async (e) => {

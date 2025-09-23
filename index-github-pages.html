@@ -2966,7 +2966,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 importingItems: false,
                 importingUsers: false,
                 exportingItems: false,
-                exportingUsers: false
+                exportingUsers: false,
+                itemImportStatus: '',
+                userImportStatus: ''
             });
 
             const [duplicateDialog, setDuplicateDialog] = useState({
@@ -4486,15 +4488,17 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 const file = event.target.files[0];
                 if (!file) return;
 
-                setCsvOperations(prev => ({ ...prev, importingItems: true }));
+                setCsvOperations(prev => ({ ...prev, importingItems: true, itemImportStatus: 'Reading file...' }));
                 const reader = new FileReader();
 
                 reader.onload = async (e) => {
                     try {
+                        setCsvOperations(prev => ({ ...prev, itemImportStatus: 'Parsing CSV data...' }));
                         const csv = e.target.result;
                         const lines = csv.split('\n');
                         const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
 
+                        setCsvOperations(prev => ({ ...prev, itemImportStatus: `Processing ${lines.length - 1} rows...` }));
                         // Parse all items first
                         const newItems = [];
                         let parseErrors = 0;
@@ -4558,12 +4562,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     : 'No items found in CSV file.',
                                 'warning'
                             );
-                            setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                            setCsvOperations(prev => ({ ...prev, importingItems: false, itemImportStatus: '' }));
                             event.target.value = '';
                             return;
                         }
 
                         // Check for duplicates
+                        setCsvOperations(prev => ({ ...prev, itemImportStatus: 'Checking for duplicates...' }));
                         const duplicates = await findDuplicateItems(newItems);
 
                         if (duplicates.length > 0) {
@@ -4584,9 +4589,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                 choices: initialChoices
                             });
 
-                            setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                            setCsvOperations(prev => ({ ...prev, importingItems: false, itemImportStatus: '' }));
                         } else {
                             // No duplicates, proceed with direct import
+                            setCsvOperations(prev => ({ ...prev, itemImportStatus: `Importing ${newItems.length} items...` }));
                             const { successCount, errorCount } = await processDuplicateChoices(newItems, {});
 
                             showSnackbar(
@@ -4594,13 +4600,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                 successCount > 0 ? 'success' : 'warning'
                             );
 
-                            setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                            setCsvOperations(prev => ({ ...prev, importingItems: false, itemImportStatus: '' }));
                         }
 
                         event.target.value = ''; // Reset file input
                     } catch (error) {
                         showSnackbar(`Import failed: ${error.message}`, 'error');
-                        setCsvOperations(prev => ({ ...prev, importingItems: false }));
+                        setCsvOperations(prev => ({ ...prev, importingItems: false, itemImportStatus: '' }));
                         event.target.value = '';
                     }
                 };
@@ -4612,15 +4618,17 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 const file = event.target.files[0];
                 if (!file) return;
 
-                setCsvOperations(prev => ({ ...prev, importingUsers: true }));
+                setCsvOperations(prev => ({ ...prev, importingUsers: true, userImportStatus: 'Reading file...' }));
                 const reader = new FileReader();
 
                 reader.onload = async (e) => {
                     try {
+                        setCsvOperations(prev => ({ ...prev, userImportStatus: 'Parsing CSV data...' }));
                         const csv = e.target.result;
                         const lines = csv.split('\n');
                         const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
 
+                        setCsvOperations(prev => ({ ...prev, userImportStatus: `Processing ${lines.length - 1} user records...` }));
                         // Parse all users from CSV first
                         const newUsers = [];
                         let parseErrorCount = 0;
@@ -4675,10 +4683,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                         if (newUsers.length === 0) {
                             showSnackbar(`No valid users found in CSV. ${parseErrorCount} parsing errors.`, 'warning');
+                            setCsvOperations(prev => ({ ...prev, importingUsers: false, userImportStatus: '' }));
                             return;
                         }
 
                         // Check for duplicates
+                        setCsvOperations(prev => ({ ...prev, userImportStatus: 'Checking for duplicate users...' }));
                         const duplicateGroups = await findUserDuplicates(newUsers);
 
                         if (duplicateGroups.length > 0) {
@@ -4720,11 +4730,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                             if (action === '3' || action === null) {
                                 showSnackbar('Import cancelled. Please review CSV for duplicates.', 'info');
+                                setCsvOperations(prev => ({ ...prev, importingUsers: false, userImportStatus: '' }));
                                 return;
                             }
 
                             if (action === '1') {
                                 // UPDATE existing users with CSV data
+                                setCsvOperations(prev => ({ ...prev, userImportStatus: `Updating ${totalDuplicates} existing users...` }));
                                 showSnackbar(`Updating ${totalDuplicates} existing users with CSV data...`, 'info');
 
                                 let updatedCount = 0;
@@ -4835,7 +4847,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     } catch (error) {
                         showSnackbar(`Import failed: ${error.message}`, 'error');
                     } finally {
-                        setCsvOperations(prev => ({ ...prev, importingUsers: false }));
+                        setCsvOperations(prev => ({ ...prev, importingUsers: false, userImportStatus: '' }));
                         event.target.value = ''; // Reset file input
                     }
                 };
@@ -6103,7 +6115,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             {csvOperations.importingItems ? (
                                                                 <>
                                                                     <div className="mat-spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
-                                                                    Importing...
+                                                                    {csvOperations.itemImportStatus || 'Importing...'}
                                                                 </>
                                                             ) : (
                                                                 <>
@@ -6131,7 +6143,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             {csvOperations.importingUsers ? (
                                                                 <>
                                                                     <div className="mat-spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
-                                                                    Importing...
+                                                                    {csvOperations.userImportStatus || 'Importing...'}
                                                                 </>
                                                             ) : (
                                                                 <>
