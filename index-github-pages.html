@@ -2936,6 +2936,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 return localStorage.getItem('lowStockAlwaysHidden') === 'true';
             });
 
+            // Edit checkout record state
+            const [editCheckoutRecord, setEditCheckoutRecord] = useState(null);
+            const [showEditCheckoutModal, setShowEditCheckoutModal] = useState(false);
+
             // Form states for Add New Item
             const [newItemForm, setNewItemForm] = useState({
                 name: '',
@@ -3740,6 +3744,55 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 } catch (error) {
                     console.error('Error unarchiving record:', error);
                     alert('Failed to unarchive record. Please try again.');
+                }
+            };
+
+            // Edit checkout record functions
+            const openEditCheckoutModal = (record) => {
+                setEditCheckoutRecord({
+                    id: record.id,
+                    itemName: record.itemName,
+                    userName: record.userName,
+                    quantity: record.quantity,
+                    departmentId: record.departmentId || record.costCode || '',
+                    jobNumber: record.jobNumber || '',
+                    notes: record.notes || ''
+                });
+                setShowEditCheckoutModal(true);
+            };
+
+            const closeEditCheckoutModal = () => {
+                setEditCheckoutRecord(null);
+                setShowEditCheckoutModal(false);
+            };
+
+            const saveEditCheckoutRecord = async () => {
+                if (!editCheckoutRecord || !editCheckoutRecord.id) return;
+
+                try {
+                    const docRef = db.collection('checkoutHistory').doc(editCheckoutRecord.id);
+                    await docRef.update({
+                        itemName: editCheckoutRecord.itemName,
+                        userName: editCheckoutRecord.userName,
+                        quantity: parseInt(editCheckoutRecord.quantity),
+                        departmentId: formatDepartmentId(editCheckoutRecord.departmentId),
+                        jobNumber: editCheckoutRecord.jobNumber,
+                        notes: editCheckoutRecord.notes,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    // Update local state
+                    setCheckoutHistory(prev => prev.map(record =>
+                        record.id === editCheckoutRecord.id
+                            ? { ...record, ...editCheckoutRecord, quantity: parseInt(editCheckoutRecord.quantity) }
+                            : record
+                    ));
+
+                    closeEditCheckoutModal();
+                    showSnackbar('Checkout record updated successfully', 'success');
+                } catch (error) {
+                    console.error('Error updating checkout record:', error);
+                    showSnackbar('Failed to update checkout record', 'error');
                 }
             };
 
@@ -7002,10 +7055,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                             variant="text"
                                                                             color="primary"
                                                                             className="!p-2 !min-w-0"
-                                                                            onClick={() => {
-                                                                                // Edit functionality - could open edit modal
-                                                                                console.log('Edit record:', record);
-                                                                            }}
+                                                                            onClick={() => openEditCheckoutModal(record)}
                                                                         >
                                                                             <span className="material-icons text-sm">edit</span>
                                                                         </MaterialButton>
@@ -7013,7 +7063,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                             variant="text"
                                                                             color="secondary"
                                                                             className="!p-2 !min-w-0"
-                                                                            onClick={() => archiveRecord(record)}
+                                                                            onClick={() => manualArchiveRecord(record)}
                                                                         >
                                                                             <span className="material-icons text-sm">archive</span>
                                                                         </MaterialButton>
@@ -7514,6 +7564,84 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     <button className="md-button primary" onClick={handlePopupViewInventory}>
                                         <span className="material-icons">inventory_2</span>
                                         View Inventory
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Edit Checkout Record Modal */}
+                    {showEditCheckoutModal && editCheckoutRecord && (
+                        <div className="md-modal-overlay" onClick={closeEditCheckoutModal}>
+                            <div className="md-modal" onClick={(e) => e.stopPropagation()}>
+                                <button className="md-modal-close" onClick={closeEditCheckoutModal}>
+                                    <span className="material-icons">close</span>
+                                </button>
+
+                                <div className="md-modal-header">
+                                    <h2 className="md-modal-title">
+                                        <span className="material-icons" style={{ color: 'var(--md-sys-color-primary)' }}>
+                                            edit
+                                        </span>
+                                        Edit Checkout Record
+                                    </h2>
+                                </div>
+
+                                <div className="md-modal-body">
+                                    <div className="space-y-4">
+                                        <MaterialInput
+                                            label="Item Name"
+                                            value={editCheckoutRecord.itemName}
+                                            onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, itemName: e.target.value }))}
+                                            required
+                                        />
+
+                                        <MaterialInput
+                                            label="User Name"
+                                            value={editCheckoutRecord.userName}
+                                            onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, userName: e.target.value }))}
+                                            required
+                                        />
+
+                                        <MaterialInput
+                                            label="Quantity"
+                                            type="number"
+                                            value={editCheckoutRecord.quantity}
+                                            onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, quantity: e.target.value }))}
+                                            required
+                                            min="1"
+                                        />
+
+                                        <MaterialInput
+                                            label="Department ID"
+                                            value={editCheckoutRecord.departmentId}
+                                            onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, departmentId: e.target.value }))}
+                                            placeholder="e.g., 2-20-060"
+                                        />
+
+                                        <MaterialInput
+                                            label="Job Number"
+                                            value={editCheckoutRecord.jobNumber}
+                                            onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, jobNumber: e.target.value }))}
+                                            placeholder="Optional job number"
+                                        />
+
+                                        <MaterialInput
+                                            label="Notes"
+                                            value={editCheckoutRecord.notes}
+                                            onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, notes: e.target.value }))}
+                                            placeholder="Optional notes"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="md-modal-actions">
+                                    <button type="button" className="md-button secondary" onClick={closeEditCheckoutModal}>
+                                        Cancel
+                                    </button>
+                                    <button type="button" className="md-button primary" onClick={saveEditCheckoutRecord}>
+                                        <span className="material-icons">save</span>
+                                        Save Changes
                                     </button>
                                 </div>
                             </div>
