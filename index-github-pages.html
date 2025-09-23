@@ -3672,6 +3672,77 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 }
             };
 
+            // Manual archive function for individual records
+            const manualArchiveRecord = async (record) => {
+                try {
+                    const archiveTimestamp = new Date();
+                    const batch = db.batch();
+
+                    // Create archive document
+                    const archiveRef = db.collection('archivedCheckouts').doc();
+                    batch.set(archiveRef, {
+                        ...record,
+                        archivedAt: archiveTimestamp,
+                        manuallyArchived: true,
+                        shipmentDetails: {
+                            vendor: 'Manual Archive',
+                            method: 'Manual'
+                        }
+                    });
+
+                    // Remove from checkout history
+                    if (record.id) {
+                        const checkoutRef = db.collection('checkoutHistory').doc(record.id);
+                        batch.delete(checkoutRef);
+                    }
+
+                    await batch.commit();
+
+                    // Update local state
+                    setCheckoutHistory(prev => prev.filter(r => r.id !== record.id));
+
+                    console.log(`Manually archived checkout record for ${record.itemName}`);
+                } catch (error) {
+                    console.error('Error manually archiving record:', error);
+                    alert('Failed to archive record. Please try again.');
+                }
+            };
+
+            // Un-archive function for archived records
+            const unarchiveRecord = async (record) => {
+                try {
+                    const batch = db.batch();
+
+                    // Create new checkout history document
+                    const checkoutRef = db.collection('checkoutHistory').doc();
+                    const recordData = { ...record };
+
+                    // Remove archive-specific fields
+                    delete recordData.archivedAt;
+                    delete recordData.manuallyArchived;
+                    delete recordData.shipmentDetails;
+                    delete recordData.id; // Remove old ID to get new one
+
+                    batch.set(checkoutRef, recordData);
+
+                    // Remove from archived checkouts
+                    if (record.id) {
+                        const archiveRef = db.collection('archivedCheckouts').doc(record.id);
+                        batch.delete(archiveRef);
+                    }
+
+                    await batch.commit();
+
+                    // Update local state
+                    setArchivedCheckouts(prev => prev.filter(r => r.id !== record.id));
+
+                    console.log(`Unarchived checkout record for ${record.itemName}`);
+                } catch (error) {
+                    console.error('Error unarchiving record:', error);
+                    alert('Failed to unarchive record. Please try again.');
+                }
+            };
+
             const removeProcessedItems = async (processedItems) => {
                 try {
                     const batch = db.batch();
@@ -6888,6 +6959,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             </div>
                                                         </th>
                                                     )}
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                        <div className="flex items-center">
+                                                            <span className="material-icons mr-1 text-sm">settings</span>
+                                                            Actions
+                                                        </div>
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
