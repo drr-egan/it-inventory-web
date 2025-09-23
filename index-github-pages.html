@@ -1723,7 +1723,7 @@
         };
 
         // Enhanced Mobile-Optimized Barcode Scanner Component
-        const MaterialBarcodeScanner = ({ items, onItemScanned }) => {
+        const MaterialBarcodeScanner = ({ items, onItemScanned, searchQuery, onSearchChange }) => {
             const [scanInput, setScanInput] = useState('');
             const [isExpanded, setIsExpanded] = useState(true); // Default expanded for better UX
             const [scanMode, setScanMode] = useState('keyboard'); // 'keyboard' or 'camera'
@@ -1799,6 +1799,9 @@
                     // Call the callback to add to cart
                     onItemScanned(foundItem, 1);
                     setScanInput('');
+                    if (onSearchChange) {
+                        onSearchChange('');
+                    }
 
                     // Clear feedback after 3 seconds
                     setTimeout(() => setScanFeedback(''), 3000);
@@ -1822,7 +1825,7 @@
             const handleKeyPress = (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleScan(scanInput);
+                    handleScan(searchQuery || scanInput);
                 }
             };
 
@@ -2706,10 +2709,16 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         <input
                                             ref={inputRef}
                                             type="text"
-                                            value={scanInput}
-                                            onChange={(e) => setScanInput(e.target.value)}
+                                            value={searchQuery || scanInput}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                setScanInput(value);
+                                                if (onSearchChange) {
+                                                    onSearchChange(value);
+                                                }
+                                            }}
                                             onKeyPress={handleKeyPress}
-                                            placeholder="Scan barcode or type item name"
+                                            placeholder="Scan barcode, search items, or type item name"
                                             className="w-full text-lg"
                                             disabled={isScanning}
                                             autoComplete="off"
@@ -2717,13 +2726,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                             autoCapitalize="off"
                                             spellCheck="false"
                                         />
-                                        <label>Scan Input</label>
+                                        <label>Scan & Search</label>
                                     </div>
                                     <MaterialButton
                                         variant="contained"
                                         color="primary"
-                                        onClick={() => handleScan(scanInput)}
-                                        disabled={!scanInput.trim() || isScanning}
+                                        onClick={() => handleScan(searchQuery || scanInput)}
+                                        disabled={!(searchQuery || scanInput).trim() || isScanning}
                                         className="w-full py-3"
                                     >
                                         <span className="material-icons mr-2">
@@ -5464,6 +5473,11 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                             addToCart(item, quantity);
                                             console.log(`✅ Scanned and added to cart: ${item.name} +${quantity}`);
                                         }}
+                                        searchQuery={shopSearchQuery}
+                                        onSearchChange={(value) => {
+                                            setShopSearchQuery(value);
+                                            setInventoryPagination(prev => ({ ...prev, currentPage: 1 }));
+                                        }}
                                     />
 
                                     {/* Items Grid */}
@@ -5473,33 +5487,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                             Shop Items
                                         </h2>
 
-                                        {/* Search Field */}
-                                        <div className="mb-6">
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Search items by name, category, or ASIN..."
-                                                    value={shopSearchQuery}
-                                                    onChange={(e) => {
-                                                        setShopSearchQuery(e.target.value);
-                                                        setInventoryPagination(prev => ({ ...prev, currentPage: 1 }));
-                                                    }}
-                                                    className="w-full px-4 py-3 pl-12 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                />
-                                                <span className="material-icons absolute left-4 top-3.5 text-gray-400">search</span>
-                                                {shopSearchQuery && (
-                                                    <button
-                                                        onClick={() => {
-                                                            setShopSearchQuery('');
-                                                            setInventoryPagination(prev => ({ ...prev, currentPage: 1 }));
-                                                        }}
-                                                        className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                                    >
-                                                        <span className="material-icons">clear</span>
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
                                             {getPaginatedItems().map(item => (
                                                 <MaterialCard key={item.id} elevation={1} className="!p-3 lg:!p-4 hover:mat-elevation-4">
