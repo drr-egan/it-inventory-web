@@ -6994,6 +6994,42 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                  (typeof record.archivedAt === 'string' ? new Date(record.archivedAt).toLocaleDateString() : 'Unknown')}
                                                             </td>
                                                         )}
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center space-x-2">
+                                                                {checkoutViewMode === 'current' ? (
+                                                                    <>
+                                                                        <MaterialButton
+                                                                            variant="text"
+                                                                            color="primary"
+                                                                            className="!p-2 !min-w-0"
+                                                                            onClick={() => {
+                                                                                // Edit functionality - could open edit modal
+                                                                                console.log('Edit record:', record);
+                                                                            }}
+                                                                        >
+                                                                            <span className="material-icons text-sm">edit</span>
+                                                                        </MaterialButton>
+                                                                        <MaterialButton
+                                                                            variant="text"
+                                                                            color="secondary"
+                                                                            className="!p-2 !min-w-0"
+                                                                            onClick={() => archiveRecord(record)}
+                                                                        >
+                                                                            <span className="material-icons text-sm">archive</span>
+                                                                        </MaterialButton>
+                                                                    </>
+                                                                ) : (
+                                                                    <MaterialButton
+                                                                        variant="text"
+                                                                        color="primary"
+                                                                        className="!p-2 !min-w-0"
+                                                                        onClick={() => unarchiveRecord(record)}
+                                                                    >
+                                                                        <span className="material-icons text-sm">unarchive</span>
+                                                                    </MaterialButton>
+                                                                )}
+                                                            </div>
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
