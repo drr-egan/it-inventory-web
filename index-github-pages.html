@@ -1359,22 +1359,10 @@
                                 <div className="space-y-4">
                                     <button
                                         className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 py-4 px-6 text-lg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                                        onClick={async () => {
+                                        onClick={() => {
                                             if (loading) return;
-                                            try {
-                                                // Execute reCAPTCHA first
-                                                const token = await grecaptcha.enterprise.execute('6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql', {
-                                                    action: 'submit'
-                                                });
-                                                console.log('reCAPTCHA token received:', token);
-                                                window.recaptchaToken = token;
-                                                // Then trigger Google Sign-In
-                                                handleGoogleSignIn();
-                                            } catch (error) {
-                                                console.error('reCAPTCHA error:', error);
-                                                // Fallback: try Google Sign-In without reCAPTCHA
-                                                handleGoogleSignIn();
-                                            }
+                                            // Direct Google Sign-In without reCAPTCHA
+                                            handleGoogleSignIn();
                                         }}
                                         disabled={loading}
                                     >
