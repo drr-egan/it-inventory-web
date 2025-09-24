@@ -59,12 +59,19 @@
 
         // Handle redirect result from Google Sign-In
         auth.getRedirectResult().then((result) => {
-            if (result.user) {
+            console.log('Redirect result received:', result);
+            if (result && result.user) {
                 console.log('Google Sign-In successful via redirect:', result.user.email);
                 // User is now signed in, auth state change will be handled by onAuthStateChanged
+            } else if (result && !result.user) {
+                console.log('Redirect completed but no user - may be initial page load');
+            } else {
+                console.log('No redirect result - normal page load');
             }
         }).catch((error) => {
             console.error('Redirect result error:', error);
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
             if (error.code === 'auth/internal-error') {
                 console.error('Internal auth error on redirect - this may be a Firebase configuration issue');
             }
@@ -1194,13 +1201,49 @@
                     });
 
                     console.log('Attempting Google Sign-In with redirect method...');
-                    await auth.signInWithRedirect(freshProvider);
-                    // Note: redirect will reload the page, so we won't reach this point
-                    return;
+                    console.log('Provider configuration:', freshProvider);
+
+                    // Add a timeout check for redirect
+                    const redirectPromise = auth.signInWithRedirect(freshProvider);
+                    const timeoutPromise = new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('Redirect timeout - no response after 10 seconds')), 10000);
+                    });
+
+                    try {
+                        await Promise.race([redirectPromise, timeoutPromise]);
+                        // If we reach here, redirect was initiated successfully
+                        console.log('Redirect initiated successfully');
+                        return;
+                    } catch (timeoutError) {
+                        console.warn('Redirect timed out or failed, will try popup as fallback');
+                        throw timeoutError; // This will be caught by the main catch block
+                    }
                 } catch (error) {
                     console.error('Google Sign-In Error:', error);
                     console.error('Error code:', error.code);
                     console.error('Error message:', error.message);
+
+                    // If redirect failed or timed out, try popup as fallback
+                    if (error.message && error.message.includes('Redirect timeout')) {
+                        console.log('Attempting popup fallback after redirect timeout...');
+                        try {
+                            const popupProvider = new firebase.auth.GoogleAuthProvider();
+                            popupProvider.addScope('email');
+                            popupProvider.addScope('profile');
+                            popupProvider.setCustomParameters({
+                                prompt: 'select_account'
+                            });
+
+                            const result = await auth.signInWithPopup(popupProvider);
+                            const user = result.user;
+                            console.log('Google Sign-In successful via popup fallback:', user.email);
+                            showSnackbar(`Welcome ${user.displayName || user.email}!`, 'success');
+                            return; // Success, exit function
+                        } catch (popupError) {
+                            console.error('Popup fallback also failed:', popupError);
+                            error = popupError; // Use popup error for final error handling
+                        }
+                    }
 
                     if (error.code === 'auth/popup-closed-by-user') {
                         showSnackbar('Sign-in was cancelled', 'warning');
