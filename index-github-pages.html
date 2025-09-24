@@ -54,38 +54,17 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // Initialize App Check with reCAPTCHA Enterprise - Wait for grecaptcha to load
-        const initAppCheck = async () => {
-            try {
-                // Wait for grecaptcha to be available
-                await new Promise((resolve, reject) => {
-                    const checkGrecaptcha = () => {
-                        if (window.grecaptcha && window.grecaptcha.enterprise) {
-                            resolve();
-                        } else {
-                            setTimeout(checkGrecaptcha, 100);
-                        }
-                    };
-                    checkGrecaptcha();
-                    // Timeout after 10 seconds
-                    setTimeout(() => reject(new Error('grecaptcha timeout')), 10000);
-                });
-
-                const appCheck = firebase.appCheck();
-                const recaptchaProvider = new firebase.appCheck.RecaptchaEnterpriseProvider('6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql');
-                appCheck.activate(recaptchaProvider, true);
-                console.log('App Check activated with reCAPTCHA Enterprise');
-            } catch (error) {
-                console.warn('App Check activation failed:', error);
-                // Continue without App Check
-            }
-        };
-
-        // Initialize App Check after DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initAppCheck);
-        } else {
-            initAppCheck();
+        // Initialize App Check with reCAPTCHA Enterprise - Compat SDK
+        try {
+            const appCheck = firebase.appCheck();
+            appCheck.activate({
+                provider: 'recaptcha-enterprise',
+                siteKey: '6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql'
+            }, true);
+            console.log('App Check activated with reCAPTCHA Enterprise');
+        } catch (error) {
+            console.warn('App Check activation failed, continuing without it:', error);
+            // Continue without App Check - authentication will still work
         }
 
         // Configure auth settings
@@ -1196,13 +1175,7 @@
                 return unsubscribe;
             }, []);
 
-            // Expose handleGoogleSignIn to global scope for reCAPTCHA callback
-            useEffect(() => {
-                window.triggerGoogleSignIn = handleGoogleSignIn;
-                return () => {
-                    delete window.triggerGoogleSignIn;
-                };
-            }, [handleGoogleSignIn]);
+            // Note: handleGoogleSignIn is called directly from button onClick
 
             const handleSignIn = async (e) => {
                 e.preventDefault();
@@ -1394,10 +1367,24 @@
                                 {/* Primary Google Sign-In */}
                                 <div className="space-y-4">
                                     <button
-                                        className="g-recaptcha w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 py-4 px-6 text-lg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                                        data-sitekey="6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql"
-                                        data-callback="onSubmit"
-                                        data-action="submit"
+                                        className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 py-4 px-6 text-lg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                                        onClick={async () => {
+                                            if (loading) return;
+                                            try {
+                                                // Execute reCAPTCHA first
+                                                const token = await grecaptcha.enterprise.execute('6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql', {
+                                                    action: 'submit'
+                                                });
+                                                console.log('reCAPTCHA token received:', token);
+                                                window.recaptchaToken = token;
+                                                // Then trigger Google Sign-In
+                                                handleGoogleSignIn();
+                                            } catch (error) {
+                                                console.error('reCAPTCHA error:', error);
+                                                // Fallback: try Google Sign-In without reCAPTCHA
+                                                handleGoogleSignIn();
+                                            }
+                                        }}
                                         disabled={loading}
                                     >
                                         {loading ? (
