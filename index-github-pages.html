@@ -1145,20 +1145,64 @@
                 setLoading(true);
 
                 try {
-                    const result = await auth.signInWithPopup(googleProvider);
+                    // Clear any existing auth state first
+                    await auth.signOut();
+
+                    // Add a small delay to ensure clean state
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    // Create fresh provider instance
+                    const freshProvider = new firebase.auth.GoogleAuthProvider();
+                    freshProvider.addScope('email');
+                    freshProvider.addScope('profile');
+                    freshProvider.setCustomParameters({
+                        prompt: 'select_account',
+                        hd: undefined // Remove hosted domain restriction if any
+                    });
+
+                    console.log('Attempting Google Sign-In with fresh provider...');
+                    const result = await auth.signInWithPopup(freshProvider);
                     const user = result.user;
+                    console.log('Google Sign-In successful:', user.email);
                     showSnackbar(`Welcome ${user.displayName || user.email}!`, 'success');
                 } catch (error) {
                     console.error('Google Sign-In Error:', error);
+                    console.error('Error code:', error.code);
+                    console.error('Error message:', error.message);
+
                     if (error.code === 'auth/popup-closed-by-user') {
                         showSnackbar('Sign-in was cancelled', 'warning');
                     } else if (error.code === 'auth/popup-blocked') {
                         showSnackbar('Pop-up blocked. Please allow pop-ups for this site.', 'error');
+                    } else if (error.code === 'auth/internal-error') {
+                        console.error('Internal error details:', error);
+                        setError('Authentication service temporarily unavailable. Please try again in a moment.');
+                        showSnackbar('Authentication error. Please check Firebase console configuration.', 'error');
                     } else {
                         setError(error.message);
                         showSnackbar(`Google Sign-In failed: ${error.message}`, 'error');
                     }
                 } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Fallback authentication method using redirect
+            const handleGoogleSignInRedirect = async () => {
+                setError('');
+                setLoading(true);
+
+                try {
+                    console.log('Attempting Google Sign-In with redirect...');
+                    const freshProvider = new firebase.auth.GoogleAuthProvider();
+                    freshProvider.addScope('email');
+                    freshProvider.addScope('profile');
+
+                    await auth.signInWithRedirect(freshProvider);
+                } catch (error) {
+                    console.error('Google Sign-In Redirect Error:', error);
+                    setError(error.message);
+                    showSnackbar(`Redirect sign-in failed: ${error.message}`, 'error');
                     setLoading(false);
                 }
             };
@@ -1293,6 +1337,16 @@
                                                 Continue with Google
                                             </>
                                         )}
+                                    </MaterialButton>
+
+                                    {/* Fallback redirect button */}
+                                    <MaterialButton
+                                        onClick={handleGoogleSignInRedirect}
+                                        variant="outlined"
+                                        disabled={loading}
+                                        className="w-full !border-gray-300 !text-gray-600 hover:!bg-gray-50 !py-3 !text-sm"
+                                    >
+                                        Try Redirect Method Instead
                                     </MaterialButton>
 
                                     <p className="text-xs text-gray-500 text-gray-400 mt-6">
