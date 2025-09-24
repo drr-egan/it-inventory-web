@@ -12,7 +12,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- reCAPTCHA Enterprise -->
-    <script src="https://www.google.com/recaptcha/enterprise.js?render=6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j"></script>
+    <script src="https://www.google.com/recaptcha/enterprise.js?render=6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql"></script>
 
     <!-- Material Design CSS (after Tailwind to override) -->
 
@@ -54,11 +54,23 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // Initialize App Check with reCAPTCHA Enterprise
+        // Initialize App Check with reCAPTCHA Enterprise - Custom Provider
         const appCheck = firebase.appCheck();
         appCheck.activate({
-            provider: 'recaptcha-enterprise',
-            siteKey: '6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j'
+            provider: {
+                getToken: async () => {
+                    // Execute reCAPTCHA Enterprise
+                    const token = await grecaptcha.enterprise.execute('6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql', {
+                        action: 'firebase_auth'
+                    });
+
+                    // Return App Check token format
+                    return {
+                        token: token,
+                        expireTimeMillis: Date.now() + (2 * 60 * 1000) // 2 minutes from now
+                    };
+                }
+            }
         }, true);
 
         // Configure auth settings
@@ -98,6 +110,20 @@
         db.enablePersistence({synchronizeTabs: true}).catch((err) => {
             console.warn('Firestore persistence not available:', err.code);
         });
+    </script>
+
+    <!-- reCAPTCHA Callback Function -->
+    <script>
+        function onSubmit(token) {
+            // Handle reCAPTCHA token and trigger Google Sign-In
+            console.log('reCAPTCHA token received:', token);
+            // Store token globally for use in handleGoogleSignIn
+            window.recaptchaToken = token;
+            // Trigger the handleGoogleSignIn function
+            if (window.triggerGoogleSignIn) {
+                window.triggerGoogleSignIn();
+            }
+        }
     </script>
 
     <style>
@@ -1155,6 +1181,14 @@
                 return unsubscribe;
             }, []);
 
+            // Expose handleGoogleSignIn to global scope for reCAPTCHA callback
+            useEffect(() => {
+                window.triggerGoogleSignIn = handleGoogleSignIn;
+                return () => {
+                    delete window.triggerGoogleSignIn;
+                };
+            }, [handleGoogleSignIn]);
+
             const handleSignIn = async (e) => {
                 e.preventDefault();
                 setError('');
@@ -1344,11 +1378,12 @@
 
                                 {/* Primary Google Sign-In */}
                                 <div className="space-y-4">
-                                    <MaterialButton
-                                        onClick={handleGoogleSignIn}
-                                        variant="contained"
+                                    <button
+                                        className="g-recaptcha w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 py-4 px-6 text-lg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                                        data-sitekey="6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql"
+                                        data-callback="onSubmit"
+                                        data-action="submit"
                                         disabled={loading}
-                                        className="w-full !bg-white hover:!bg-gray-50 !text-gray-700 !border !border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 !py-4 !text-lg"
                                     >
                                         {loading ? (
                                             <>
@@ -1366,7 +1401,7 @@
                                                 Continue with Google
                                             </>
                                         )}
-                                    </MaterialButton>
+                                    </button>
 
 
                                     <p className="text-xs text-gray-500 text-gray-400 mt-6">

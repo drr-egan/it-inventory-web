@@ -1,7 +1,7 @@
 {
   "event": {
-    "token": "HFc3l6YABcCSAGWG5PXVNeXBURLh58egt0BTt4JSd5PgkgGAEFHkgzEXMkbCNaMhQjGAZLFwoJWkxHWmUddHIceHwldFtyM3MWdU1RRwhvdl0qNnFiVnIAKnFedRVSXE5eVFR6QzQdRyVbLH5YOnkwFyhqHBEXNSFmOgBfMmNsa3pEDGdxAV50dlEXJQgBHAhxFTEMJzB6SFZsTF8FHkgkE3F6KWoEVBckDQQ4Fw1_",
-    "expectedAction": "LOGIN",
-    "siteKey": "6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j"
+    "token": "TOKEN",
+    "expectedAction": "submit",
+    "siteKey": "6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql"
   }
 }
