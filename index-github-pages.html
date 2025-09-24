@@ -20,6 +20,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-check-compat.js"></script>
 
     <!-- React -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -1361,15 +1362,6 @@
                                         )}
                                     </MaterialButton>
 
-                                    {/* Fallback redirect button */}
-                                    <MaterialButton
-                                        onClick={handleGoogleSignInRedirect}
-                                        variant="outlined"
-                                        disabled={loading}
-                                        className="w-full !border-gray-300 !text-gray-600 hover:!bg-gray-50 !py-3 !text-sm"
-                                    >
-                                        Try Redirect Method Instead
-                                    </MaterialButton>
 
                                     <p className="text-xs text-gray-500 text-gray-400 mt-6">
                                         Secure authentication powered by Google<br/>
