@@ -55,7 +55,7 @@
 
         // Configure auth settings to help prevent internal errors
         auth.useDeviceLanguage();
-        auth.settings.appVerificationDisabledForTesting = false;
+        auth.settings.appVerificationDisabledForTesting = true; // Disable App Check for testing
 
         // Handle redirect result from Google Sign-In
         auth.getRedirectResult().then((result) => {
