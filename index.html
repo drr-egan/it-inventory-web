@@ -63,7 +63,10 @@
 
         // Initialize App Check with reCAPTCHA
         const appCheck = firebase.appCheck();
-        appCheck.activate('6Lffp9MrAAAAAF_3rjWOicNsMuJ8MFbnWq3e0yc-', true);
+        appCheck.activate({
+            provider: 'recaptcha-v3',
+            siteKey: '6Lffp9MrAAAAAF_3rjWOicNsMuJ8MFbnWq3e0yc-'
+        }, true);
         
     </script>
 
