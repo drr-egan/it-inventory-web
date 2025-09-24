@@ -66,6 +66,10 @@
             console.log('Redirect result received:', result);
             if (result && result.user) {
                 console.log('Google Sign-In successful via redirect:', result.user.email);
+                // Show success notification
+                if (window.showSnackbar) {
+                    window.showSnackbar(`Welcome ${result.user.displayName || result.user.email}!`, 'success');
+                }
                 // User is now signed in, auth state change will be handled by onAuthStateChanged
             } else if (result && !result.user) {
                 console.log('Redirect completed but no user - may be initial page load');
@@ -1201,10 +1205,8 @@
                     console.log('Current domain:', window.location.hostname);
                     console.log('Auth domain:', auth.app.options.authDomain);
 
-                    const result = await auth.signInWithPopup(provider);
-                    const user = result.user;
-                    console.log('Google Sign-In successful:', user.email);
-                    showSnackbar(`Welcome ${user.displayName || user.email}!`, 'success');
+                    await auth.signInWithRedirect(provider);
+                    // Note: signInWithRedirect will redirect the page, so success handling is in useEffect
                 } catch (error) {
                     console.error('Google Sign-In Error:', error);
                     console.error('Error code:', error.code);
