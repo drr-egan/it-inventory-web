@@ -8028,55 +8028,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
         );
     </script>
 
-    <!-- Complete reCAPTCHA Auth Test -->
-    <button onclick="completeAuth()" style="position: fixed; top: 20px; right: 20px; z-index: 99999; background: #dc2626; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-family: Arial, sans-serif; font-weight: bold;">
-        🔐 Complete Auth
-    </button>
 
-    <script>
-        async function completeAuth() {
-            try {
-                // Generate fresh token
-                const token = await new Promise((resolve) => {
-                    grecaptcha.enterprise.ready(async () => {
-                        const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
-                        resolve(token);
-                    });
-                });
-
-                console.log('Generated token:', token);
-
-                // Try Google's REST API format
-                const assessment = {
-                    event: {
-                        token: token,
-                        expectedAction: "LOGIN",
-                        siteKey: "6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j"
-                    }
-                };
-
-                console.log('Assessment payload:', JSON.stringify(assessment, null, 2));
-
-                // Attempt verification (will likely fail due to CORS, but that's OK)
-                try {
-                    const response = await fetch(`https://recaptchaenterprise.googleapis.com/v1/projects/it-inventory-eaebc/assessments?key=AIzaSyCBOBb7mJPoI7cwubp12xnmjglLkuWYWYI`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(assessment)
-                    });
-                    const result = await response.json();
-                    console.log('Verification result:', result);
-                    alert('✅ Complete! Token generated and verification attempted. Check console.');
-                } catch (apiError) {
-                    console.log('API call failed (expected):', apiError.message);
-                    alert('✅ Complete! Token generated successfully. API call failed due to CORS but this should complete Google\'s requirements.');
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                alert('❌ Error: ' + error.message);
-            }
-        }
-    </script>
 </body>
 </html>
