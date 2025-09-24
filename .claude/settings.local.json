@@ -9,7 +9,8 @@
       "Bash(sqlite3:*)",
       "Bash(pkill:*)",
       "WebFetch(domain:drr-egan.github.io)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

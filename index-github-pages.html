@@ -7947,40 +7947,5 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
         );
     </script>
 
-    <!-- Simple reCAPTCHA Test -->
-    <button onclick="testRecaptcha()" style="position: fixed; top: 20px; right: 20px; z-index: 99999; background: #10b981; color: white; padding: 12px 18px; border: none; border-radius: 6px; cursor: pointer; font-family: Arial, sans-serif; font-weight: bold;">
-        🔒 Test reCAPTCHA
-    </button>
-
-    <script>
-        function testRecaptcha() {
-            console.log('Button clicked!');
-            console.log('grecaptcha available?', typeof grecaptcha);
-            console.log('grecaptcha.enterprise available?', typeof grecaptcha?.enterprise);
-
-            if (typeof grecaptcha === 'undefined') {
-                alert('❌ grecaptcha not loaded');
-                return;
-            }
-
-            if (typeof grecaptcha.enterprise === 'undefined') {
-                alert('❌ grecaptcha.enterprise not loaded');
-                return;
-            }
-
-            console.log('Calling grecaptcha.enterprise.ready...');
-            grecaptcha.enterprise.ready(async () => {
-                console.log('grecaptcha ready, executing...');
-                try {
-                    const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
-                    console.log('✅ reCAPTCHA token generated:', token);
-                    alert('✅ SUCCESS! reCAPTCHA token generated: ' + token.substring(0, 20) + '...');
-                } catch (error) {
-                    console.error('❌ reCAPTCHA error:', error);
-                    alert('❌ Error: ' + error.message);
-                }
-            });
-        }
-    </script>
 </body>
 </html>
