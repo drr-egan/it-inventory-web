@@ -1169,41 +1169,15 @@
                 setLoading(true);
 
                 try {
-                    // First ensure reCAPTCHA is ready and generate token
-                    console.log('Initializing reCAPTCHA before authentication...');
-                    const recaptchaToken = await new Promise((resolve, reject) => {
-                        if (typeof grecaptcha === 'undefined' || !grecaptcha.enterprise) {
-                            console.log('reCAPTCHA not loaded, continuing without token...');
-                            resolve(null);
-                            return;
-                        }
+                    console.log('Testing simplified Google Sign-In without reCAPTCHA...');
 
-                        grecaptcha.enterprise.ready(async () => {
-                            try {
-                                const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {
-                                    action: 'LOGIN'
-                                });
-                                console.log('reCAPTCHA token generated successfully');
-                                resolve(token);
-                            } catch (error) {
-                                console.log('reCAPTCHA token generation failed, continuing without token:', error);
-                                resolve(null);
-                            }
-                        });
-                    });
+                    // Create simple provider instance
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    provider.addScope('email');
+                    provider.addScope('profile');
 
-                    // Create fresh provider instance without clearing auth state
-                    const freshProvider = new firebase.auth.GoogleAuthProvider();
-                    freshProvider.addScope('email');
-                    freshProvider.addScope('profile');
-                    freshProvider.setCustomParameters({
-                        prompt: 'select_account'
-                    });
-
-                    console.log('Attempting Google Sign-In with popup method (with reCAPTCHA pre-verification)...');
-                    console.log('Provider configuration:', freshProvider);
-
-                    const result = await auth.signInWithPopup(freshProvider);
+                    console.log('Attempting Google Sign-In with simplified popup method...');
+                    const result = await auth.signInWithPopup(provider);
                     const user = result.user;
                     console.log('Google Sign-In successful:', user.email);
                     showSnackbar(`Welcome ${user.displayName || user.email}!`, 'success');
