@@ -54,18 +54,9 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // Initialize App Check with reCAPTCHA Enterprise - Compat SDK
-        try {
-            const appCheck = firebase.appCheck();
-            appCheck.activate({
-                provider: 'recaptcha-enterprise',
-                siteKey: '6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql'
-            }, true);
-            console.log('App Check activated with reCAPTCHA Enterprise');
-        } catch (error) {
-            console.warn('App Check activation failed, continuing without it:', error);
-            // Continue without App Check - authentication will still work
-        }
+        // App Check temporarily disabled due to compatibility issues with compat SDK
+        // The reCAPTCHA integration works directly in the button click handler
+        console.log('App Check disabled - using reCAPTCHA directly for user verification');
 
         // Configure auth settings
         auth.useDeviceLanguage();
