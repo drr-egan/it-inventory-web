@@ -7947,20 +7947,5 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
         );
     </script>
 
-    <!-- Temporary token getter -->
-    <button onclick="getToken()" style="position: fixed; top: 20px; right: 20px; z-index: 99999; background: #059669; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-family: Arial, sans-serif; font-weight: bold;">
-        📋 Get Token
-    </button>
-
-    <script>
-        function getToken() {
-            grecaptcha.enterprise.ready(async () => {
-                const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
-                console.log('Full token:', token);
-                navigator.clipboard.writeText(token);
-                alert('Token copied to clipboard! Also check console for full token.');
-            });
-        }
-    </script>
 </body>
 </html>

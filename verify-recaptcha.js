@@ -4,8 +4,8 @@
 const { RecaptchaEnterpriseServiceClient } = require('@google-cloud/recaptcha-enterprise');
 
 async function verifyToken() {
-    // Replace this with the actual token from your test
-    const token = "HFa3Y2eA8QES9KQGEDRV"; // Use your actual full token
+    // Fresh token from reCAPTCHA test
+    const token = "HFMXBsIglKSykQGmdZH1pIHhwHbBdqOAJiRzJuZy1peQk2WgwTXEElU3oyLipMcB01Wg9dVQMfGEVRGGwLNnsKOnUzNlJkcXoAN0RHBQF5NFQ8dHh0FHsWaHhINxxEHkdIFl1sAT0LBSxNbndOeHAmVSF8XhgBdyhweAlJcGp6KXNSTm5nQ1diNFgBZwEXXgFnVzgaZTlsCl96DlYTXEEyUXhsa2MSFh4yTw0uVQRp";
 
     const client = new RecaptchaEnterpriseServiceClient();
     const projectPath = client.projectPath("it-inventory-eaebc");

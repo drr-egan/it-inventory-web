@@ -10,7 +10,8 @@
       "Bash(pkill:*)",
       "WebFetch(domain:drr-egan.github.io)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []
