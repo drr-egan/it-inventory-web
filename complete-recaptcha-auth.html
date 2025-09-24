@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete reCAPTCHA Authentication</title>
+    <script src="https://www.google.com/recaptcha/enterprise.js?render=6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j"></script>
+</head>
+<body>
+    <h1>Complete reCAPTCHA Authentication</h1>
+    <button onclick="generateAndVerifyToken()">Generate & Verify Token</button>
+    <div id="result"></div>
+
+    <script>
+        async function generateAndVerifyToken() {
+            document.getElementById('result').innerHTML = 'Working...';
+
+            try {
+                // Generate token
+                const token = await new Promise((resolve) => {
+                    grecaptcha.enterprise.ready(async () => {
+                        const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
+                        resolve(token);
+                    });
+                });
+
+                console.log('Generated token:', token);
+
+                // Immediately verify via Google's REST API
+                const verifyUrl = `https://recaptchaenterprise.googleapis.com/v1/projects/it-inventory-eaebc/assessments?key=AIzaSyCBOBb7mJPoI7cwubp12xnmjglLkuWYWYI`;
+
+                const response = await fetch(verifyUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        event: {
+                            token: token,
+                            siteKey: '6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j'
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                document.getElementById('result').innerHTML = `
+                    <h3>Token Generated & Verification Attempted!</h3>
+                    <p>Token: ${token.substring(0, 50)}...</p>
+                    <p>Response: ${JSON.stringify(result, null, 2)}</p>
+                    <p><strong>This should complete Google's authentication requirement!</strong></p>
+                `;
+
+                console.log('Verification result:', result);
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
