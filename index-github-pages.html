@@ -53,6 +53,10 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
+        // Configure auth settings to help prevent internal errors
+        auth.useDeviceLanguage();
+        auth.settings.appVerificationDisabledForTesting = false;
+
         // Initialize Google Auth Provider
         const googleProvider = new firebase.auth.GoogleAuthProvider();
         googleProvider.addScope('email');
@@ -1145,6 +1149,29 @@
                 setLoading(true);
 
                 try {
+                    // First ensure reCAPTCHA is ready and generate token
+                    console.log('Initializing reCAPTCHA before authentication...');
+                    const recaptchaToken = await new Promise((resolve, reject) => {
+                        if (typeof grecaptcha === 'undefined' || !grecaptcha.enterprise) {
+                            console.log('reCAPTCHA not loaded, continuing without token...');
+                            resolve(null);
+                            return;
+                        }
+
+                        grecaptcha.enterprise.ready(async () => {
+                            try {
+                                const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {
+                                    action: 'LOGIN'
+                                });
+                                console.log('reCAPTCHA token generated successfully');
+                                resolve(token);
+                            } catch (error) {
+                                console.log('reCAPTCHA token generation failed, continuing without token:', error);
+                                resolve(null);
+                            }
+                        });
+                    });
+
                     // Clear any existing auth state first
                     await auth.signOut();
 
