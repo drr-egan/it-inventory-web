@@ -58,6 +58,11 @@
         googleProvider.addScope('email');
         googleProvider.addScope('profile');
 
+        // Add custom parameters to help with auth reliability
+        googleProvider.setCustomParameters({
+            prompt: 'select_account'
+        });
+
         // Enable offline persistence
         db.enablePersistence({synchronizeTabs: true}).catch((err) => {
             console.warn('Firestore persistence not available:', err.code);
