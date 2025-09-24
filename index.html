@@ -1135,6 +1135,31 @@
                                     </p>
                                 </div>
 
+                                {/* Test reCAPTCHA Button */}
+                                <div className="space-y-4">
+                                    <MaterialButton
+                                        onClick={async () => {
+                                            try {
+                                                await new Promise((resolve) => {
+                                                    grecaptcha.enterprise.ready(async () => {
+                                                        const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
+                                                        console.log('✅ reCAPTCHA token generated successfully:', token);
+                                                        alert('reCAPTCHA token generated! Check console for details.');
+                                                        resolve();
+                                                    });
+                                                });
+                                            } catch (error) {
+                                                console.error('reCAPTCHA error:', error);
+                                                alert('reCAPTCHA failed: ' + error.message);
+                                            }
+                                        }}
+                                        variant="outlined"
+                                        className="w-full !border-green-500 !text-green-500 hover:!bg-green-50 !py-2"
+                                    >
+                                        🔒 Test reCAPTCHA (Complete Setup)
+                                    </MaterialButton>
+                                </div>
+
                                 {/* Primary Google Sign-In */}
                                 <div className="space-y-4">
                                     <MaterialButton
