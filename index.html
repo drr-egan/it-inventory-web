@@ -654,6 +654,28 @@
 <body>
     <div id="root"></div>
 
+    <!-- Simple reCAPTCHA Test Button (always visible) -->
+    <div style="position: fixed; top: 10px; right: 10px; z-index: 9999;">
+        <button onclick="testRecaptcha()" style="background: #10b981; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+            🔒 Test reCAPTCHA
+        </button>
+    </div>
+
+    <script>
+        function testRecaptcha() {
+            try {
+                grecaptcha.enterprise.ready(async () => {
+                    const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
+                    console.log('✅ reCAPTCHA token generated successfully:', token);
+                    alert('reCAPTCHA token generated! Check console for token details. This should complete Google\'s setup.');
+                });
+            } catch (error) {
+                console.error('reCAPTCHA error:', error);
+                alert('reCAPTCHA failed: ' + error.message);
+            }
+        }
+    </script>
+
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
