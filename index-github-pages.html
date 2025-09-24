@@ -54,9 +54,15 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // Configure auth settings to help prevent internal errors
+        // Initialize App Check with reCAPTCHA Enterprise
+        const appCheck = firebase.appCheck();
+        appCheck.activate({
+            provider: 'recaptcha-enterprise',
+            siteKey: '6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j'
+        }, true);
+
+        // Configure auth settings
         auth.useDeviceLanguage();
-        auth.settings.appVerificationDisabledForTesting = true; // Disable App Check for testing
 
         // Handle redirect result from Google Sign-In
         auth.getRedirectResult().then((result) => {
