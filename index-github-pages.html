@@ -1169,14 +1169,18 @@
                 setLoading(true);
 
                 try {
-                    console.log('Testing simplified Google Sign-In without reCAPTCHA...');
+                    console.log('Testing simplified auth with wait period...');
 
-                    // Create simple provider instance
+                    // Wait a moment for any pending Firebase initializations
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    // Create provider with minimal configuration
                     const provider = new firebase.auth.GoogleAuthProvider();
-                    provider.addScope('email');
-                    provider.addScope('profile');
 
-                    console.log('Attempting Google Sign-In with simplified popup method...');
+                    console.log('Attempting Google Sign-In with basic configuration...');
+                    console.log('Current domain:', window.location.hostname);
+                    console.log('Auth domain:', auth.app.options.authDomain);
+
                     const result = await auth.signInWithPopup(provider);
                     const user = result.user;
                     console.log('Google Sign-In successful:', user.email);
