@@ -54,24 +54,39 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // Initialize App Check with reCAPTCHA Enterprise - Custom Provider
-        const appCheck = firebase.appCheck();
-        appCheck.activate({
-            provider: {
-                getToken: async () => {
-                    // Execute reCAPTCHA Enterprise
-                    const token = await grecaptcha.enterprise.execute('6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql', {
-                        action: 'firebase_auth'
-                    });
-
-                    // Return App Check token format
-                    return {
-                        token: token,
-                        expireTimeMillis: Date.now() + (2 * 60 * 1000) // 2 minutes from now
+        // Initialize App Check with reCAPTCHA Enterprise - Wait for grecaptcha to load
+        const initAppCheck = async () => {
+            try {
+                // Wait for grecaptcha to be available
+                await new Promise((resolve, reject) => {
+                    const checkGrecaptcha = () => {
+                        if (window.grecaptcha && window.grecaptcha.enterprise) {
+                            resolve();
+                        } else {
+                            setTimeout(checkGrecaptcha, 100);
+                        }
                     };
-                }
+                    checkGrecaptcha();
+                    // Timeout after 10 seconds
+                    setTimeout(() => reject(new Error('grecaptcha timeout')), 10000);
+                });
+
+                const appCheck = firebase.appCheck();
+                const recaptchaProvider = new firebase.appCheck.RecaptchaEnterpriseProvider('6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql');
+                appCheck.activate(recaptchaProvider, true);
+                console.log('App Check activated with reCAPTCHA Enterprise');
+            } catch (error) {
+                console.warn('App Check activation failed:', error);
+                // Continue without App Check
             }
-        }, true);
+        };
+
+        // Initialize App Check after DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAppCheck);
+        } else {
+            initAppCheck();
+        }
 
         // Configure auth settings
         auth.useDeviceLanguage();
