@@ -1002,6 +1002,15 @@
                 setLoading(true);
 
                 try {
+                    // Generate reCAPTCHA token for login action
+                    await new Promise((resolve) => {
+                        grecaptcha.enterprise.ready(async () => {
+                            const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
+                            console.log('reCAPTCHA token generated for LOGIN action');
+                            resolve();
+                        });
+                    });
+
                     const result = await auth.signInWithPopup(googleProvider);
                     const user = result.user;
                     showSnackbar(`Welcome ${user.displayName || user.email}!`, 'success');
