@@ -1205,22 +1205,11 @@
                     console.log('Current domain:', window.location.hostname);
                     console.log('Auth domain:', auth.app.options.authDomain);
 
-                    // Try popup first for better error reporting
-                    try {
-                        const result = await auth.signInWithPopup(provider);
-                        console.log('Popup sign-in successful:', result.user.email);
-                        showSnackbar(`Welcome ${result.user.displayName || result.user.email}!`, 'success');
-                        setLoading(false);
-                    } catch (popupError) {
-                        console.log('Popup failed, trying redirect...', popupError.code, popupError.message);
-                        if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/popup-closed-by-user' || popupError.code === 'auth/internal-error') {
-                            console.log('Falling back to redirect method...');
-                            await auth.signInWithRedirect(provider);
-                            // signInWithRedirect will redirect the page, so success handling is in useEffect
-                        } else {
-                            throw popupError; // Re-throw other errors
-                        }
-                    }
+                    // Try popup with detailed error logging
+                    const result = await auth.signInWithPopup(provider);
+                    console.log('Popup sign-in successful:', result.user.email);
+                    showSnackbar(`Welcome ${result.user.displayName || result.user.email}!`, 'success');
+                    setLoading(false);
                 } catch (error) {
                     console.error('Google Sign-In Error:', error);
                     console.error('Error code:', error.code);
