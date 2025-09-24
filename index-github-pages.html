@@ -11,6 +11,9 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- reCAPTCHA Enterprise -->
+    <script src="https://www.google.com/recaptcha/enterprise.js?render=6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j"></script>
+
     <!-- Material Design CSS (after Tailwind to override) -->
 
     <!-- Firebase SDK -->
@@ -7943,5 +7946,27 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             </ErrorBoundary>
         );
     </script>
+
+    <!-- Emergency reCAPTCHA Test Button -->
+    <div id="recaptcha-test-button" style="position: fixed; top: 20px; right: 20px; z-index: 99999; background: #059669; color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; font-family: Arial, sans-serif; font-weight: bold; font-size: 14px;" onclick="
+        console.log('Testing reCAPTCHA...');
+        if (typeof grecaptcha !== 'undefined' && grecaptcha.enterprise) {
+            grecaptcha.enterprise.ready(async () => {
+                try {
+                    const token = await grecaptcha.enterprise.execute('6Ld_kNMrAAAAAIYoB4JC9Cz5dl2xAcSJZ_rlP80j', {action: 'LOGIN'});
+                    console.log('✅ reCAPTCHA SUCCESS! Token:', token);
+                    alert('✅ reCAPTCHA token generated successfully! Check console for details. Google setup should now be complete.');
+                } catch (error) {
+                    console.error('reCAPTCHA error:', error);
+                    alert('❌ reCAPTCHA failed: ' + error.message);
+                }
+            });
+        } else {
+            alert('❌ reCAPTCHA not loaded yet. Wait a moment and try again.');
+            console.error('grecaptcha.enterprise not available');
+        }
+    ">
+        🔒 TEST reCAPTCHA
+    </div>
 </body>
 </html>
