@@ -57,6 +57,19 @@
         auth.useDeviceLanguage();
         auth.settings.appVerificationDisabledForTesting = false;
 
+        // Handle redirect result from Google Sign-In
+        auth.getRedirectResult().then((result) => {
+            if (result.user) {
+                console.log('Google Sign-In successful via redirect:', result.user.email);
+                // User is now signed in, auth state change will be handled by onAuthStateChanged
+            }
+        }).catch((error) => {
+            console.error('Redirect result error:', error);
+            if (error.code === 'auth/internal-error') {
+                console.error('Internal auth error on redirect - this may be a Firebase configuration issue');
+            }
+        });
+
         // Initialize Google Auth Provider
         const googleProvider = new firebase.auth.GoogleAuthProvider();
         googleProvider.addScope('email');
@@ -1172,26 +1185,18 @@
                         });
                     });
 
-                    // Clear any existing auth state first
-                    await auth.signOut();
-
-                    // Add a small delay to ensure clean state
-                    await new Promise(resolve => setTimeout(resolve, 500));
-
-                    // Create fresh provider instance
+                    // Create fresh provider instance without clearing auth state
                     const freshProvider = new firebase.auth.GoogleAuthProvider();
                     freshProvider.addScope('email');
                     freshProvider.addScope('profile');
                     freshProvider.setCustomParameters({
-                        prompt: 'select_account',
-                        hd: undefined // Remove hosted domain restriction if any
+                        prompt: 'select_account'
                     });
 
-                    console.log('Attempting Google Sign-In with fresh provider...');
-                    const result = await auth.signInWithPopup(freshProvider);
-                    const user = result.user;
-                    console.log('Google Sign-In successful:', user.email);
-                    showSnackbar(`Welcome ${user.displayName || user.email}!`, 'success');
+                    console.log('Attempting Google Sign-In with redirect method...');
+                    await auth.signInWithRedirect(freshProvider);
+                    // Note: redirect will reload the page, so we won't reach this point
+                    return;
                 } catch (error) {
                     console.error('Google Sign-In Error:', error);
                     console.error('Error code:', error.code);
