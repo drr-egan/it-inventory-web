@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self' https://accounts.google.com https://www.google.com;">
     <title>IT Inventory Management - Firebase Material - UPDATED</title>
     <!-- GitHub Pages Deploy: 2025-09-18 - ITEMS FIXED -->
 
@@ -12,8 +11,6 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- reCAPTCHA Enterprise -->
-    <script src="https://www.google.com/recaptcha/enterprise.js?render=6LfGk9MrAAAAAHsG0euhYwAVbEsus_UURowB9Oql"></script>
 
     <!-- Material Design CSS (after Tailwind to override) -->
 
@@ -21,7 +18,10 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-check-compat.js"></script>
+
+    <!-- FirebaseUI for simplified authentication -->
+    <script src="https://www.gstatic.com/firebasejs/ui/6.0.2/firebase-ui-auth.js"></script>
+    <link type="text/css" rel="stylesheet" href="https://www.gstatic.com/firebasejs/ui/6.0.2/firebase-ui-auth.css" />
 
     <!-- React -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -55,9 +55,6 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        // App Check temporarily disabled due to compatibility issues with compat SDK
-        // The reCAPTCHA integration works directly in the button click handler
-        console.log('App Check disabled - using reCAPTCHA directly for user verification');
 
         // Configure auth settings
         auth.useDeviceLanguage();
@@ -102,19 +99,6 @@
         });
     </script>
 
-    <!-- reCAPTCHA Callback Function -->
-    <script>
-        function onSubmit(token) {
-            // Handle reCAPTCHA token and trigger Google Sign-In
-            console.log('reCAPTCHA token received:', token);
-            // Store token globally for use in handleGoogleSignIn
-            window.recaptchaToken = token;
-            // Trigger the handleGoogleSignIn function
-            if (window.triggerGoogleSignIn) {
-                window.triggerGoogleSignIn();
-            }
-        }
-    </script>
 
     <style>
         /* Material You Design System */
@@ -1367,7 +1351,7 @@
                                         className="w-full bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 py-4 px-6 text-lg rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                                         onClick={() => {
                                             if (loading) return;
-                                            // Direct Google Sign-In without reCAPTCHA
+                                            // Direct Google Sign-In
                                             handleGoogleSignIn();
                                         }}
                                         disabled={loading}
@@ -4348,6 +4332,23 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 }
             };
 
+            // Handle deleting a user
+            const handleDeleteUser = async (user) => {
+                const userName = user.name || (user.firstName + ' ' + user.lastName);
+                const confirmMessage = `Are you sure you want to delete user "${userName}"?\n\nThis action cannot be undone.`;
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+
+                try {
+                    await db.collection('users').doc(user.id).delete();
+                    showSnackbar(`User "${userName}" deleted successfully!`, 'success');
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    showSnackbar(`Failed to delete user: ${error.message}`, 'error');
+                }
+            };
+
             // Populate edit form when editing user changes
             useEffect(() => {
                 if (editingUser) {
@@ -4851,6 +4852,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                 });
 
                                 if (!user.firstName || !user.lastName || !user.costCode) {
+                                    parseErrorCount++;
+                                    continue;
+                                }
+
+                                // Filter out users without employee ID or with N/A
+                                if (!user.employeeId || user.employeeId.toLowerCase() === 'n/a' || user.employeeId.toLowerCase() === 'na') {
                                     parseErrorCount++;
                                     continue;
                                 }
@@ -6065,14 +6072,24 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             </code>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <MaterialButton
-                                                                onClick={() => setEditingUser(user)}
-                                                                variant="text"
-                                                                color="primary"
-                                                                className="!p-2"
-                                                            >
-                                                                <span className="material-icons text-sm">edit</span>
-                                                            </MaterialButton>
+                                                            <div className="flex gap-2">
+                                                                <MaterialButton
+                                                                    onClick={() => setEditingUser(user)}
+                                                                    variant="text"
+                                                                    color="primary"
+                                                                    className="!p-2"
+                                                                >
+                                                                    <span className="material-icons text-sm">edit</span>
+                                                                </MaterialButton>
+                                                                <MaterialButton
+                                                                    onClick={() => handleDeleteUser(user)}
+                                                                    variant="text"
+                                                                    color="error"
+                                                                    className="!p-2"
+                                                                >
+                                                                    <span className="material-icons text-sm">delete</span>
+                                                                </MaterialButton>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
