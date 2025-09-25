@@ -3049,6 +3049,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 scanning: false
             });
 
+            // User cleanup state for removing users without employee IDs
+            const [userCleanupState, setUserCleanupState] = useState({
+                scanning: false,
+                removing: false
+            });
+
             const [cleanupDialog, setCleanupDialog] = useState({
                 open: false,
                 duplicateGroups: [],
@@ -5308,6 +5314,62 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 }
             };
 
+            // Function to scan and remove users without employee IDs
+            const scanAndRemoveUsersWithoutEmployeeId = async () => {
+                setUserCleanupState(prev => ({ ...prev, scanning: true }));
+
+                try {
+                    const snapshot = await db.collection('users').get();
+                    const allUsers = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+
+                    // Find users without employee IDs
+                    const usersWithoutEmployeeId = allUsers.filter(user => {
+                        const employeeId = user.employeeId || user.employee_id || '';
+                        return !employeeId.trim() || employeeId.toLowerCase() === 'n/a' || employeeId.toLowerCase() === 'na';
+                    });
+
+                    if (usersWithoutEmployeeId.length === 0) {
+                        showSnackbar('No users without Employee IDs found!', 'success');
+                        return;
+                    }
+
+                    // Confirm deletion with user
+                    const userList = usersWithoutEmployeeId.map(user =>
+                        `• ${user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim()} - ${user.costCode || 'No Cost Code'}`
+                    ).join('\n');
+
+                    const confirmed = confirm(
+                        `Found ${usersWithoutEmployeeId.length} users without Employee IDs:\n\n${userList}\n\nDo you want to permanently delete these users?\n\n⚠️ WARNING: This action cannot be undone!`
+                    );
+
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    setUserCleanupState(prev => ({ ...prev, scanning: false, removing: true }));
+
+                    // Delete users in batch
+                    const batch = db.batch();
+
+                    usersWithoutEmployeeId.forEach(user => {
+                        batch.delete(db.collection('users').doc(user.id));
+                    });
+
+                    await batch.commit();
+
+                    showSnackbar(`Successfully removed ${usersWithoutEmployeeId.length} users without Employee IDs!`, 'success');
+
+                } catch (error) {
+                    console.error('Error removing users without employee IDs:', error);
+                    showSnackbar(`Error removing users: ${error.message}`, 'error');
+                } finally {
+                    setUserCleanupState({ scanning: false, removing: false });
+                }
+            };
+
             // Bulk Operations
             const handleResetAllQuantities = async () => {
                 if (!confirm('Are you sure you want to reset ALL item quantities to zero? This cannot be undone.')) {
@@ -5534,7 +5596,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                             {getPaginatedItems().map(item => (
                                                 <MaterialCard key={item.id} elevation={1} className="!p-3 lg:!p-4 hover:mat-elevation-4">
                                                     <div className="flex justify-between items-start mb-3">
-                                                        <h3 className="font-medium text-sm text-white line-clamp-2">
+                                                        <h3 className="font-medium text-sm text-white">
                                                             {item.name}
                                                         </h3>
                                                         <div className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -6490,15 +6552,15 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         </div>
                                     </MaterialCard>
 
-                                    {/* User Duplicate Cleanup */}
+                                    {/* User Cleanup */}
                                     <MaterialCard elevation={2}>
                                         <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                                             <span className="material-icons mr-2 text-purple-600">people</span>
-                                            User Duplicate Cleanup
+                                            User Cleanup
                                         </h3>
                                         <div className="space-y-4">
                                             <p className="text-sm text-gray-400">
-                                                Scan user database for duplicate users and merge them to clean up your database. Users are considered duplicates if they have matching employee IDs, names, or email addresses.
+                                                Clean up your user database by finding and merging duplicate users, or removing users without Employee IDs. Users are considered duplicates if they have matching employee IDs, names, or email addresses.
                                             </p>
                                             <MaterialButton
                                                 onClick={async () => {
@@ -6545,11 +6607,38 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                     </>
                                                 )}
                                             </MaterialButton>
+
+                                            <MaterialButton
+                                                onClick={scanAndRemoveUsersWithoutEmployeeId}
+                                                variant="outlined"
+                                                color="warning"
+                                                className="w-full"
+                                                disabled={userCleanupState.scanning || userCleanupState.removing}
+                                            >
+                                                {userCleanupState.scanning ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-orange-600 border-t-transparent rounded-full mr-2"></div>
+                                                        Scanning for Users...
+                                                    </>
+                                                ) : userCleanupState.removing ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full mr-2"></div>
+                                                        Removing Users...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="material-icons mr-2">person_remove</span>
+                                                        Remove Users Without Employee IDs
+                                                    </>
+                                                )}
+                                            </MaterialButton>
+
                                             <div className="text-xs text-gray-400 p-3 bg-purple-900/20 rounded-lg">
-                                                <p className="font-medium mb-1">💡 How it works:</p>
-                                                <p><strong>Detection:</strong> Finds users with matching employee IDs, names, or email addresses</p>
-                                                <p><strong>Merging:</strong> Combines user data and removes duplicates</p>
-                                                <p><strong>Safety:</strong> Preview all changes before applying them</p>
+                                                <p className="font-medium mb-1">💡 User Cleanup Options:</p>
+                                                <p><strong>Duplicate Detection:</strong> Finds users with matching employee IDs, names, or email addresses</p>
+                                                <p><strong>Duplicate Merging:</strong> Combines user data and removes duplicates with preview</p>
+                                                <p><strong>Employee ID Cleanup:</strong> Removes users without valid Employee IDs</p>
+                                                <p><strong>Safety:</strong> All operations include confirmation prompts</p>
                                             </div>
                                         </div>
                                     </MaterialCard>
@@ -7910,7 +7999,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         <span className="material-icons" style={{ color: 'var(--md-sys-color-warning)' }}>
                                             content_copy
                                         </span>
-                                        User Duplicate Cleanup ({userDuplicateDialog.duplicates.length} groups found)
+                                        User Cleanup - Duplicates ({userDuplicateDialog.duplicates.length} groups found)
                                     </h2>
                                 </div>
 
