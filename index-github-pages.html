@@ -4002,7 +4002,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                             // Set up real-time listeners with fallback data
                             const itemsUnsubscribe = db.collection('items')
                                 .onSnapshot((snapshot) => {
-                                    const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                                    const itemsData = snapshot.docs
+                                        .map(doc => ({ id: doc.id, ...doc.data() }))
+                                        .filter(item => !item.name?.startsWith('_CATEGORY_PLACEHOLDER_'));
 
                                     // If Firebase is empty, use default items
                                     if (itemsData.length === 0) {
@@ -4502,11 +4504,17 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         const itemsData = await itemsResponse.json();
                         console.log(`Refreshing ${itemsData.length} items in Firebase`);
 
-                        // Clear existing items first
+                        // Clear existing items first (but preserve category placeholders)
                         const existingItems = await db.collection('items').get();
                         if (!existingItems.empty) {
                             const deleteBatch = db.batch();
-                            existingItems.docs.forEach(doc => deleteBatch.delete(doc.ref));
+                            existingItems.docs.forEach(doc => {
+                                const data = doc.data();
+                                // Only delete actual items, not category placeholders
+                                if (!data.name?.startsWith('_CATEGORY_PLACEHOLDER_')) {
+                                    deleteBatch.delete(doc.ref);
+                                }
+                            });
                             await deleteBatch.commit();
                         }
 
@@ -4576,10 +4584,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 try {
                     const duplicates = [];
                     const snapshot = await db.collection('items').get();
-                    const existingItems = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
+                    const existingItems = snapshot.docs
+                        .map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }))
+                        .filter(item => !item.name?.startsWith('_CATEGORY_PLACEHOLDER_'));
 
                     for (const newItem of newItems) {
                         const existingItem = existingItems.find(existing =>
@@ -5060,10 +5070,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             const findExistingDuplicates = async () => {
                 try {
                     const snapshot = await db.collection('items').get();
-                    const allItems = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
+                    const allItems = snapshot.docs
+                        .map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }))
+                        .filter(item => !item.name?.startsWith('_CATEGORY_PLACEHOLDER_'));
 
                     const duplicateGroups = [];
                     const processed = new Set();
