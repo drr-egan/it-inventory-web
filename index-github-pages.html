@@ -3467,19 +3467,20 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         }
                     }
 
-                    // Generate PDF report
-                    await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
+                    // Generate PDF report and get processed PDF bytes
+                    const processedPdfBytes = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
 
                     // Archive processed checkout records and remove from checkout history
                     await archiveAndRemoveCheckoutRecords(matchedCheckoutRecords);
 
-                    // Update processing results
+                    // Update processing results with PDF data for re-download
                     setProcessingResults(prev => [...prev, {
                         timestamp: new Date().toISOString(),
                         fileName: pdfFile.name,
                         itemsProcessed: selectedShipmentItems.length,
                         totalAmount: total,
-                        vendor: vendorName || 'Manual Entry'
+                        vendor: vendorName || 'Manual Entry',
+                        pdfBytes: processedPdfBytes  // Store PDF bytes for re-download
                     }]);
 
                     showSnackbar(`Successfully processed ${selectedShipmentItems.length} items and updated inventory!`, 'success');
@@ -3500,6 +3501,28 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     showSnackbar(`Error processing shipment: ${error.message}`, 'error');
                 } finally {
                     setIsProcessing(false);
+                }
+            };
+
+            // Function to re-download processed PDF
+            const downloadProcessedPDF = (result) => {
+                if (!result.pdfBytes) {
+                    showSnackbar('PDF data not available for this record', 'error');
+                    return;
+                }
+
+                try {
+                    const blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = result.fileName;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                    showSnackbar('PDF download started', 'success');
+                } catch (error) {
+                    console.error('Error downloading PDF:', error);
+                    showSnackbar('Failed to download PDF', 'error');
                 }
             };
 
@@ -3677,16 +3700,18 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         currentPage.drawText(notes, { x: leftMargin, y, size: 9, font });
                     }
 
-                    // Save the PDF with the original filename (minus extension) + suffix
-                    const originalName = pdfFile.name.replace(/\.pdf$/i, '');
+                    // Save the PDF with the exact same filename as the upload
                     const pdfBytes = await originalPdfDoc.save();
                     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
                     link.href = url;
-                    link.download = `${originalName}-with-allocation.pdf`;
+                    link.download = pdfFile.name;  // Use exact same name as upload
                     link.click();
                     URL.revokeObjectURL(url);
+
+                    // Return PDF bytes for storage in processing results
+                    return pdfBytes;
 
                 } catch (error) {
                     console.error('Error generating PDF report:', error);
@@ -7559,13 +7584,23 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <div className="text-sm text-gray-500 text-gray-400">
-                                                            {new Date(result.timestamp).toLocaleDateString()}
+                                                        <div className="flex items-center space-x-3">
+                                                            <div className="text-sm text-gray-500 text-gray-400">
+                                                                {new Date(result.timestamp).toLocaleDateString()}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => downloadProcessedPDF(result)}
+                                                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors"
+                                                                title={`Download ${result.fileName}`}
+                                                            >
+                                                                <span className="material-icons text-sm">download</span>
+                                                                Download
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
-                                        )})
+                                        )}
                                     </MaterialCard>
                                 </div>
                             </div>
