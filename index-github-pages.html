@@ -18,6 +18,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 
     <!-- FirebaseUI for simplified authentication -->
     <script src="https://www.gstatic.com/firebasejs/ui/6.0.2/firebase-ui-auth.js"></script>
@@ -57,6 +58,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
+        const storage = firebase.storage();
 
 
         // Configure auth settings
@@ -982,6 +984,143 @@
                 <div className={`mat-card mat-elevation-${elevation} p-6 ${className}`} {...props}>
                     {children}
                 </div>
+            );
+        };
+
+        // Storage Management Component
+        const StorageManagement = ({ getStorageUsage, cleanupOldPDFs, showSnackbar }) => {
+            const [storageInfo, setStorageInfo] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
+            const [isCleaningUp, setIsCleaningUp] = useState(false);
+            const [showDetails, setShowDetails] = useState(false);
+
+            const refreshStorageInfo = async () => {
+                setIsLoading(true);
+                try {
+                    const info = await getStorageUsage();
+                    setStorageInfo(info);
+                } catch (error) {
+                    console.error('Error refreshing storage info:', error);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleCleanup = async () => {
+                if (!confirm('This will delete all PDFs older than 30 days. Continue?')) {
+                    return;
+                }
+
+                setIsCleaningUp(true);
+                try {
+                    const deletedCount = await cleanupOldPDFs();
+                    await refreshStorageInfo(); // Refresh after cleanup
+                    if (deletedCount === 0) {
+                        showSnackbar('No old PDFs found to delete', 'info');
+                    }
+                } catch (error) {
+                    console.error('Error during cleanup:', error);
+                    showSnackbar('Error during cleanup', 'error');
+                } finally {
+                    setIsCleaningUp(false);
+                }
+            };
+
+            useEffect(() => {
+                refreshStorageInfo();
+            }, []);
+
+            return (
+                <MaterialCard elevation={1} className="mt-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-white flex items-center">
+                            <span className="material-icons mr-2 text-orange-600">storage</span>
+                            Storage Management
+                        </h3>
+                        <button
+                            onClick={refreshStorageInfo}
+                            disabled={isLoading}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                        >
+                            <span className="material-icons text-sm">refresh</span>
+                            {isLoading ? 'Loading...' : 'Refresh'}
+                        </button>
+                    </div>
+
+                    {storageInfo && (
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-gray-700 p-3 rounded-lg">
+                                    <div className="text-xs text-gray-400">Total Files</div>
+                                    <div className="text-lg font-semibold text-white">{storageInfo.totalFiles}</div>
+                                </div>
+                                <div className="bg-gray-700 p-3 rounded-lg">
+                                    <div className="text-xs text-gray-400">Storage Used</div>
+                                    <div className="text-lg font-semibold text-white">{storageInfo.totalSizeMB} MB</div>
+                                </div>
+                                <div className="bg-gray-700 p-3 rounded-lg">
+                                    <div className="text-xs text-gray-400">Spark Plan Limit</div>
+                                    <div className="text-lg font-semibold text-green-400">5,120 MB</div>
+                                    <div className="text-xs text-gray-400">
+                                        {((storageInfo.totalSizeMB / 5120) * 100).toFixed(2)}% used
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-3 border-t border-gray-600">
+                                <button
+                                    onClick={() => setShowDetails(!showDetails)}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors"
+                                >
+                                    <span className="material-icons text-sm">
+                                        {showDetails ? 'visibility_off' : 'visibility'}
+                                    </span>
+                                    {showDetails ? 'Hide Details' : 'Show Details'}
+                                </button>
+
+                                <button
+                                    onClick={handleCleanup}
+                                    disabled={isCleaningUp}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                    <span className="material-icons text-sm">cleaning_services</span>
+                                    {isCleaningUp ? 'Cleaning...' : 'Cleanup Old PDFs (30+ days)'}
+                                </button>
+                            </div>
+
+                            {showDetails && storageInfo.fileDetails && (
+                                <div className="mt-3 p-3 bg-gray-800 rounded-lg">
+                                    <h4 className="text-sm font-semibold text-white mb-2">File Details</h4>
+                                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                                        {storageInfo.fileDetails.slice(0, 10).map((file, index) => (
+                                            <div key={index} className="flex justify-between items-center text-xs">
+                                                <span className="text-gray-300 truncate flex-1">
+                                                    {file.name.replace(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z_/, '')}
+                                                </span>
+                                                <div className="flex items-center space-x-2 text-gray-400">
+                                                    <span>{(file.size / 1024).toFixed(1)} KB</span>
+                                                    <span>{file.created.toLocaleDateString()}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {storageInfo.fileDetails.length > 10 && (
+                                            <div className="text-xs text-gray-500 text-center pt-2">
+                                                ... and {storageInfo.fileDetails.length - 10} more files
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {!storageInfo && !isLoading && (
+                        <div className="text-center py-4 text-gray-400">
+                            <span className="material-icons text-4xl mb-2 opacity-50">cloud_off</span>
+                            <p>Unable to load storage information</p>
+                        </div>
+                    )}
+                </MaterialCard>
             );
         };
 
@@ -3467,20 +3606,22 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         }
                     }
 
-                    // Generate PDF report and get processed PDF bytes
-                    const processedPdfBytes = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
+                    // Generate PDF report and upload to Firebase Storage
+                    const pdfStorageData = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
 
                     // Archive processed checkout records and remove from checkout history
                     await archiveAndRemoveCheckoutRecords(matchedCheckoutRecords);
 
-                    // Update processing results with PDF data for re-download
+                    // Update processing results with Firebase Storage data
                     setProcessingResults(prev => [...prev, {
                         timestamp: new Date().toISOString(),
                         fileName: pdfFile.name,
                         itemsProcessed: selectedShipmentItems.length,
                         totalAmount: total,
                         vendor: vendorName || 'Manual Entry',
-                        pdfBytes: processedPdfBytes  // Store PDF bytes for re-download
+                        downloadURL: pdfStorageData.downloadURL,
+                        storagePath: pdfStorageData.storagePath,
+                        uploadTimestamp: pdfStorageData.timestamp
                     }]);
 
                     showSnackbar(`Successfully processed ${selectedShipmentItems.length} items and updated inventory!`, 'success');
@@ -3504,25 +3645,140 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 }
             };
 
-            // Function to re-download processed PDF
+            // Function to re-download processed PDF from Firebase Storage
             const downloadProcessedPDF = (result) => {
-                if (!result.pdfBytes) {
-                    showSnackbar('PDF data not available for this record', 'error');
+                if (!result.downloadURL) {
+                    showSnackbar('PDF download URL not available for this record', 'error');
                     return;
                 }
 
                 try {
-                    const blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
-                    const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
-                    link.href = url;
+                    link.href = result.downloadURL;
                     link.download = result.fileName;
+                    link.target = '_blank';
                     link.click();
-                    URL.revokeObjectURL(url);
                     showSnackbar('PDF download started', 'success');
                 } catch (error) {
                     console.error('Error downloading PDF:', error);
                     showSnackbar('Failed to download PDF', 'error');
+                }
+            };
+
+            // Function to manually delete processed PDF from Firebase Storage
+            const deleteProcessedPDF = async (result, index) => {
+                if (!result.storagePath) {
+                    showSnackbar('Storage path not available for this record', 'error');
+                    return;
+                }
+
+                if (!confirm(`Are you sure you want to delete "${result.fileName}"? This cannot be undone.`)) {
+                    return;
+                }
+
+                try {
+                    // Delete from Firebase Storage
+                    const storageRef = storage.ref(result.storagePath);
+                    await storageRef.delete();
+
+                    // Remove from processing results
+                    setProcessingResults(prev => prev.filter((_, i) => i !== index));
+
+                    showSnackbar(`Successfully deleted ${result.fileName}`, 'success');
+                } catch (error) {
+                    console.error('Error deleting PDF:', error);
+                    showSnackbar(`Failed to delete PDF: ${error.message}`, 'error');
+                }
+            };
+
+            // Function to get Firebase Storage usage information
+            const getStorageUsage = async () => {
+                try {
+                    const storageRef = storage.ref('processed-pdfs');
+                    const listResult = await storageRef.listAll();
+
+                    let totalSize = 0;
+                    const fileDetails = [];
+
+                    // Get metadata for each file to calculate total size
+                    for (const itemRef of listResult.items) {
+                        try {
+                            const metadata = await itemRef.getMetadata();
+                            totalSize += parseInt(metadata.size) || 0;
+                            fileDetails.push({
+                                name: itemRef.name,
+                                size: parseInt(metadata.size) || 0,
+                                created: new Date(metadata.timeCreated),
+                                path: itemRef.fullPath
+                            });
+                        } catch (metaError) {
+                            console.warn(`Could not get metadata for ${itemRef.name}:`, metaError);
+                        }
+                    }
+
+                    return {
+                        totalFiles: listResult.items.length,
+                        totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2),
+                        totalSizeBytes: totalSize,
+                        fileDetails: fileDetails.sort((a, b) => b.created - a.created)
+                    };
+                } catch (error) {
+                    console.error('Error getting storage usage:', error);
+                    showSnackbar('Failed to get storage usage information', 'error');
+                    return null;
+                }
+            };
+
+            // Function to auto-delete PDFs older than 30 days
+            const cleanupOldPDFs = async () => {
+                try {
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+                    const storageRef = storage.ref('processed-pdfs');
+                    const listResult = await storageRef.listAll();
+
+                    let deletedCount = 0;
+                    const deletionPromises = [];
+
+                    for (const itemRef of listResult.items) {
+                        try {
+                            const metadata = await itemRef.getMetadata();
+                            const createdDate = new Date(metadata.timeCreated);
+
+                            if (createdDate < thirtyDaysAgo) {
+                                deletionPromises.push(
+                                    itemRef.delete().then(() => {
+                                        deletedCount++;
+                                        console.log(`Deleted old PDF: ${itemRef.name}`);
+                                    }).catch(err => {
+                                        console.error(`Failed to delete ${itemRef.name}:`, err);
+                                    })
+                                );
+                            }
+                        } catch (metaError) {
+                            console.warn(`Could not check age of ${itemRef.name}:`, metaError);
+                        }
+                    }
+
+                    await Promise.all(deletionPromises);
+
+                    // Also clean up processing results for deleted files
+                    setProcessingResults(prev =>
+                        prev.filter(result => {
+                            const resultDate = new Date(result.uploadTimestamp || result.timestamp);
+                            return resultDate >= thirtyDaysAgo;
+                        })
+                    );
+
+                    if (deletedCount > 0) {
+                        showSnackbar(`Automatically deleted ${deletedCount} old PDFs (>30 days)`, 'info');
+                    }
+
+                    return deletedCount;
+                } catch (error) {
+                    console.error('Error during PDF cleanup:', error);
+                    return 0;
                 }
             };
 
@@ -3710,8 +3966,18 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     link.click();
                     URL.revokeObjectURL(url);
 
-                    // Return PDF bytes for storage in processing results
-                    return pdfBytes;
+                    // Upload PDF to Firebase Storage with timestamp to avoid conflicts
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const storageRef = storage.ref(`processed-pdfs/${timestamp}_${pdfFile.name}`);
+                    const uploadTask = await storageRef.put(blob);
+                    const downloadURL = await storageRef.getDownloadURL();
+
+                    // Return storage metadata for processing results
+                    return {
+                        downloadURL,
+                        storagePath: `processed-pdfs/${timestamp}_${pdfFile.name}`,
+                        timestamp: new Date().toISOString()
+                    };
 
                 } catch (error) {
                     console.error('Error generating PDF report:', error);
@@ -4103,6 +4369,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                 });
 
                             setConnectionStatus('connected');
+
+                            // Automatically cleanup old PDFs on app startup
+                            setTimeout(() => {
+                                cleanupOldPDFs().catch(error => {
+                                    console.warn('Auto-cleanup failed:', error);
+                                });
+                            }, 2000); // Wait 2 seconds after connection is established
 
                             return () => {
                                 itemsUnsubscribe();
@@ -7588,20 +7861,37 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             <div className="text-sm text-gray-500 text-gray-400">
                                                                 {new Date(result.timestamp).toLocaleDateString()}
                                                             </div>
-                                                            <button
-                                                                onClick={() => downloadProcessedPDF(result)}
-                                                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors"
-                                                                title={`Download ${result.fileName}`}
-                                                            >
-                                                                <span className="material-icons text-sm">download</span>
-                                                                Download
-                                                            </button>
+                                                            <div className="flex items-center space-x-2">
+                                                                <button
+                                                                    onClick={() => downloadProcessedPDF(result)}
+                                                                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors"
+                                                                    title={`Download ${result.fileName}`}
+                                                                >
+                                                                    <span className="material-icons text-sm">download</span>
+                                                                    Download
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => deleteProcessedPDF(result, processingResults.length - 1 - index)}
+                                                                    className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg transition-colors"
+                                                                    title={`Delete ${result.fileName}`}
+                                                                >
+                                                                    <span className="material-icons text-sm">delete</span>
+                                                                    Delete
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
                                         )}
                                     </MaterialCard>
+
+                                    {/* Storage Management */}
+                                    <StorageManagement
+                                        getStorageUsage={getStorageUsage}
+                                        cleanupOldPDFs={cleanupOldPDFs}
+                                        showSnackbar={showSnackbar}
+                                    />
                                 </div>
                             </div>
                             </div>
