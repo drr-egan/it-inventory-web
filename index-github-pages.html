@@ -32,6 +32,9 @@
     <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
+    <!-- CSV Processing Library -->
+    <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
     <!-- PDF.js Configuration -->
     <script>
         // Set PDF.js worker
@@ -5080,64 +5083,93 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     try {
                         setCsvOperations(prev => ({ ...prev, historyImportStatus: 'Parsing CSV data...' }));
                         const csv = e.target.result;
-                        const lines = csv.split('\n');
-                        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
 
-                        setCsvOperations(prev => ({ ...prev, historyImportStatus: `Processing ${lines.length - 1} history records...` }));
+                        // Parse CSV using Papa Parse for proper handling of quoted fields
+                        const parseResult = Papa.parse(csv, {
+                            header: true,
+                            skipEmptyLines: true,
+                            transformHeader: (header) => header.trim() // Clean headers
+                        });
+
+                        if (parseResult.errors.length > 0) {
+                            console.warn('Papa Parse errors:', parseResult.errors);
+                        }
+
+                        const csvData = parseResult.data;
+                        setCsvOperations(prev => ({ ...prev, historyImportStatus: `Processing ${csvData.length} history records...` }));
 
                         // Parse all history records from CSV first
                         const newRecords = [];
                         let parseErrorCount = 0;
+                        const parseErrors = [];
 
-                        for (let i = 1; i < lines.length; i++) {
-                            if (!lines[i].trim()) continue; // Skip empty lines
+                        for (let i = 0; i < csvData.length; i++) {
+                            const row = csvData[i];
 
                             try {
-                                const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
                                 const record = {};
 
-                                headers.forEach((header, index) => {
-                                    switch(header.toLowerCase()) {
-                                        case 'itemname':
-                                        case 'item name':
-                                            record.itemName = values[index] || '';
-                                            break;
-                                        case 'username':
-                                        case 'user name':
-                                            record.rawUserName = values[index] || '';
-                                            break;
-                                        case 'employee id':
-                                        case 'employeeid':
-                                            record.employeeId = values[index] || '';
-                                            break;
-                                        case 'cost code':
-                                        case 'costcode':
-                                            record.costCode = values[index] || '';
-                                            break;
-                                        case 'jobnum':
-                                        case 'job num':
-                                        case 'job number':
-                                            record.jobNumber = values[index] && values[index] !== 'NULL' ? values[index] : '';
-                                            break;
-                                        case 'dateentered':
-                                        case 'date entered':
-                                        case 'date':
-                                            record.dateEntered = values[index] || '';
-                                            break;
+                                // Map headers with case-insensitive matching and multiple variants
+                                Object.keys(row).forEach(header => {
+                                    const headerLower = header.toLowerCase();
+                                    const value = row[header]?.toString().trim() || '';
+
+                                    // ItemName
+                                    if (['itemname', 'item name', 'item'].includes(headerLower)) {
+                                        record.itemName = value;
+                                    }
+                                    // UserName
+                                    else if (['username', 'user name', 'user'].includes(headerLower)) {
+                                        record.rawUserName = value;
+                                    }
+                                    // Employee ID
+                                    else if (['employee id', 'employeeid', 'emp id', 'empid'].includes(headerLower)) {
+                                        record.employeeId = value;
+                                    }
+                                    // Cost Code
+                                    else if (['cost code', 'costcode', 'cost_code', 'department', 'dept'].includes(headerLower)) {
+                                        record.costCode = value;
+                                    }
+                                    // Job Number
+                                    else if (['jobnum', 'job num', 'job number', 'jobnumber', 'job'].includes(headerLower)) {
+                                        record.jobNumber = value && value !== 'NULL' ? value : '';
+                                    }
+                                    // Date
+                                    else if (['dateentered', 'date entered', 'date_entered', 'date', 'timestamp'].includes(headerLower)) {
+                                        record.dateEntered = value;
                                     }
                                 });
 
                                 // Validate required fields
                                 if (record.itemName && record.rawUserName && (record.costCode || record.jobNumber) && record.dateEntered) {
+
+                                    // User name resolution using Employee ID lookup
+                                    if (record.employeeId) {
+                                        const foundUser = users.find(user =>
+                                            (user.employeeId || user.employee_id) === record.employeeId
+                                        );
+                                        if (foundUser) {
+                                            // Use proper "FirstName LastName" format from database
+                                            record.resolvedUserName = foundUser.name ||
+                                                `${foundUser.firstName || ''} ${foundUser.lastName || ''}`.trim();
+                                        } else {
+                                            // Employee ID not found, use imported format
+                                            record.resolvedUserName = record.rawUserName;
+                                        }
+                                    } else {
+                                        // No Employee ID provided, use imported format
+                                        record.resolvedUserName = record.rawUserName;
+                                    }
+
                                     // Apply job number priority logic
                                     if (record.jobNumber && record.jobNumber.trim()) {
                                         // Job number takes priority - use it as departmentId and set special userName
                                         record.departmentId = record.jobNumber;
                                         record.userName = `Bill to Job ${record.jobNumber}`;
                                     } else {
-                                        // No job number - use cost code as departmentId and actual user name
+                                        // No job number - use cost code as departmentId and resolved user name
                                         record.departmentId = formatDepartmentId(record.costCode);
-                                        record.userName = record.rawUserName;
+                                        record.userName = record.resolvedUserName;
                                     }
 
                                     // Set default quantity and other required fields
@@ -5147,6 +5179,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     // Parse date
                                     try {
                                         record.dateEntered = new Date(record.dateEntered);
+                                        if (isNaN(record.dateEntered.getTime())) {
+                                            throw new Error('Invalid date');
+                                        }
                                     } catch (dateError) {
                                         record.dateEntered = new Date();
                                     }
@@ -5154,20 +5189,47 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     newRecords.push(record);
                                 } else {
                                     parseErrorCount++;
+                                    parseErrors.push({
+                                        row: i + 1,
+                                        data: row,
+                                        missing: [
+                                            !record.itemName ? 'ItemName' : null,
+                                            !record.rawUserName ? 'UserName' : null,
+                                            !record.costCode && !record.jobNumber ? 'Cost Code or JobNum' : null,
+                                            !record.dateEntered ? 'DateEntered' : null
+                                        ].filter(Boolean)
+                                    });
                                 }
 
                             } catch (parseError) {
                                 parseErrorCount++;
+                                parseErrors.push({
+                                    row: i + 1,
+                                    error: parseError.message,
+                                    data: row
+                                });
                             }
                         }
 
                         if (newRecords.length === 0) {
-                            showSnackbar(
-                                parseErrorCount > 0
-                                    ? `No valid history records found. ${parseErrorCount} parsing errors.`
-                                    : 'No history records found in CSV file.',
-                                'warning'
-                            );
+                            let errorMessage = parseErrorCount > 0
+                                ? `No valid history records found. ${parseErrorCount} parsing errors.`
+                                : 'No history records found in CSV file.';
+
+                            // Add detailed error information
+                            if (parseErrors.length > 0) {
+                                console.error('Detailed parse errors:', parseErrors);
+                                const firstError = parseErrors[0];
+                                if (firstError.missing) {
+                                    errorMessage += `\n\nFirst error (row ${firstError.row}): Missing fields: ${firstError.missing.join(', ')}`;
+                                } else if (firstError.error) {
+                                    errorMessage += `\n\nFirst error (row ${firstError.row}): ${firstError.error}`;
+                                }
+                                errorMessage += `\n\nExpected columns: ItemName, UserName, Cost Code (or JobNum), DateEntered, Employee ID`;
+                            }
+
+                            alert(errorMessage);
+                            showSnackbar('Import failed - check console for details', 'error');
                             setCsvOperations(prev => ({ ...prev, importingHistory: false, historyImportStatus: '' }));
                             event.target.value = '';
                             return;
@@ -7477,7 +7539,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-400">
-                                                            {formatDepartmentId(record.departmentId || record.costCode) || '-'}
+                                                            {record.jobNumber && record.jobNumber.trim()
+                                                                ? `Job ${record.jobNumber}`
+                                                                : (formatDepartmentId(record.departmentId || record.costCode) || '-')
+                                                            }
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-400">
                                                             {record.dateEntered?.toDate?.()?.toLocaleDateString() ||
