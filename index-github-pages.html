@@ -997,10 +997,25 @@
             const refreshStorageInfo = async () => {
                 setIsLoading(true);
                 try {
+                    console.log('StorageManagement: Refreshing storage info...');
                     const info = await getStorageUsage();
+                    console.log('StorageManagement: Got storage info:', info);
                     setStorageInfo(info);
+
+                    if (info && info.error) {
+                        showSnackbar(`Storage warning: ${info.error}`, 'warning');
+                    }
                 } catch (error) {
-                    console.error('Error refreshing storage info:', error);
+                    console.error('StorageManagement: Error refreshing storage info:', error);
+                    showSnackbar('Failed to load storage information', 'error');
+                    // Set default empty state so UI doesn't stay in loading
+                    setStorageInfo({
+                        totalFiles: 0,
+                        totalSizeMB: '0.00',
+                        totalSizeBytes: 0,
+                        fileDetails: [],
+                        error: 'Unable to access Firebase Storage'
+                    });
                 } finally {
                     setIsLoading(false);
                 }
@@ -1027,7 +1042,25 @@
             };
 
             useEffect(() => {
+                // Add a timeout to prevent infinite loading
+                const timeoutId = setTimeout(() => {
+                    if (isLoading) {
+                        console.warn('Storage info loading timeout');
+                        setIsLoading(false);
+                        setStorageInfo({
+                            totalFiles: 0,
+                            totalSizeMB: '0.00',
+                            totalSizeBytes: 0,
+                            fileDetails: [],
+                            error: 'Loading timeout - Firebase Storage may not be configured'
+                        });
+                        showSnackbar('Storage loading timeout - check Firebase configuration', 'warning');
+                    }
+                }, 10000); // 10 second timeout
+
                 refreshStorageInfo();
+
+                return () => clearTimeout(timeoutId);
             }, []);
 
             return (
@@ -1118,6 +1151,28 @@
                         <div className="text-center py-4 text-gray-400">
                             <span className="material-icons text-4xl mb-2 opacity-50">cloud_off</span>
                             <p>Unable to load storage information</p>
+                            <p className="text-xs mt-2">Check browser console for details</p>
+                        </div>
+                    )}
+
+                    {isLoading && (
+                        <div className="text-center py-4 text-gray-400">
+                            <span className="material-icons text-4xl mb-2 opacity-50 animate-spin">refresh</span>
+                            <p>Loading storage information...</p>
+                            <p className="text-xs mt-2">This may take a moment on first load</p>
+                        </div>
+                    )}
+
+                    {storageInfo && storageInfo.error && (
+                        <div className="bg-yellow-900/20 border border-yellow-600 rounded-lg p-3 mb-3">
+                            <div className="flex items-center gap-2 text-yellow-400">
+                                <span className="material-icons text-sm">warning</span>
+                                <span className="text-sm font-medium">Storage Access Issue</span>
+                            </div>
+                            <p className="text-xs text-gray-300 mt-1">{storageInfo.error}</p>
+                            <p className="text-xs text-gray-400 mt-2">
+                                Possible causes: Firebase Storage not enabled, insufficient permissions, or network issues
+                            </p>
                         </div>
                     )}
                 </MaterialCard>
@@ -3691,11 +3746,45 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 }
             };
 
+            // Function to test Firebase Storage connectivity
+            const testStorageConnectivity = async () => {
+                try {
+                    console.log('Testing Firebase Storage connectivity...');
+                    const testRef = storage.ref('test-connection');
+
+                    // Try to get metadata (this will fail gracefully if folder doesn't exist)
+                    await testRef.listAll();
+                    console.log('Storage connectivity test successful');
+                    return true;
+                } catch (error) {
+                    console.error('Storage connectivity test failed:', error);
+                    if (error.code === 'storage/unauthorized') {
+                        throw new Error('Storage access unauthorized - check Firebase Storage rules');
+                    } else if (error.code === 'storage/unknown') {
+                        throw new Error('Storage service unavailable - check Firebase Storage configuration');
+                    } else {
+                        throw new Error(`Storage error: ${error.message}`);
+                    }
+                }
+            };
+
             // Function to get Firebase Storage usage information
             const getStorageUsage = async () => {
                 try {
+                    console.log('Getting storage usage...');
+
+                    if (!storage) {
+                        throw new Error('Firebase Storage not initialized');
+                    }
+
+                    // Test connectivity first
+                    await testStorageConnectivity();
+
                     const storageRef = storage.ref('processed-pdfs');
+                    console.log('Storage ref created, listing files...');
+
                     const listResult = await storageRef.listAll();
+                    console.log(`Found ${listResult.items.length} files in Firebase Storage`);
 
                     let totalSize = 0;
                     const fileDetails = [];
@@ -3716,16 +3805,28 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         }
                     }
 
-                    return {
+                    const result = {
                         totalFiles: listResult.items.length,
                         totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2),
                         totalSizeBytes: totalSize,
                         fileDetails: fileDetails.sort((a, b) => b.created - a.created)
                     };
+
+                    console.log('Storage usage calculated:', result);
+                    return result;
                 } catch (error) {
                     console.error('Error getting storage usage:', error);
-                    showSnackbar('Failed to get storage usage information', 'error');
-                    return null;
+                    console.error('Error details:', error.code, error.message);
+
+                    // Return basic info if we can't access storage
+                    showSnackbar(`Storage access error: ${error.message}`, 'error');
+                    return {
+                        totalFiles: 0,
+                        totalSizeMB: '0.00',
+                        totalSizeBytes: 0,
+                        fileDetails: [],
+                        error: error.message
+                    };
                 }
             };
 
