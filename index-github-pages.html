@@ -3029,10 +3029,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             const [csvOperations, setCsvOperations] = useState({
                 importingItems: false,
                 importingUsers: false,
+                importingHistory: false,
                 exportingItems: false,
                 exportingUsers: false,
                 itemImportStatus: '',
-                userImportStatus: ''
+                userImportStatus: '',
+                historyImportStatus: ''
             });
 
             const [duplicateDialog, setDuplicateDialog] = useState({
@@ -5066,6 +5068,258 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 reader.readAsText(file);
             };
 
+            // CSV Import Functions - History
+            const handleHistoryImport = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                setCsvOperations(prev => ({ ...prev, importingHistory: true, historyImportStatus: 'Reading file...' }));
+                const reader = new FileReader();
+
+                reader.onload = async (e) => {
+                    try {
+                        setCsvOperations(prev => ({ ...prev, historyImportStatus: 'Parsing CSV data...' }));
+                        const csv = e.target.result;
+                        const lines = csv.split('\n');
+                        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+
+                        setCsvOperations(prev => ({ ...prev, historyImportStatus: `Processing ${lines.length - 1} history records...` }));
+
+                        // Parse all history records from CSV first
+                        const newRecords = [];
+                        let parseErrorCount = 0;
+
+                        for (let i = 1; i < lines.length; i++) {
+                            if (!lines[i].trim()) continue; // Skip empty lines
+
+                            try {
+                                const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+                                const record = {};
+
+                                headers.forEach((header, index) => {
+                                    switch(header.toLowerCase()) {
+                                        case 'itemname':
+                                        case 'item name':
+                                            record.itemName = values[index] || '';
+                                            break;
+                                        case 'username':
+                                        case 'user name':
+                                            record.rawUserName = values[index] || '';
+                                            break;
+                                        case 'employee id':
+                                        case 'employeeid':
+                                            record.employeeId = values[index] || '';
+                                            break;
+                                        case 'cost code':
+                                        case 'costcode':
+                                            record.costCode = values[index] || '';
+                                            break;
+                                        case 'jobnum':
+                                        case 'job num':
+                                        case 'job number':
+                                            record.jobNumber = values[index] && values[index] !== 'NULL' ? values[index] : '';
+                                            break;
+                                        case 'dateentered':
+                                        case 'date entered':
+                                        case 'date':
+                                            record.dateEntered = values[index] || '';
+                                            break;
+                                    }
+                                });
+
+                                // Validate required fields
+                                if (record.itemName && record.rawUserName && (record.costCode || record.jobNumber) && record.dateEntered) {
+                                    // Apply job number priority logic
+                                    if (record.jobNumber && record.jobNumber.trim()) {
+                                        // Job number takes priority - use it as departmentId and set special userName
+                                        record.departmentId = record.jobNumber;
+                                        record.userName = `Bill to Job ${record.jobNumber}`;
+                                    } else {
+                                        // No job number - use cost code as departmentId and actual user name
+                                        record.departmentId = formatDepartmentId(record.costCode);
+                                        record.userName = record.rawUserName;
+                                    }
+
+                                    // Set default quantity and other required fields
+                                    record.quantity = 1; // Default quantity for historical records
+                                    record.id = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+                                    // Parse date
+                                    try {
+                                        record.dateEntered = new Date(record.dateEntered);
+                                    } catch (dateError) {
+                                        record.dateEntered = new Date();
+                                    }
+
+                                    newRecords.push(record);
+                                } else {
+                                    parseErrorCount++;
+                                }
+
+                            } catch (parseError) {
+                                parseErrorCount++;
+                            }
+                        }
+
+                        if (newRecords.length === 0) {
+                            showSnackbar(
+                                parseErrorCount > 0
+                                    ? `No valid history records found. ${parseErrorCount} parsing errors.`
+                                    : 'No history records found in CSV file.',
+                                'warning'
+                            );
+                            setCsvOperations(prev => ({ ...prev, importingHistory: false, historyImportStatus: '' }));
+                            event.target.value = '';
+                            return;
+                        }
+
+                        // Check for duplicates
+                        setCsvOperations(prev => ({ ...prev, historyImportStatus: 'Checking for duplicates...' }));
+                        const duplicates = await findHistoryDuplicates(newRecords);
+
+                        if (duplicates.length > 0) {
+                            const action = prompt(
+                                `🔍 DUPLICATE HISTORY RECORDS FOUND!\n\n` +
+                                `Found ${duplicates.length} potential duplicate records:\n\n` +
+                                duplicates.slice(0, 5).map(dup => `• ${dup.itemName} - ${dup.userName} - ${dup.dateEntered}`).join('\n') +
+                                (duplicates.length > 5 ? `\n... and ${duplicates.length - 5} more` : '') +
+                                `\n\n📝 WHAT WOULD YOU LIKE TO DO?\n\n` +
+                                `1️⃣ SKIP duplicates, import only new records\n` +
+                                `   (Will import ${newRecords.length - duplicates.length} new records)\n\n` +
+                                `2️⃣ CANCEL import\n` +
+                                `   (Stop import so you can review your CSV file)\n\n` +
+                                `Please enter 1 or 2:`
+                            );
+
+                            if (action === '2' || action === null) {
+                                showSnackbar('Import cancelled. Please review CSV for duplicates.', 'info');
+                                setCsvOperations(prev => ({ ...prev, importingHistory: false, historyImportStatus: '' }));
+                                return;
+                            }
+
+                            if (action === '1') {
+                                // Filter out duplicates
+                                const uniqueRecords = newRecords.filter(record =>
+                                    !duplicates.some(dup =>
+                                        dup.itemName === record.itemName &&
+                                        dup.userName === record.userName &&
+                                        new Date(dup.dateEntered).getTime() === new Date(record.dateEntered).getTime()
+                                    )
+                                );
+
+                                if (uniqueRecords.length === 0) {
+                                    showSnackbar('All records were duplicates. No records imported.', 'warning');
+                                    setCsvOperations(prev => ({ ...prev, importingHistory: false, historyImportStatus: '' }));
+                                    return;
+                                }
+
+                                // Import unique records
+                                setCsvOperations(prev => ({ ...prev, historyImportStatus: `Importing ${uniqueRecords.length} unique records...` }));
+                                const { successCount, errorCount } = await importHistoryRecords(uniqueRecords);
+
+                                showSnackbar(
+                                    `Import completed! ${successCount} records added, ${errorCount} errors, ${duplicates.length} duplicates skipped.`,
+                                    successCount > 0 ? 'success' : 'warning'
+                                );
+                            }
+                        } else {
+                            // No duplicates, proceed with direct import
+                            setCsvOperations(prev => ({ ...prev, historyImportStatus: `Importing ${newRecords.length} records...` }));
+                            const { successCount, errorCount } = await importHistoryRecords(newRecords);
+
+                            showSnackbar(
+                                `Import completed! ${successCount} records added, ${errorCount} errors.`,
+                                successCount > 0 ? 'success' : 'warning'
+                            );
+                        }
+
+                        setCsvOperations(prev => ({ ...prev, importingHistory: false, historyImportStatus: '' }));
+                        event.target.value = ''; // Reset file input
+
+                    } catch (error) {
+                        console.error('History import error:', error);
+                        showSnackbar(`Import failed: ${error.message}`, 'error');
+                        setCsvOperations(prev => ({ ...prev, importingHistory: false, historyImportStatus: '' }));
+                        event.target.value = '';
+                    }
+                };
+
+                reader.readAsText(file);
+            };
+
+            // Helper functions for history import
+            const findHistoryDuplicates = async (newRecords) => {
+                const duplicates = [];
+
+                for (const record of newRecords) {
+                    // Check against current checkout history
+                    const existingInCurrent = checkoutHistory.find(existing =>
+                        existing.itemName?.toLowerCase() === record.itemName?.toLowerCase() &&
+                        existing.userName?.toLowerCase() === record.userName?.toLowerCase() &&
+                        Math.abs(new Date(existing.dateEntered).getTime() - new Date(record.dateEntered).getTime()) < 60000 // Within 1 minute
+                    );
+
+                    // Check against archived checkouts
+                    const existingInArchive = archivedCheckouts.find(existing =>
+                        existing.itemName?.toLowerCase() === record.itemName?.toLowerCase() &&
+                        existing.userName?.toLowerCase() === record.userName?.toLowerCase() &&
+                        Math.abs(new Date(existing.dateEntered).getTime() - new Date(record.dateEntered).getTime()) < 60000 // Within 1 minute
+                    );
+
+                    if (existingInCurrent || existingInArchive) {
+                        duplicates.push({
+                            itemName: record.itemName,
+                            userName: record.userName,
+                            dateEntered: record.dateEntered.toLocaleString()
+                        });
+                    }
+                }
+
+                return duplicates;
+            };
+
+            const importHistoryRecords = async (records) => {
+                let successCount = 0;
+                let errorCount = 0;
+
+                try {
+                    // Import records in batches to avoid Firebase limitations
+                    const batchSize = 50;
+                    for (let i = 0; i < records.length; i += batchSize) {
+                        const batch = db.batch();
+                        const recordsBatch = records.slice(i, i + batchSize);
+
+                        recordsBatch.forEach(record => {
+                            const docRef = db.collection('checkoutHistory').doc();
+                            batch.set(docRef, {
+                                ...record,
+                                id: docRef.id,
+                                dateEntered: firebase.firestore.Timestamp.fromDate(record.dateEntered),
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                createdBy: auth.currentUser?.email || 'history-import',
+                                notes: 'Imported from historical data',
+                                status: 'active'
+                            });
+                        });
+
+                        await batch.commit();
+                        successCount += recordsBatch.length;
+
+                        // Update progress
+                        setCsvOperations(prev => ({
+                            ...prev,
+                            historyImportStatus: `Imported ${Math.min(i + batchSize, records.length)} / ${records.length} records...`
+                        }));
+                    }
+
+                } catch (error) {
+                    console.error('Error importing history records:', error);
+                    errorCount = records.length - successCount;
+                }
+
+                return { successCount, errorCount };
+            };
+
             // Duplicate Cleanup Functions
             const findExistingDuplicates = async () => {
                 try {
@@ -7080,6 +7334,53 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     </div>
                                 </div>
 
+                                {/* CSV Import Section */}
+                                <MaterialCard elevation={2} className="mb-6">
+                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                                        <span className="material-icons mr-2 text-purple-600">file_upload</span>
+                                        Import Historical Checkout Data
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <div className="text-xs text-gray-400 p-3 bg-yellow-900/20 rounded-lg border-l-4 border-yellow-400">
+                                            <p className="font-medium mb-2">📋 CSV Import Instructions:</p>
+                                            <div className="space-y-1 ml-2">
+                                                <p><strong>Required columns:</strong> ItemName, UserName, Cost Code, DateEntered</p>
+                                                <p><strong>Optional columns:</strong> Employee ID, JobNum</p>
+                                                <p><strong>Job Priority:</strong> If JobNum is provided, it will be used as the Cost Code and user will show "Bill to Job [JobNum]"</p>
+                                                <p><strong>Duplicate Detection:</strong> System will detect and prevent duplicate entries</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <input
+                                                type="file"
+                                                accept=".csv"
+                                                onChange={handleHistoryImport}
+                                                className="hidden"
+                                                id="history-csv-import"
+                                            />
+                                            <MaterialButton
+                                                onClick={() => document.getElementById('history-csv-import').click()}
+                                                variant="outlined"
+                                                color="primary"
+                                                className="w-full"
+                                                disabled={csvOperations.importingHistory}
+                                            >
+                                                {csvOperations.importingHistory ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
+                                                        {csvOperations.historyImportStatus || 'Importing...'}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="material-icons mr-2">upload_file</span>
+                                                        Import Checkout History CSV
+                                                    </>
+                                                )}
+                                            </MaterialButton>
+                                        </div>
+                                    </div>
+                                </MaterialCard>
+
                                 <MaterialCard elevation={1}>
                                     <div className="mb-4">
                                         <p className="text-sm text-gray-400">
@@ -7136,7 +7437,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                                         <div className="flex items-center">
                                                             <span className="material-icons mr-1 text-sm">business</span>
-                                                            Department
+                                                            Cost Code
                                                         </div>
                                                     </th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -7168,7 +7469,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             {record.itemName}
                                                         </td>
                                                         <td className="px-6 py-4 text-gray-400">
-                                                            {record.userName}
+                                                            {record.jobNumber && record.jobNumber.trim() ? `Bill to Job ${record.jobNumber}` : record.userName}
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-900/20 text-blue-300">
@@ -7754,7 +8055,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         />
 
                                         <MaterialInput
-                                            label="Department ID"
+                                            label="Cost Code"
                                             value={editCheckoutRecord.departmentId}
                                             onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, departmentId: e.target.value }))}
                                             placeholder="e.g., 2-20-060"
