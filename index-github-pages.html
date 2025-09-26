@@ -5728,6 +5728,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             const mergeCheckoutDuplicates = async (duplicateGroups, choices) => {
                 try {
                     let cleanedCount = 0;
+                    let skippedCount = 0;
                     let errorCount = 0;
 
                     for (const group of duplicateGroups) {
@@ -5736,6 +5737,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                         if (!choice) {
                             errorCount++;
+                            continue;
+                        }
+
+                        // Skip this group if user chose to keep all records
+                        if (choice.action === 'skip') {
+                            console.log(`Skipping duplicate group: ${groupKey}`);
+                            skippedCount++;
                             continue;
                         }
 
@@ -5789,7 +5797,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         throw new Error(`${cleanedCount} groups cleaned, ${errorCount} errors`);
                     }
 
-                    return { success: true, cleanedCount };
+                    return { success: true, cleanedCount, skippedCount };
 
                 } catch (error) {
                     console.error('Error during checkout duplicate cleanup:', error);
@@ -7147,9 +7155,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             const initialChoices = {};
                                                             duplicateGroups.forEach(group => {
                                                                 const groupKey = `${group.itemName}_${group.normalizedUserName}`;
+                                                                // Default to skip for safer user experience
                                                                 initialChoices[groupKey] = {
-                                                                    keepRecordId: group.records[0].id,
-                                                                    deleteRecordIds: group.records.slice(1).map(record => record.id)
+                                                                    action: 'skip'
                                                                 };
                                                             });
                                                             setCheckoutCleanupDialog({
@@ -8782,6 +8790,35 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                     </div>
 
                                                     <div className="space-y-2">
+                                                        {/* Skip option */}
+                                                        <label className="flex items-center p-3 bg-yellow-900/30 border border-yellow-600/50 rounded-lg cursor-pointer hover:bg-yellow-900/40">
+                                                            <input
+                                                                type="radio"
+                                                                name={`group-${groupIndex}`}
+                                                                checked={checkoutCleanupDialog.choices[groupKey]?.action === 'skip'}
+                                                                onChange={() => {
+                                                                    setCheckoutCleanupDialog(prev => ({
+                                                                        ...prev,
+                                                                        choices: {
+                                                                            ...prev.choices,
+                                                                            [groupKey]: {
+                                                                                action: 'skip'
+                                                                            }
+                                                                        }
+                                                                    }));
+                                                                }}
+                                                                className="mr-3"
+                                                            />
+                                                            <div className="flex items-center">
+                                                                <span className="material-icons text-yellow-400 mr-2">skip_next</span>
+                                                                <div>
+                                                                    <div className="text-yellow-200 font-medium">Skip this group</div>
+                                                                    <div className="text-yellow-300 text-sm">Keep all {group.count} records as-is (no cleanup)</div>
+                                                                </div>
+                                                            </div>
+                                                        </label>
+
+                                                        {/* Record selection options */}
                                                         {group.records.map((record, recordIndex) => (
                                                             <label key={record.id} className="flex items-center p-3 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700">
                                                                 <input
@@ -8794,6 +8831,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                             choices: {
                                                                                 ...prev.choices,
                                                                                 [groupKey]: {
+                                                                                    action: 'merge',
                                                                                     keepRecordId: record.id,
                                                                                     deleteRecordIds: group.records
                                                                                         .filter(r => r.id !== record.id)
@@ -8840,8 +8878,18 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         onClick={async () => {
                                             try {
                                                 showSnackbar('Cleaning up duplicate checkout records...', 'info');
-                                                await mergeCheckoutDuplicates(checkoutCleanupDialog.duplicates, checkoutCleanupDialog.choices);
-                                                showSnackbar('Checkout duplicates cleaned up successfully!', 'success');
+                                                const result = await mergeCheckoutDuplicates(checkoutCleanupDialog.duplicates, checkoutCleanupDialog.choices);
+
+                                                let message = 'Checkout duplicates processed successfully!';
+                                                if (result.cleanedCount > 0 && result.skippedCount > 0) {
+                                                    message = `Cleaned ${result.cleanedCount} duplicate groups, skipped ${result.skippedCount} groups`;
+                                                } else if (result.cleanedCount > 0) {
+                                                    message = `Cleaned ${result.cleanedCount} duplicate groups`;
+                                                } else if (result.skippedCount > 0) {
+                                                    message = `All ${result.skippedCount} duplicate groups were skipped - no changes made`;
+                                                }
+
+                                                showSnackbar(message, 'success');
                                                 setCheckoutCleanupDialog({open: false, duplicates: [], choices: {}, scanning: false});
                                             } catch (error) {
                                                 console.error('Error during checkout cleanup:', error);
