@@ -3067,6 +3067,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 scanning: false
             });
 
+            const [checkoutCleanupDialog, setCheckoutCleanupDialog] = useState({
+                open: false,
+                duplicates: [],
+                choices: {},
+                scanning: false
+            });
+
             // Pagination states
             const [inventoryPagination, setInventoryPagination] = useState({
                 currentPage: 1,
@@ -5242,8 +5249,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         if (duplicates.length > 0) {
                             const action = prompt(
                                 `🔍 DUPLICATE HISTORY RECORDS FOUND!\n\n` +
-                                `Found ${duplicates.length} potential duplicate records:\n\n` +
-                                duplicates.slice(0, 5).map(dup => `• ${dup.itemName} - ${dup.userName} - ${dup.dateEntered}`).join('\n') +
+                                `Found ${duplicates.length} potential duplicate records (including name format variations):\n\n` +
+                                duplicates.slice(0, 5).map(dup =>
+                                    `• ${dup.itemName} - ${dup.userName}` +
+                                    (dup.existingUserName && dup.existingUserName !== dup.userName ? ` (matches: ${dup.existingUserName})` : '') +
+                                    ` - ${dup.dateEntered}`
+                                ).join('\n') +
                                 (duplicates.length > 5 ? `\n... and ${duplicates.length - 5} more` : '') +
                                 `\n\n📝 WHAT WOULD YOU LIKE TO DO?\n\n` +
                                 `1️⃣ SKIP duplicates, import only new records\n` +
@@ -5314,30 +5325,101 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 const duplicates = [];
 
                 for (const record of newRecords) {
-                    // Check against current checkout history
-                    const existingInCurrent = checkoutHistory.find(existing =>
-                        existing.itemName?.toLowerCase() === record.itemName?.toLowerCase() &&
-                        existing.userName?.toLowerCase() === record.userName?.toLowerCase() &&
-                        Math.abs(new Date(existing.dateEntered).getTime() - new Date(record.dateEntered).getTime()) < 60000 // Within 1 minute
-                    );
+                    const normalizedRecordName = normalizeUserName(record.userName);
+                    const recordItemName = record.itemName?.toLowerCase().trim();
 
-                    // Check against archived checkouts
-                    const existingInArchive = archivedCheckouts.find(existing =>
-                        existing.itemName?.toLowerCase() === record.itemName?.toLowerCase() &&
-                        existing.userName?.toLowerCase() === record.userName?.toLowerCase() &&
-                        Math.abs(new Date(existing.dateEntered).getTime() - new Date(record.dateEntered).getTime()) < 60000 // Within 1 minute
-                    );
+                    // Check against current checkout history with flexible name matching
+                    const existingInCurrent = checkoutHistory.find(existing => {
+                        const normalizedExistingName = normalizeUserName(existing.userName);
+                        const existingItemName = existing.itemName?.toLowerCase().trim();
+
+                        return existingItemName === recordItemName &&
+                               normalizedExistingName === normalizedRecordName &&
+                               Math.abs(new Date(existing.dateEntered).getTime() - new Date(record.dateEntered).getTime()) < 60000; // Within 1 minute
+                    });
+
+                    // Check against archived checkouts with flexible name matching
+                    const existingInArchive = archivedCheckouts.find(existing => {
+                        const normalizedExistingName = normalizeUserName(existing.userName);
+                        const existingItemName = existing.itemName?.toLowerCase().trim();
+
+                        return existingItemName === recordItemName &&
+                               normalizedExistingName === normalizedRecordName &&
+                               Math.abs(new Date(existing.dateEntered).getTime() - new Date(record.dateEntered).getTime()) < 60000; // Within 1 minute
+                    });
 
                     if (existingInCurrent || existingInArchive) {
                         duplicates.push({
                             itemName: record.itemName,
                             userName: record.userName,
-                            dateEntered: record.dateEntered.toLocaleString()
+                            dateEntered: record.dateEntered.toLocaleString(),
+                            matchedBy: existingInCurrent ? 'current' : 'archived',
+                            existingUserName: existingInCurrent?.userName || existingInArchive?.userName
                         });
                     }
                 }
 
                 return duplicates;
+            };
+
+            // Helper function to normalize user names for comparison
+            const normalizeUserName = (name) => {
+                if (!name) return '';
+                const normalized = name.toLowerCase().trim();
+
+                // Check if it's "Last, First" format
+                if (normalized.includes(',')) {
+                    const [last, first] = normalized.split(',').map(part => part.trim());
+                    return `${first} ${last}`.replace(/\s+/g, ' ');
+                }
+
+                // Otherwise assume it's "First Last" format
+                return normalized.replace(/\s+/g, ' ');
+            };
+
+            // Function to find duplicate checkout records with flexible name matching
+            const findCheckoutDuplicates = async () => {
+                try {
+                    const allRecords = [...checkoutHistory, ...archivedCheckouts];
+                    const duplicateGroups = [];
+                    const processedIds = new Set();
+
+                    for (const record of allRecords) {
+                        if (processedIds.has(record.id)) continue;
+
+                        const normalizedName = normalizeUserName(record.userName);
+                        const itemName = record.itemName?.toLowerCase().trim();
+
+                        // Find potential duplicates
+                        const duplicates = allRecords.filter(other => {
+                            if (other.id === record.id || processedIds.has(other.id)) return false;
+
+                            const otherNormalizedName = normalizeUserName(other.userName);
+                            const otherItemName = other.itemName?.toLowerCase().trim();
+
+                            // Match if same item and same user (accounting for name format variations)
+                            return itemName === otherItemName && normalizedName === otherNormalizedName;
+                        });
+
+                        if (duplicates.length > 0) {
+                            const group = [record, ...duplicates];
+                            duplicateGroups.push({
+                                records: group,
+                                itemName: record.itemName,
+                                normalizedUserName: normalizedName,
+                                count: group.length
+                            });
+
+                            // Mark all records in this group as processed
+                            group.forEach(r => processedIds.add(r.id));
+                        }
+                    }
+
+                    return duplicateGroups;
+                } catch (error) {
+                    console.error('Error finding checkout duplicates:', error);
+                    return [];
+                }
             };
 
             const importHistoryRecords = async (records) => {
@@ -5639,6 +5721,79 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 } catch (error) {
                     console.error('Error merging user duplicate group:', error);
                     return { success: false, error: error.message };
+                }
+            };
+
+            // Function to merge checkout duplicate groups
+            const mergeCheckoutDuplicates = async (duplicateGroups, choices) => {
+                try {
+                    let cleanedCount = 0;
+                    let errorCount = 0;
+
+                    for (const group of duplicateGroups) {
+                        const groupKey = `${group.itemName}_${group.normalizedUserName}`;
+                        const choice = choices[groupKey];
+
+                        if (!choice) {
+                            errorCount++;
+                            continue;
+                        }
+
+                        try {
+                            const batch = db.batch();
+
+                            // Remove duplicate records (keep only the selected one)
+                            for (const recordId of choice.deleteRecordIds) {
+                                const record = group.records.find(r => r.id === recordId);
+                                if (record) {
+                                    // Check if it's in current checkout history or archived
+                                    const isInCurrent = checkoutHistory.find(r => r.id === recordId);
+                                    if (isInCurrent) {
+                                        batch.delete(db.collection('checkoutHistory').doc(recordId));
+                                    } else {
+                                        batch.delete(db.collection('archivedCheckouts').doc(recordId));
+                                    }
+                                }
+                            }
+
+                            // Add audit trail to the kept record
+                            const keepRecord = group.records.find(r => r.id === choice.keepRecordId);
+                            if (keepRecord) {
+                                const isInCurrent = checkoutHistory.find(r => r.id === choice.keepRecordId);
+                                const collection = isInCurrent ? 'checkoutHistory' : 'archivedCheckouts';
+
+                                batch.update(db.collection(collection).doc(choice.keepRecordId), {
+                                    duplicateCleanup: {
+                                        removedDuplicates: choice.deleteRecordIds,
+                                        cleanedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                        cleanedBy: auth.currentUser?.email || 'system'
+                                    }
+                                });
+                            }
+
+                            await batch.commit();
+                            cleanedCount++;
+
+                            // Update local state
+                            setCheckoutHistory(prev => prev.filter(r => !choice.deleteRecordIds.includes(r.id)));
+                            setArchivedCheckouts(prev => prev.filter(r => !choice.deleteRecordIds.includes(r.id)));
+
+                        } catch (error) {
+                            console.error(`Error cleaning up duplicate group: ${groupKey}`, error);
+                            errorCount++;
+                        }
+                    }
+
+                    if (errorCount > 0) {
+                        console.warn(`Completed with ${errorCount} errors out of ${duplicateGroups.length} groups`);
+                        throw new Error(`${cleanedCount} groups cleaned, ${errorCount} errors`);
+                    }
+
+                    return { success: true, cleanedCount };
+
+                } catch (error) {
+                    console.error('Error during checkout duplicate cleanup:', error);
+                    throw error;
                 }
             };
 
@@ -6967,6 +7122,72 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                 <p><strong>Duplicate Merging:</strong> Combines user data and removes duplicates with preview</p>
                                                 <p><strong>Employee ID Cleanup:</strong> Removes users without valid Employee IDs</p>
                                                 <p><strong>Safety:</strong> All operations include confirmation prompts</p>
+                                            </div>
+                                        </div>
+                                    </MaterialCard>
+
+                                    {/* Checkout History Cleanup */}
+                                    <MaterialCard elevation={2}>
+                                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                                            <span className="material-icons mr-2 text-cyan-600">history</span>
+                                            Checkout History Cleanup
+                                        </h3>
+                                        <div className="space-y-4">
+                                            <p className="text-sm text-gray-400">
+                                                Find and merge duplicate checkout records caused by different name formats (e.g., "Last, First" vs "First Last") during historical imports.
+                                            </p>
+                                            <MaterialButton
+                                                onClick={async () => {
+                                                    setCheckoutCleanupDialog(prev => ({ ...prev, scanning: true }));
+                                                    try {
+                                                        const duplicateGroups = await findCheckoutDuplicates();
+                                                        if (duplicateGroups.length === 0) {
+                                                            showSnackbar('No duplicate checkout records found!', 'success');
+                                                        } else {
+                                                            const initialChoices = {};
+                                                            duplicateGroups.forEach(group => {
+                                                                const groupKey = `${group.itemName}_${group.normalizedUserName}`;
+                                                                initialChoices[groupKey] = {
+                                                                    keepRecordId: group.records[0].id,
+                                                                    deleteRecordIds: group.records.slice(1).map(record => record.id)
+                                                                };
+                                                            });
+                                                            setCheckoutCleanupDialog({
+                                                                open: true,
+                                                                duplicates: duplicateGroups,
+                                                                choices: initialChoices,
+                                                                scanning: false
+                                                            });
+                                                        }
+                                                    } catch (error) {
+                                                        showSnackbar(`Error scanning for checkout duplicates: ${error.message}`, 'error');
+                                                    } finally {
+                                                        setCheckoutCleanupDialog(prev => ({ ...prev, scanning: false }));
+                                                    }
+                                                }}
+                                                variant="outlined"
+                                                color="info"
+                                                className="w-full"
+                                                disabled={checkoutCleanupDialog?.scanning}
+                                            >
+                                                {checkoutCleanupDialog?.scanning ? (
+                                                    <>
+                                                        <div className="mat-spinner w-4 h-4 border-2 border-cyan-600 border-t-transparent rounded-full mr-2"></div>
+                                                        Scanning for Duplicates...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="material-icons mr-2">manage_history</span>
+                                                        Scan & Clean History Duplicates
+                                                    </>
+                                                )}
+                                            </MaterialButton>
+                                            <div className="text-xs text-gray-400 p-3 bg-cyan-900/20 rounded-lg">
+                                                <p className="font-medium mb-1">💡 How it works:</p>
+                                                <p><strong>Detection:</strong> Finds checkout records with same item and user but different name formats</p>
+                                                <p><strong>Name Matching:</strong> Handles "Peterson, Evan" ↔ "Evan Peterson" variations</p>
+                                                <p><strong>Safety:</strong> Preview all duplicates before merging and provides confirmation</p>
+                                                <p><strong>Data Integrity:</strong> Preserves most recent record and maintains audit trail</p>
                                             </div>
                                         </div>
                                     </MaterialCard>
@@ -8511,6 +8732,124 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     >
                                         <span className="material-icons mr-2">merge</span>
                                         Merge All User Duplicates
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Checkout History Cleanup Dialog */}
+                    {checkoutCleanupDialog.open && (
+                        <div className="md-modal-overlay" onClick={() => setCheckoutCleanupDialog(prev => ({...prev, open: false}))}>
+                            <div className="md-modal" style={{maxWidth: '900px', width: '95%'}} onClick={(e) => e.stopPropagation()}>
+                                <button className="md-modal-close" onClick={() => setCheckoutCleanupDialog(prev => ({...prev, open: false}))}>
+                                    <span className="material-icons">close</span>
+                                </button>
+
+                                <div className="md-modal-header">
+                                    <h2 className="md-modal-title">
+                                        <span className="material-icons" style={{ color: 'var(--md-sys-color-info)' }}>
+                                            history
+                                        </span>
+                                        Checkout History Cleanup - Duplicates ({checkoutCleanupDialog.duplicates.length} groups found)
+                                    </h2>
+                                </div>
+
+                                <div className="md-modal-body">
+                                    <p style={{
+                                        color: 'var(--md-sys-color-on-surface-variant)',
+                                        marginBottom: '20px',
+                                        font: 'var(--md-sys-typescale-body-large)'
+                                    }}>
+                                        Found {checkoutCleanupDialog.duplicates.length} duplicate checkout groups with different name formats. For each group, choose which record to keep - all others will be removed.
+                                    </p>
+
+                                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                        {checkoutCleanupDialog.duplicates.map((group, groupIndex) => {
+                                            const groupKey = `${group.itemName}_${group.normalizedUserName}`;
+                                            return (
+                                                <div key={groupIndex} className="border border-gray-200 border-gray-600 rounded-lg p-4 mb-4">
+                                                    <div className="flex items-center mb-3">
+                                                        <span className="material-icons text-cyan-400 mr-2">content_copy</span>
+                                                        <h4 className="font-medium text-white">
+                                                            {group.itemName} - {group.normalizedUserName.split(' ').map(word =>
+                                                                word.charAt(0).toUpperCase() + word.slice(1)
+                                                            ).join(' ')}
+                                                        </h4>
+                                                        <span className="ml-auto bg-cyan-600/20 text-cyan-300 px-2 py-1 rounded-full text-sm">
+                                                            {group.count} duplicates
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        {group.records.map((record, recordIndex) => (
+                                                            <label key={record.id} className="flex items-center p-3 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`group-${groupIndex}`}
+                                                                    checked={checkoutCleanupDialog.choices[groupKey]?.keepRecordId === record.id}
+                                                                    onChange={() => {
+                                                                        setCheckoutCleanupDialog(prev => ({
+                                                                            ...prev,
+                                                                            choices: {
+                                                                                ...prev.choices,
+                                                                                [groupKey]: {
+                                                                                    keepRecordId: record.id,
+                                                                                    deleteRecordIds: group.records
+                                                                                        .filter(r => r.id !== record.id)
+                                                                                        .map(r => r.id)
+                                                                                }
+                                                                            }
+                                                                        }));
+                                                                    }}
+                                                                    className="mr-3"
+                                                                />
+                                                                <div className="flex-1">
+                                                                    <div className="text-white font-medium">{record.userName}</div>
+                                                                    <div className="text-gray-400 text-sm">
+                                                                        Date: {new Date(record.dateEntered?.toDate ? record.dateEntered.toDate() : record.dateEntered).toLocaleDateString()}
+                                                                    </div>
+                                                                    {record.departmentId && (
+                                                                        <div className="text-gray-400 text-sm">Cost Code: {record.departmentId}</div>
+                                                                    )}
+                                                                    {record.jobNumber && (
+                                                                        <div className="text-gray-400 text-sm">Job #: {record.jobNumber}</div>
+                                                                    )}
+                                                                    {recordIndex === 0 && (
+                                                                        <div className="text-xs text-cyan-400 mt-1">✨ Recommended (most recent)</div>
+                                                                    )}
+                                                                </div>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="md-modal-actions">
+                                    <button
+                                        className="md-button secondary"
+                                        onClick={() => setCheckoutCleanupDialog(prev => ({...prev, open: false}))}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="md-button primary"
+                                        onClick={async () => {
+                                            try {
+                                                showSnackbar('Cleaning up duplicate checkout records...', 'info');
+                                                await mergeCheckoutDuplicates(checkoutCleanupDialog.duplicates, checkoutCleanupDialog.choices);
+                                                showSnackbar('Checkout duplicates cleaned up successfully!', 'success');
+                                                setCheckoutCleanupDialog({open: false, duplicates: [], choices: {}, scanning: false});
+                                            } catch (error) {
+                                                console.error('Error during checkout cleanup:', error);
+                                                showSnackbar(`Error cleaning up duplicates: ${error.message}`, 'error');
+                                            }
+                                        }}
+                                    >
+                                        Clean Up Duplicates
                                     </button>
                                 </div>
                             </div>
