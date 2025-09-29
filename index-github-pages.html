@@ -3667,17 +3667,32 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     // Archive processed checkout records and remove from checkout history
                     await archiveAndRemoveCheckoutRecords(matchedCheckoutRecords);
 
-                    // Update processing results with Firebase Storage data
-                    setProcessingResults(prev => [...prev, {
+                    // Update processing results with storage data (Firebase or in-memory)
+                    const resultData = {
                         timestamp: new Date().toISOString(),
                         fileName: pdfFile.name,
                         itemsProcessed: selectedShipmentItems.length,
                         totalAmount: total,
                         vendor: vendorName || 'Manual Entry',
-                        downloadURL: pdfStorageData.downloadURL,
-                        storagePath: pdfStorageData.storagePath,
-                        uploadTimestamp: pdfStorageData.timestamp
-                    }]);
+                        uploadTimestamp: pdfStorageData.timestamp,
+                        storageType: pdfStorageData.storageType
+                    };
+
+                    // Add storage-specific data
+                    if (pdfStorageData.storageType === 'firebase') {
+                        resultData.downloadURL = pdfStorageData.downloadURL;
+                        resultData.storagePath = pdfStorageData.storagePath;
+                    } else {
+                        resultData.pdfBytes = pdfStorageData.pdfBytes;
+                        resultData.warning = pdfStorageData.warning;
+                    }
+
+                    setProcessingResults(prev => [...prev, resultData]);
+
+                    // Show warning if using memory storage
+                    if (pdfStorageData.storageType === 'memory') {
+                        showSnackbar('PDF stored in browser memory only - enable Firebase Storage for permanent storage', 'warning');
+                    }
 
                     showSnackbar(`Successfully processed ${selectedShipmentItems.length} items and updated inventory!`, 'success');
 
@@ -3700,70 +3715,106 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 }
             };
 
-            // Function to re-download processed PDF from Firebase Storage
+            // Function to re-download processed PDF (supports both Firebase Storage and in-memory)
             const downloadProcessedPDF = (result) => {
-                if (!result.downloadURL) {
-                    showSnackbar('PDF download URL not available for this record', 'error');
-                    return;
-                }
-
                 try {
-                    const link = document.createElement('a');
-                    link.href = result.downloadURL;
-                    link.download = result.fileName;
-                    link.target = '_blank';
-                    link.click();
-                    showSnackbar('PDF download started', 'success');
+                    if (result.storageType === 'firebase' && result.downloadURL) {
+                        // Firebase Storage download
+                        const link = document.createElement('a');
+                        link.href = result.downloadURL;
+                        link.download = result.fileName;
+                        link.target = '_blank';
+                        link.click();
+                        showSnackbar('PDF download started', 'success');
+                    } else if (result.storageType === 'memory' && result.pdfBytes) {
+                        // In-memory download
+                        const blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = result.fileName;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        showSnackbar('PDF download started (from browser memory)', 'success');
+                    } else {
+                        showSnackbar('PDF data not available for this record', 'error');
+                    }
                 } catch (error) {
                     console.error('Error downloading PDF:', error);
                     showSnackbar('Failed to download PDF', 'error');
                 }
             };
 
-            // Function to manually delete processed PDF from Firebase Storage
+            // Function to manually delete processed PDF (supports both Firebase Storage and in-memory)
             const deleteProcessedPDF = async (result, index) => {
-                if (!result.storagePath) {
-                    showSnackbar('Storage path not available for this record', 'error');
-                    return;
-                }
-
                 if (!confirm(`Are you sure you want to delete "${result.fileName}"? This cannot be undone.`)) {
                     return;
                 }
 
                 try {
-                    // Delete from Firebase Storage
-                    const storageRef = storage.ref(result.storagePath);
-                    await storageRef.delete();
+                    if (result.storageType === 'firebase' && result.storagePath) {
+                        // Delete from Firebase Storage
+                        const storageRef = storage.ref(result.storagePath);
+                        await storageRef.delete();
+                        showSnackbar(`Successfully deleted ${result.fileName} from Firebase Storage`, 'success');
+                    } else if (result.storageType === 'memory') {
+                        // For memory storage, just remove from local state
+                        showSnackbar(`Removed ${result.fileName} from browser memory`, 'success');
+                    } else {
+                        showSnackbar(`Removed ${result.fileName} from processing list`, 'success');
+                    }
 
                     // Remove from processing results
                     setProcessingResults(prev => prev.filter((_, i) => i !== index));
 
-                    showSnackbar(`Successfully deleted ${result.fileName}`, 'success');
                 } catch (error) {
                     console.error('Error deleting PDF:', error);
                     showSnackbar(`Failed to delete PDF: ${error.message}`, 'error');
                 }
             };
 
+            // Global flag to track if Firebase Storage is available
+            let storageAvailable = null; // null = unknown, true = available, false = unavailable
+
             // Function to test Firebase Storage connectivity
             const testStorageConnectivity = async () => {
+                if (storageAvailable === false) {
+                    throw new Error('Firebase Storage previously determined to be unavailable');
+                }
+
+                if (storageAvailable === true) {
+                    return true;
+                }
+
                 try {
                     console.log('Testing Firebase Storage connectivity...');
+
+                    // Simple test with very short timeout to avoid long waits
                     const testRef = storage.ref('test-connection');
 
-                    // Try to get metadata (this will fail gracefully if folder doesn't exist)
-                    await testRef.listAll();
+                    // Use Promise.race with timeout to avoid hanging
+                    const testPromise = testRef.listAll();
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Storage test timeout')), 3000)
+                    );
+
+                    await Promise.race([testPromise, timeoutPromise]);
+
                     console.log('Storage connectivity test successful');
+                    storageAvailable = true;
                     return true;
                 } catch (error) {
-                    console.error('Storage connectivity test failed:', error);
-                    if (error.code === 'storage/unauthorized') {
+                    console.warn('Storage connectivity test failed:', error);
+                    storageAvailable = false;
+
+                    if (error.message.includes('CORS') || error.code === 'storage/retry-limit-exceeded') {
+                        throw new Error('Firebase Storage not enabled - contact admin to enable Storage in Firebase Console');
+                    } else if (error.code === 'storage/unauthorized') {
                         throw new Error('Storage access unauthorized - check Firebase Storage rules');
                     } else if (error.code === 'storage/unknown') {
                         throw new Error('Storage service unavailable - check Firebase Storage configuration');
                     } else {
-                        throw new Error(`Storage error: ${error.message}`);
+                        throw new Error(`Storage unavailable: ${error.message}`);
                     }
                 }
             };
@@ -4067,17 +4118,36 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     link.click();
                     URL.revokeObjectURL(url);
 
-                    // Upload PDF to Firebase Storage with timestamp to avoid conflicts
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                    const storageRef = storage.ref(`processed-pdfs/${timestamp}_${pdfFile.name}`);
-                    const uploadTask = await storageRef.put(blob);
-                    const downloadURL = await storageRef.getDownloadURL();
+                    // Try to upload to Firebase Storage, fallback to in-memory storage
+                    try {
+                        if (storageAvailable !== false) {
+                            await testStorageConnectivity();
 
-                    // Return storage metadata for processing results
+                            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                            const storageRef = storage.ref(`processed-pdfs/${timestamp}_${pdfFile.name}`);
+                            const uploadTask = await storageRef.put(blob);
+                            const downloadURL = await storageRef.getDownloadURL();
+
+                            console.log('PDF successfully uploaded to Firebase Storage');
+                            return {
+                                downloadURL,
+                                storagePath: `processed-pdfs/${timestamp}_${pdfFile.name}`,
+                                timestamp: new Date().toISOString(),
+                                storageType: 'firebase'
+                            };
+                        }
+                    } catch (storageError) {
+                        console.warn('Firebase Storage upload failed, using in-memory fallback:', storageError);
+                        storageAvailable = false;
+                    }
+
+                    // Fallback to in-memory storage (original system)
+                    console.log('Using in-memory PDF storage (Firebase Storage not available)');
                     return {
-                        downloadURL,
-                        storagePath: `processed-pdfs/${timestamp}_${pdfFile.name}`,
-                        timestamp: new Date().toISOString()
+                        pdfBytes: pdfBytes,
+                        timestamp: new Date().toISOString(),
+                        storageType: 'memory',
+                        warning: 'PDF stored in browser memory - will be lost on page refresh'
                     };
 
                 } catch (error) {
@@ -4471,11 +4541,15 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                             setConnectionStatus('connected');
 
-                            // Automatically cleanup old PDFs on app startup
+                            // Automatically cleanup old PDFs on app startup (only if Firebase Storage is available)
                             setTimeout(() => {
-                                cleanupOldPDFs().catch(error => {
-                                    console.warn('Auto-cleanup failed:', error);
-                                });
+                                if (storageAvailable !== false) {
+                                    cleanupOldPDFs().catch(error => {
+                                        console.warn('Auto-cleanup failed:', error);
+                                    });
+                                } else {
+                                    console.log('Skipping auto-cleanup: Firebase Storage not available');
+                                }
                             }, 2000); // Wait 2 seconds after connection is established
 
                             return () => {
@@ -7956,6 +8030,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                 <p className="text-sm text-gray-400">
                                                                     {result.itemsProcessed} items • ${result.totalAmount.toFixed(2)} • {result.vendor}
                                                                 </p>
+                                                                {result.storageType === 'memory' && (
+                                                                    <p className="text-xs text-yellow-400 flex items-center mt-1">
+                                                                        <span className="material-icons text-xs mr-1">warning</span>
+                                                                        Browser memory only
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center space-x-3">
