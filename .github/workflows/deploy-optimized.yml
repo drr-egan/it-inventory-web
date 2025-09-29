@@ -1,0 +1,97 @@
+name: Deploy Optimized Build to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages-optimized"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Prepare deployment files
+        run: |
+          # Ensure data directory exists in dist
+          mkdir -p dist/data
+
+          # Copy data files to dist
+          if [ -d "data" ]; then
+            cp -r data/* dist/data/
+          fi
+
+          # Copy fallback files if they exist
+          [ -f "cart-icon.png" ] && cp cart-icon.png dist/ || echo "Cart icon not found"
+          [ -f "github-pages-adapter.js" ] && cp github-pages-adapter.js dist/ || echo "Adapter not needed for optimized build"
+
+          # Ensure favicon is properly copied
+          if [ -f "public/favicon.ico" ]; then
+            cp public/favicon.ico dist/
+            echo "✅ Favicon copied to dist/"
+          else
+            echo "❌ Favicon not found in public/"
+          fi
+
+          # Verify build output
+          echo "=== Build Output ==="
+          ls -la dist/
+
+          # Show chunk analysis
+          if [ -d "dist/assets" ]; then
+            echo "=== Asset Analysis ==="
+            ls -la dist/assets/ | head -20
+
+            # Calculate total size
+            total_size=$(du -sb dist/ | cut -f1)
+            echo "Total build size: $total_size bytes"
+
+            # Show largest chunks
+            echo "=== Largest Assets ==="
+            find dist/assets -name "*.js" -exec du -h {} + | sort -hr | head -5
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
