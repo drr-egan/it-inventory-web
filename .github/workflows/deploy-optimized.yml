@@ -25,21 +25,16 @@ jobs:
 
       - name: Prepare deployment files
         run: |
-          # Use pre-built assets that are already committed
-          echo "=== Using Pre-built Assets ==="
+          # Use pre-built assets from dist/ directory (Vite output)
+          echo "=== Using Pre-built Assets from dist/ ==="
 
-          # Create deployment directory structure
+          # Copy entire dist directory as deployment root
           mkdir -p deploy
+          cp -r dist/* deploy/
 
-          # Copy all necessary files to deploy directory
-          cp index.html deploy/
-          cp -r assets/ deploy/
-          cp manifest.webmanifest deploy/
-          cp registerSW.js deploy/
-          cp sw.js deploy/
-          cp workbox-*.js deploy/
-          cp cart-icon.png deploy/ 2>/dev/null || echo "Cart icon will be copied if available"
-          cp favicon.ico deploy/ 2>/dev/null || echo "Favicon will be copied if available"
+          # Also copy cart icon and favicon if they exist at root
+          cp cart-icon.png deploy/ 2>/dev/null || echo "Using cart-icon from dist"
+          cp favicon.ico deploy/ 2>/dev/null || echo "Using favicon from dist"
 
           # Ensure data directory exists
           mkdir -p deploy/data
