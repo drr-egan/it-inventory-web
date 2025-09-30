@@ -1,0 +1,323 @@
+> The app let me log in fine but there seems to be no CSS loading. index-7c9f37b0.js:9 Firebase initialized 
+successfully
+index-7c9f37b0.js:9 PDF services configured with lazy loading
+index-7c9f37b0.js:9 Auth state changed: No user
+firebase-vendor-75c67651.js:2746 Cross-Origin-Opener-Policy policy would block the window.closed call.
+e @ firebase-vendor-75c67651.js:2746
+firebase-vendor-75c67651.js:2746 Cross-Origin-Opener-Policy policy would block the window.closed call.
+e @ firebase-vendor-75c67651.js:2746
+firebase-vendor-75c67651.js:2746 Cross-Origin-Opener-Policy policy would block the window.closed call.
+e @ firebase-vendor-75c67651.js:2746
+firebase-vendor-75c67651.js:2746 Cross-Origin-Opener-Policy policy would block the window.closed call.
+e @ firebase-vendor-75c67651.js:2746
+index-7c9f37b0.js:9 Auth state changed: drr@eganco.com
+
+● I can see the issue - the application is loading and Firebase authentication is working (you successfully
+  logged in as drr@eganco.com), but the CSS isn't loading properly. Looking at the browser console output,
+  there are no 404 errors for JavaScript modules anymore, which means our previous fix worked for the JS
+  files. However, the CSS file isn't loading.
+
+  Let me research the current state of the CSS loading to understand what's happening.
+
+● Read(index.html)
+  ⎿  Read 31 lines (ctrl+o to expand)
+
+● I can see the HTML references the CSS file at /it-inventory-web/assets/index-96abf446.css on line 25. Let
+  me check if this file exists and verify its path.
+
+● Bash(curl -I https://drr-egan.github.io/it-inventory-web/assets/index-96abf446.css)
+  ⎿  HTTP/2 200                           
+     server: GitHub.com
+     content-type: text/css; charset=utf-8
+     … +24 lines (ctrl+o to expand)
+
+● The CSS file is returning HTTP 200 and is accessible. Let me check a sample of the CSS content to see if
+  it's properly formed:
+
+● Bash(curl -s https://drr-egan.github.io/it-inventory-web/assets/index-96abf446.css | head -20)
+  ⎿ /*! tailwindcss v4.1.13 | MIT License | https://tailwindcss.com */@layer properties{@supports ((-webkit-
+    hyphens:none) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g
+    b)))){*,:before,:after,::backdrop{--tw-translate-x:0;--tw-translate-y:0;--tw-translate-z:0;--tw-rotate-x
+    … +129 lines (ctrl+o to expand)
+
+
+
+● The CSS file is loading properly and contains valid Tailwind CSS classes. However, I notice there might be
+  a content security policy (CSP) or CORS issue that could prevent the CSS from applying. Let me check the
+  browser network tab behavior by testing the CSS file loading directly.
+
+  Let me also examine if there are any specific missing CSS classes that are used by the application
+  components. First, let me check what the authentication component looks like to understand what classes it
+  should be using:
+
+● Read(src/components/auth/AuthComponent.jsx)
+  ⎿  Read 50 lines (ctrl+o to expand)
+
+● I can see the AuthComponent is using standard Tailwind classes like min-h-screen, bg-gray-50, flex,
+  items-center, justify-center, p-4, etc. These classes exist in the CSS file I checked. Let me examine the
+  MainApp component to see what classes are used there:
+
+● Read(src/components/MainApp.jsx)
+  ⎿  Read 50 lines (ctrl+o to expand)
+
+● Let me also check if there are any specific Tailwind utilities or custom CSS that might be missing. Let me
+  look at the source CSS file to see what should be included:
+
+● Read(src/index.css)
+  ⎿  Read 25 lines (ctrl+o to expand)
+
+● Now let me check if there are any missing CSS color utilities or specific classes that might not be in the
+  built CSS. Let me search the built CSS file for some specific classes used in the components:
+
+● Bash(curl -s https://drr-egan.github.io/it-inventory-web/assets/index-96abf446.css | grep -E
+      "bg-gray-50|min-h-screen|bg-white|shadow-lg|text-blue-600" | wc -l)
+  ⎿  1                                                                        
+     _MONOSPACE_ENV_STARTED_=http://localhost:80/,http://localhost:6000/capra/
+
+● That's concerning - only 1 match for those critical classes. Let me check what color and background classes
+   are actually present:
+
+● Bash(curl -s https://drr-egan.github.io/it-inventory-web/assets/index-96abf446.css | grep -oE
+      "\.(bg-[a-z0-9-]+|text-[a-z0-9-]+|shadow-[a-z0-9-]+)" | head -20)
+  ⎿  .bg-gradient-to-br           
+     .bg-gradient-to-r
+     .text-center
+     … +3 lines (ctrl+o to expand)
+
+● This reveals the problem! The Tailwind CSS file is missing most of the color classes and utility classes
+  that the components are using. This is a Tailwind CSS purging issue - the build process is not detecting
+  the classes used in the JavaScript/JSX components and is purging them from the final CSS.
+
+  Let me check the Tailwind configuration to understand how it's configured for content detection:
+
+● Read(tailwind.config.js)
+  ⎿  Read 26 lines (ctrl+o to expand)
+
+● The Tailwind config looks correct - it should be scanning ./src/**/*.{js,ts,jsx,tsx} for classes. However,
+  the issue might be that during the build process, the CSS is being generated before the JavaScript
+  components are fully processed, or there's an issue with the content path resolution during the build.
+
+  Let me also check if there's a PostCSS configuration that might be interfering:
+
+● Read(postcss.config.js)
+  ⎿  Read 6 lines (ctrl+o to expand)
+
+● Now I understand the root cause! The issue is that we're using Tailwind v4 (as shown in the PostCSS config
+  with @tailwindcss/postcss) which has different content detection behavior than Tailwind v3. In Tailwind v4,
+   the content scanning might not be working properly with the JSX files during the Vite build process.
+
+  Let me also check the current built CSS locally to confirm it has the same issue:
+
+● Bash(head -10 assets/index-96abf446.css | grep -E "bg-gray-50|min-h-screen|bg-white")
+  ⎿ /*! tailwindcss v4.1.13 | MIT License | https://tailwindcss.com */@layer properties{@supports ((-webkit-
+    hyphens:none) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g
+    b)))){*,:before,:after,::backdrop{--tw-translate-x:0;--tw-translate-y:0;--tw-translate-z:0;--tw-rotate-x
+    … +129 lines (ctrl+o to expand)
+
+
+
+● Perfect! I can see min-h-screen is present in the CSS (around the middle of that output), but I need to
+  check specifically for the color classes. Let me search more specifically:
+
+● Bash(grep -o "bg-gray-50\|bg-white\|text-blue-600\|shadow-lg\|text-gray-900" assets/index-96abf446.css)
+  ⎿  _MONOSPACE_ENV_STARTED_=http://localhost:80/,http://localhost:6000/capra/
+
+● Confirmed! The color classes (bg-gray-50, bg-white, text-blue-600, shadow-lg, text-gray-900) are completely
+   missing from the built CSS. This is definitely a Tailwind CSS content scanning/purging issue.
+
+  Based on my analysis, here's what's happening and my plan to fix it:
+                                                                                                            
+●User approved Claude's plan:
+  ⎿ Fix Missing Tailwind CSS Classes Issue
+
+    Problem Analysis
+
+    The application loads correctly and JavaScript modules work fine, but all color and styling classes are 
+    missing from the built CSS file. The root cause is a Tailwind CSS content scanning issue with Tailwind 
+    v4.
+
+    Evidence:
+    - CSS file loads successfully (HTTP 200)
+    - Basic utility classes exist (min-h-screen, flex, items-center)
+    - Critical color classes are completely missing: bg-gray-50, bg-white, text-blue-600, shadow-lg, etc.
+    - Tailwind v4 with PostCSS plugin may not be properly scanning JSX files during build
+
+    Solution Plan
+
+    1. Fix Tailwind Content Scanning
+
+    - Update tailwind.config.js to be more explicit about JSX file detection
+    - Add safelist for critical classes to prevent purging
+    - Ensure Tailwind v4 compatibility with JSX parsing
+
+    2. Alternative: Downgrade to Tailwind v3
+
+    - If v4 scanning issues persist, downgrade to stable Tailwind v3
+    - Update PostCSS config accordingly
+    - Rebuild with proven content detection
+
+    3. Verify Build Process
+
+    - Rebuild with fixed configuration
+    - Test critical classes are included in output CSS
+    - Verify all component styling works properly
+
+    4. Deploy and Test
+
+    - Commit and push changes
+    - Verify styling works on deployed GitHub Pages site
+    - Confirm authentication UI and main app styling display correctly
+
+    Expected Outcome
+
+    Application will display proper styling with:
+    - Gray background (bg-gray-50)
+    - White component backgrounds (bg-white)
+    - Blue accents (text-blue-600)
+    - Shadows and spacing working correctly
+    - All Material Design-style components rendering properly
+
+● Let me start by fixing the Tailwind configuration to ensure proper content scanning and add a safelist for
+  critical classes:
+  ⎿  Interrupted · What should Claude do instead?
+
+> also ensure the app looks exACTLY HOW IT DID PRIOR TO THE CHANGES TODAY. Ask me to confirm before 
+considering this complete
+
+● I understand - you want to ensure the app looks exactly as it did before today's changes. I'll need to see
+  what the previous working version looked like to match it precisely.
+
+● First, let me check if there are any reference images or previous CSS files that show how the app should
+  look. Let me also look for the original working HTML file to understand the expected styling:
+
+● Read(index-github-pages.html)
+  ⎿  Read 50 lines (ctrl+o to expand)
+
+● I can see the original working version used CDN Tailwind (<script 
+  src="https://cdn.tailwindcss.com"></script>) rather than the compiled Tailwind CSS. This is a crucial
+  difference! The CDN version includes all Tailwind classes and works dynamically.
+
+  Let me continue reading this file to understand the full structure:
+
+● Bash(wc -l index-github-pages.html)
+  ⎿  9435 index-github-pages.html                                             
+     _MONOSPACE_ENV_STARTED_=http://localhost:80/,http://localhost:6000/capra/
+
+● This is a large file with embedded React components. The key insight is that the original working version
+  used:
+
+  1. CDN Tailwind CSS (not compiled)
+  2. CDN React libraries (not bundled)
+  3. Inline React components with Babel transformation
+
+  But we switched to a Vite build system which compiles everything. The issue is that the compiled Tailwind
+  CSS is missing the required classes because of content scanning problems.
+
+  Let me fix the Tailwind configuration to include all the classes that were available in the CDN version:
+
+● Update(tailwind.config.js)
+  ⎿  Updated tailwind.config.js with 59 additions                                                         
+        3      content: [
+        4        "./index.html",
+        5        "./src/**/*.{js,ts,jsx,tsx}",
+        6 +      // Add all possible locations where classes might be used
+        7 +      "./src/**/*.{vue,js,ts,jsx,tsx,html,css}",
+        8 +      "./public/**/*.html",
+        9      ],
+       10 +    // Add safelist to prevent purging of critical classes
+       11 +    safelist: [
+       12 +      // Background colors
+       13 +      'bg-gray-50', 'bg-gray-100', 'bg-gray-200', 'bg-gray-300', 'bg-gray-400', 'bg-gray-500', 
+          + 'bg-gray-600', 'bg-gray-700', 'bg-gray-800', 'bg-gray-900',
+       14 +      'bg-white', 'bg-black',
+       15 +      'bg-blue-50', 'bg-blue-100', 'bg-blue-200', 'bg-blue-300', 'bg-blue-400', 'bg-blue-500', 
+          + 'bg-blue-600', 'bg-blue-700', 'bg-blue-800', 'bg-blue-900',
+       16 +      'bg-red-50', 'bg-red-100', 'bg-red-200', 'bg-red-300', 'bg-red-400', 'bg-red-500', 
+          + 'bg-red-600', 'bg-red-700', 'bg-red-800', 'bg-red-900',
+       17 +      'bg-green-50', 'bg-green-100', 'bg-green-200', 'bg-green-300', 'bg-green-400', 
+          + 'bg-green-500', 'bg-green-600', 'bg-green-700', 'bg-green-800', 'bg-green-900',
+       18 +      'bg-yellow-50', 'bg-yellow-100', 'bg-yellow-200', 'bg-yellow-300', 'bg-yellow-400', 
+          + 'bg-yellow-500', 'bg-yellow-600', 'bg-yellow-700', 'bg-yellow-800', 'bg-yellow-900',
+       19 +      'bg-purple-50', 'bg-purple-100', 'bg-purple-200', 'bg-purple-300', 'bg-purple-400', 
+          + 'bg-purple-500', 'bg-purple-600', 'bg-purple-700', 'bg-purple-800', 'bg-purple-900',
+       20 +      'bg-indigo-50', 'bg-indigo-100', 'bg-indigo-200', 'bg-indigo-300', 'bg-indigo-400', 
+          + 'bg-indigo-500', 'bg-indigo-600', 'bg-indigo-700', 'bg-indigo-800', 'bg-indigo-900',
+       21 +  
+       22 +      // Text colors
+       23 +      'text-gray-50', 'text-gray-100', 'text-gray-200', 'text-gray-300', 'text-gray-400', 
+          + 'text-gray-500', 'text-gray-600', 'text-gray-700', 'text-gray-800', 'text-gray-900',
+       24 +      'text-white', 'text-black',
+       25 +      'text-blue-50', 'text-blue-100', 'text-blue-200', 'text-blue-300', 'text-blue-400', 
+          + 'text-blue-500', 'text-blue-600', 'text-blue-700', 'text-blue-800', 'text-blue-900',
+       26 +      'text-red-50', 'text-red-100', 'text-red-200', 'text-red-300', 'text-red-400', 
+          + 'text-red-500', 'text-red-600', 'text-red-700', 'text-red-800', 'text-red-900',
+       27 +      'text-green-50', 'text-green-100', 'text-green-200', 'text-green-300', 'text-green-400', 
+          + 'text-green-500', 'text-green-600', 'text-green-700', 'text-green-800', 'text-green-900',
+       28 +      'text-yellow-50', 'text-yellow-100', 'text-yellow-200', 'text-yellow-300', 
+          + 'text-yellow-400', 'text-yellow-500', 'text-yellow-600', 'text-yellow-700', 'text-yellow-800',
+          +  'text-yellow-900',
+       29 +      'text-purple-50', 'text-purple-100', 'text-purple-200', 'text-purple-300', 
+          + 'text-purple-400', 'text-purple-500', 'text-purple-600', 'text-purple-700', 'text-purple-800',
+          +  'text-purple-900',
+       30 +      'text-indigo-50', 'text-indigo-100', 'text-indigo-200', 'text-indigo-300', 
+          + 'text-indigo-400', 'text-indigo-500', 'text-indigo-600', 'text-indigo-700', 'text-indigo-800',
+          +  'text-indigo-900',
+       31 +  
+       32 +      // Border colors
+       33 +      'border-gray-50', 'border-gray-100', 'border-gray-200', 'border-gray-300', 
+          + 'border-gray-400', 'border-gray-500', 'border-gray-600', 'border-gray-700', 'border-gray-800',
+          +  'border-gray-900',
+       34 +      'border-white', 'border-black',
+       35 +      'border-blue-50', 'border-blue-100', 'border-blue-200', 'border-blue-300', 
+          + 'border-blue-400', 'border-blue-500', 'border-blue-600', 'border-blue-700', 'border-blue-800',
+          +  'border-blue-900',
+       36 +      'border-red-50', 'border-red-100', 'border-red-200', 'border-red-300', 'border-red-400', 
+          + 'border-red-500', 'border-red-600', 'border-red-700', 'border-red-800', 'border-red-900',
+       37 +      'border-green-50', 'border-green-100', 'border-green-200', 'border-green-300', 
+          + 'border-green-400', 'border-green-500', 'border-green-600', 'border-green-700', 
+          + 'border-green-800', 'border-green-900',
+       38 +  
+       39 +      // Shadows
+       40 +      'shadow-sm', 'shadow', 'shadow-md', 'shadow-lg', 'shadow-xl', 'shadow-2xl', 
+          + 'shadow-inner', 'shadow-none',
+       41 +  
+       42 +      // Layout utilities
+       43 +      'min-h-screen', 'h-screen', 'max-w-xs', 'max-w-sm', 'max-w-md', 'max-w-lg', 'max-w-xl', 
+          + 'max-w-2xl', 'max-w-3xl', 'max-w-4xl', 'max-w-5xl', 'max-w-6xl', 'max-w-7xl',
+       44 +  
+       45 +      // Spacing
+       46 +      'p-0', 'p-1', 'p-2', 'p-3', 'p-4', 'p-5', 'p-6', 'p-7', 'p-8', 'p-9', 'p-10', 'p-11', 
+          + 'p-12',
+       47 +      'm-0', 'm-1', 'm-2', 'm-3', 'm-4', 'm-5', 'm-6', 'm-7', 'm-8', 'm-9', 'm-10', 'm-11', 
+          + 'm-12',
+       48 +      'px-0', 'px-1', 'px-2', 'px-3', 'px-4', 'px-5', 'px-6', 'px-7', 'px-8', 'px-9', 'px-10', 
+          + 'px-11', 'px-12',
+       49 +      'py-0', 'py-1', 'py-2', 'py-3', 'py-4', 'py-5', 'py-6', 'py-7', 'py-8', 'py-9', 'py-10', 
+          + 'py-11', 'py-12',
+       50 +      'ml-0', 'ml-1', 'ml-2', 'ml-3', 'ml-4', 'ml-5', 'ml-6', 'ml-7', 'ml-8', 'ml-9', 'ml-10', 
+          + 'ml-11', 'ml-12',
+       51 +      'mr-0', 'mr-1', 'mr-2', 'mr-3', 'mr-4', 'mr-5', 'mr-6', 'mr-7', 'mr-8', 'mr-9', 'mr-10', 
+          + 'mr-11', 'mr-12',
+       52 +      'mt-0', 'mt-1', 'mt-2', 'mt-3', 'mt-4', 'mt-5', 'mt-6', 'mt-7', 'mt-8', 'mt-9', 'mt-10', 
+          + 'mt-11', 'mt-12',
+       53 +      'mb-0', 'mb-1', 'mb-2', 'mb-3', 'mb-4', 'mb-5', 'mb-6', 'mb-7', 'mb-8', 'mb-9', 'mb-10', 
+          + 'mb-11', 'mb-12',
+       54 +  
+       55 +      // Font weights and sizes
+       56 +      'text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 
+          + 'text-4xl', 'text-5xl', 'text-6xl',
+       57 +      'font-thin', 'font-extralight', 'font-light', 'font-normal', 'font-medium', 
+          + 'font-semibold', 'font-bold', 'font-extrabold', 'font-black',
+       58 +  
+       59 +      // Rounded corners
+       60 +      'rounded-none', 'rounded-sm', 'rounded', 'rounded-md', 'rounded-lg', 'rounded-xl', 
+          + 'rounded-2xl', 'rounded-3xl', 'rounded-full',
+       61 +  
+       62 +      // Hover states
+       63 +      'hover:bg-gray-50', 'hover:bg-gray-100', 'hover:bg-gray-200', 'hover:bg-blue-50', 
+          + 'hover:bg-blue-100', 'hover:bg-blue-600', 'hover:bg-blue-700',
+       64 +      'hover:text-gray-600', 'hover:text-gray-700', 'hover:text-blue-600', 
+          + 'hover:text-blue-700',
+       65 +    ],
+       66      theme: {
+       67        extend: {

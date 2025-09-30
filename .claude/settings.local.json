@@ -12,7 +12,9 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(npm install:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": [],
     "ask": []
