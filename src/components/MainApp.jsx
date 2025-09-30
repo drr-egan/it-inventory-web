@@ -153,7 +153,11 @@ const MainApp = ({ user }) => {
             setCart,
             addToCart,
             removeFromCart,
-            clearCart
+            clearCart,
+            items,
+            users,
+            checkoutHistory,
+            notifications
         };
 
         switch (activeTab) {
