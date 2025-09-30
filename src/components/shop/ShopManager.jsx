@@ -69,6 +69,24 @@ const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6">
             {/* Shop Items - 2/3 width on desktop */}
             <div className="xl:col-span-2 space-y-4 lg:space-y-6 order-2 xl:order-1">
+                {/* Barcode Scanner */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center">
+                            <span className="material-icons text-xl mr-2 text-blue-600">qr_code_scanner</span>
+                            <h3 className="text-lg font-medium dark:text-white">Barcode Scanner</h3>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">Ready</span>
+                        </div>
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                        Quick add items to cart by scanning barcodes or typing item names
+                    </div>
+                </div>
+
+                {/* Shop Items Grid */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center mb-4">
                         <span className="material-icons mr-2">storefront</span>

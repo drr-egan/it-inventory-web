@@ -1,5 +1,6 @@
 import React, { Suspense, useState, useEffect } from 'react';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import LoadingSpinner from './shared/LoadingSpinner';
 
 // Lazy load feature components
@@ -15,6 +16,9 @@ const ShoppingCart = React.lazy(() => import('./cart/ShoppingCart'));
 const MainApp = ({ user }) => {
     const [activeTab, setActiveTab] = useState('shop');
     const [cart, setCart] = useState([]);
+    const [items, setItems] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [checkoutHistory, setCheckoutHistory] = useState([]);
     const [isDarkMode, setIsDarkMode] = useState(() => {
         const saved = localStorage.getItem('materialYouTheme');
         return saved ? JSON.parse(saved) : true; // Default to dark mode
@@ -108,14 +112,38 @@ const MainApp = ({ user }) => {
         setIsDarkMode(!isDarkMode);
     };
 
+    // Load data for count badges
+    useEffect(() => {
+        const itemsQuery = query(collection(db, 'items'), orderBy('name'));
+        const itemsUnsub = onSnapshot(itemsQuery, (snapshot) => {
+            setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
+        const usersQuery = query(collection(db, 'users'), orderBy('firstName'));
+        const usersUnsub = onSnapshot(usersQuery, (snapshot) => {
+            setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
+        const checkoutQuery = query(collection(db, 'checkoutHistory'), orderBy('dateEntered', 'desc'));
+        const checkoutUnsub = onSnapshot(checkoutQuery, (snapshot) => {
+            setCheckoutHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
+        return () => {
+            itemsUnsub();
+            usersUnsub();
+            checkoutUnsub();
+        };
+    }, []);
+
     const tabs = [
         { id: 'shop', name: 'Shop', icon: 'storefront', count: cart.length },
         { id: 'scanner', name: 'Scanner', icon: 'qr_code_scanner' },
-        { id: 'inventory', name: 'Inventory', icon: 'inventory_2' },
-        { id: 'users', name: 'Users', icon: 'people' },
+        { id: 'inventory', name: 'Inventory', icon: 'inventory_2', count: items.length },
+        { id: 'users', name: 'Users', icon: 'people', count: users.length },
         { id: 'admin', name: 'Admin', icon: 'admin_panel_settings' },
         { id: 'shipment', name: 'Process Shipment', icon: 'local_shipping' },
-        { id: 'history', name: 'History', icon: 'history' },
+        { id: 'history', name: 'History', icon: 'history', count: checkoutHistory.length },
     ];
 
     const renderTabContent = () => {
