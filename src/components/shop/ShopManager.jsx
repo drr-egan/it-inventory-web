@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import LoadingSpinner from '../shared/LoadingSpinner';
+import MaterialCard from '../shared/MaterialCard';
+import MaterialButton from '../shared/MaterialButton';
+import MaterialPagination from '../shared/MaterialPagination';
 import ShoppingCart from '../cart/ShoppingCart';
 
 const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
@@ -10,6 +13,11 @@ const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
+    const [pagination, setPagination] = useState({
+        currentPage: 1,
+        itemsPerPage: 50,
+        totalItems: 0
+    });
 
     useEffect(() => {
         const itemsQuery = query(collection(db, 'items'), orderBy('name'));
@@ -55,6 +63,26 @@ const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
         const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
         return matchesSearch && matchesCategory && (item.quantity || 0) > 0;
     });
+
+    // Update pagination total
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, totalItems: filteredItems.length }));
+    }, [filteredItems.length]);
+
+    // Get paginated items
+    const getPaginatedItems = () => {
+        const startIndex = (pagination.currentPage - 1) * pagination.itemsPerPage;
+        const endIndex = startIndex + pagination.itemsPerPage;
+        return filteredItems.slice(startIndex, endIndex);
+    };
+
+    const handlePageChange = (page) => {
+        setPagination(prev => ({ ...prev, currentPage: page }));
+    };
+
+    const handleItemsPerPageChange = (perPage) => {
+        setPagination(prev => ({ ...prev, itemsPerPage: perPage, currentPage: 1 }));
+    };
 
     if (loading) {
         return (
@@ -114,9 +142,9 @@ const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
                     </div>
 
                     {/* Items Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredItems.map(item => (
-                            <div key={item.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:shadow-lg transition-all">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 lg:gap-4">
+                        {getPaginatedItems().map(item => (
+                            <MaterialCard key={item.id} elevation={1} className="!p-3 lg:!p-4 hover:mat-elevation-4">
                                 <div className="flex justify-between items-start mb-3">
                                     <h3 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">
                                         {item.name}
@@ -141,10 +169,12 @@ const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
                                         </div>
                                     )}
                                 </div>
-                                <button
+                                <MaterialButton
                                     onClick={() => addToCart(item)}
                                     disabled={item.quantity === 0}
-                                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-all flex items-center justify-center"
+                                    variant="contained"
+                                    color="primary"
+                                    className="w-full !py-2"
                                 >
                                     {item.quantity === 0 ? (
                                         <>
@@ -157,10 +187,19 @@ const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
                                             Add to Cart
                                         </>
                                     )}
-                                </button>
-                            </div>
+                                </MaterialButton>
+                            </MaterialCard>
                         ))}
                     </div>
+
+                    {/* Pagination */}
+                    <MaterialPagination
+                        currentPage={pagination.currentPage}
+                        totalItems={pagination.totalItems}
+                        itemsPerPage={pagination.itemsPerPage}
+                        onPageChange={handlePageChange}
+                        onItemsPerPageChange={handleItemsPerPageChange}
+                    />
 
                     {filteredItems.length === 0 && (
                         <div className="text-center py-8">
