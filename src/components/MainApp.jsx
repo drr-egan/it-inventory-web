@@ -19,6 +19,7 @@ const MainApp = ({ user }) => {
     const [items, setItems] = useState([]);
     const [users, setUsers] = useState([]);
     const [checkoutHistory, setCheckoutHistory] = useState([]);
+    const [notifications, setNotifications] = useState([]);
     const [isDarkMode, setIsDarkMode] = useState(() => {
         const saved = localStorage.getItem('materialYouTheme');
         return saved ? JSON.parse(saved) : true; // Default to dark mode
@@ -116,7 +117,14 @@ const MainApp = ({ user }) => {
     useEffect(() => {
         const itemsQuery = query(collection(db, 'items'), orderBy('name'));
         const itemsUnsub = onSnapshot(itemsQuery, (snapshot) => {
-            setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            const itemsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setItems(itemsData);
+
+            // Generate low stock notifications
+            const lowStockItems = itemsData.filter(item =>
+                item.quantity <= (item.minThreshold || 5)
+            );
+            setNotifications(lowStockItems);
         });
 
         const usersQuery = query(collection(db, 'users'), orderBy('firstName'));
