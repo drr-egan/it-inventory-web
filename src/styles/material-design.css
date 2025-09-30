@@ -1,0 +1,304 @@
+/* Material You Design System - Ported from Original */
+/* Hybrid Approach: Use with Tailwind utilities for optimal performance */
+
+:root {
+    /* Material You Elevation Tokens */
+    --md-elevation-1: 0px 1px 3px 1px rgba(0, 0, 0, 0.15), 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+    --md-elevation-2: 0px 2px 6px 2px rgba(0, 0, 0, 0.15), 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+    --md-elevation-3: 0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px 0px rgba(0, 0, 0, 0.3);
+    --md-elevation-4: 0px 6px 10px 4px rgba(0, 0, 0, 0.15), 0px 2px 3px 0px rgba(0, 0, 0, 0.3);
+    --md-elevation-5: 0px 8px 12px 6px rgba(0, 0, 0, 0.15), 0px 4px 4px 0px rgba(0, 0, 0, 0.3);
+
+    /* Material You Shape Tokens */
+    --md-sys-shape-corner-none: 0px;
+    --md-sys-shape-corner-extra-small: 4px;
+    --md-sys-shape-corner-small: 8px;
+    --md-sys-shape-corner-medium: 12px;
+    --md-sys-shape-corner-large: 16px;
+    --md-sys-shape-corner-extra-large: 28px;
+    --md-sys-shape-corner-full: 1000px;
+
+    /* Material You Typography Scale */
+    --md-sys-typescale-display-large: 400 57px/64px 'Roboto', sans-serif;
+    --md-sys-typescale-headline-large: 400 32px/40px 'Roboto', sans-serif;
+    --md-sys-typescale-headline-medium: 400 28px/36px 'Roboto', sans-serif;
+    --md-sys-typescale-title-large: 400 22px/28px 'Roboto', sans-serif;
+    --md-sys-typescale-title-medium: 500 16px/24px 'Roboto', sans-serif;
+    --md-sys-typescale-body-large: 400 16px/24px 'Roboto', sans-serif;
+    --md-sys-typescale-body-medium: 400 14px/20px 'Roboto', sans-serif;
+    --md-sys-typescale-label-large: 500 14px/20px 'Roboto', sans-serif;
+    --md-sys-typescale-label-medium: 500 12px/16px 'Roboto', sans-serif;
+
+    /* Material You Color System */
+    --md-sys-color-primary: #1976d2;
+    --md-sys-color-on-primary: #ffffff;
+    --md-sys-color-primary-container: #d7eaff;
+    --md-sys-color-on-primary-container: #001c38;
+
+    --md-sys-color-secondary: #535f70;
+    --md-sys-color-on-secondary: #ffffff;
+    --md-sys-color-secondary-container: #d7e3f7;
+    --md-sys-color-on-secondary-container: #101c2b;
+
+    --md-sys-color-tertiary: #6b5778;
+    --md-sys-color-on-tertiary: #ffffff;
+    --md-sys-color-tertiary-container: #f2daff;
+    --md-sys-color-on-tertiary-container: #251431;
+
+    --md-sys-color-error: #ba1a1a;
+    --md-sys-color-on-error: #ffffff;
+    --md-sys-color-error-container: #ffdad6;
+    --md-sys-color-on-error-container: #410002;
+
+    --md-sys-color-surface: #fefbff;
+    --md-sys-color-on-surface: #1a1c1e;
+    --md-sys-color-surface-variant: #dfe2eb;
+    --md-sys-color-on-surface-variant: #43474e;
+
+    --md-sys-color-surface-container-lowest: #ffffff;
+    --md-sys-color-surface-container-low: #f4f0f7;
+    --md-sys-color-surface-container: #eee8f5;
+    --md-sys-color-surface-container-high: #e8e1ee;
+    --md-sys-color-surface-container-highest: #e2dbe8;
+
+    --md-sys-color-outline: #73777f;
+    --md-sys-color-outline-variant: #c3c7cf;
+
+    --md-sys-color-success: #006d35;
+    --md-sys-color-on-success: #ffffff;
+    --md-sys-color-success-container: #94f7ad;
+    --md-sys-color-on-success-container: #00210a;
+
+    --md-sys-color-warning: #f59e0b;
+    --md-sys-color-warning-container: #fef3c7;
+}
+
+/* Material You Base Styles */
+* {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Material You Global Styles */
+body {
+    background-color: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    margin: 0;
+    padding: 0;
+}
+
+/* Material You Elevation System */
+.md-elevation-1 { box-shadow: var(--md-elevation-1); }
+.md-elevation-2 { box-shadow: var(--md-elevation-2); }
+.md-elevation-3 { box-shadow: var(--md-elevation-3); }
+.md-elevation-4 { box-shadow: var(--md-elevation-4); }
+.md-elevation-5 { box-shadow: var(--md-elevation-5); }
+
+/* Material You Navigation Components */
+.md-navigation-bar {
+    transition: background-color 0.3s ease;
+}
+
+.md-navigation-tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 24px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: var(--md-sys-shape-corner-small);
+    font: var(--md-sys-typescale-label-large);
+    min-height: 48px;
+}
+
+.md-navigation-tab:hover {
+    background-color: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+}
+
+.md-navigation-tab .material-icons {
+    font-size: 20px;
+}
+
+/* Material You Badges */
+.md-badge {
+    border-radius: var(--md-sys-shape-corner-full);
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 16px;
+    text-align: center;
+    line-height: 1;
+}
+
+/* Material You Buttons */
+.md-button {
+    padding: 10px 24px;
+    border-radius: var(--md-sys-shape-corner-full);
+    border: none;
+    font: var(--md-sys-typescale-label-large);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.md-button.primary {
+    background-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+}
+
+.md-button.primary:hover {
+    background-color: color-mix(in srgb, var(--md-sys-color-primary) 92%, black);
+    box-shadow: var(--md-elevation-1);
+}
+
+.md-button.secondary {
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+    border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-button.secondary:hover {
+    background-color: var(--md-sys-color-surface-container-high);
+}
+
+.md-button.error {
+    background-color: var(--md-sys-color-error-container);
+    color: var(--md-sys-color-error);
+}
+
+.md-button.error:hover {
+    background-color: color-mix(in srgb, var(--md-sys-color-error-container) 92%, var(--md-sys-color-error));
+}
+
+/* Material Design Cards */
+.mat-card {
+    border-radius: var(--md-sys-shape-corner-medium);
+    background: var(--md-sys-color-surface-container);
+    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.mat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--md-elevation-2);
+}
+
+/* Material Design Input Fields */
+.mat-input {
+    position: relative;
+}
+
+.mat-input input, .mat-input select, .mat-input textarea {
+    width: 100%;
+    padding: 16px 12px 8px 12px;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--md-sys-shape-corner-extra-small);
+    background: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+    font-size: 16px;
+    transition: all 0.2s ease;
+}
+
+.mat-input input:focus, .mat-input select:focus, .mat-input textarea:focus {
+    outline: none;
+    border-color: var(--md-sys-color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent);
+}
+
+.mat-input label {
+    position: absolute;
+    left: 12px;
+    top: 16px;
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 16px;
+    transition: all 0.2s ease;
+    pointer-events: none;
+    background: var(--md-sys-color-surface);
+    padding: 0 4px;
+}
+
+.mat-input input:focus + label,
+.mat-input input:not(:placeholder-shown) + label,
+.mat-input select:focus + label,
+.mat-input textarea:focus + label,
+.mat-input textarea:not(:placeholder-shown) + label {
+    top: -6px;
+    font-size: 12px;
+    color: var(--md-sys-color-primary);
+}
+
+/* Material Design Animations */
+@keyframes md-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes md-scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes md-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+/* Material Design Ripple Effect */
+.mat-ripple {
+    position: relative;
+    overflow: hidden;
+    transform: translate3d(0, 0, 0);
+}
+
+.mat-ripple:before {
+    content: "";
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    transition: width 0.6s, height 0.6s, left 0.6s, top 0.6s;
+    transform: translate(-50%, -50%);
+}
+
+.mat-ripple:active:before {
+    width: 300px;
+    height: 300px;
+}
+
+/* Low Stock Indicator */
+.md-low-stock-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background-color: var(--md-sys-color-warning-container);
+    border-radius: var(--md-sys-shape-corner-small);
+    margin: 8px 0;
+}
+
+.md-low-stock-item-name {
+    font: var(--md-sys-typescale-body-medium);
+    color: var(--md-sys-color-on-surface);
+    font-weight: 500;
+}
+
+.md-low-stock-item-quantity {
+    font: var(--md-sys-typescale-body-medium);
+    color: var(--md-sys-color-warning);
+    font-weight: 600;
+}
