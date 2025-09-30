@@ -9,6 +9,7 @@ const CheckoutHistory = ({ user }) => {
     const [viewMode, setViewMode] = useState('current'); // 'current' or 'archive'
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Load current checkout history
     useEffect(() => {
@@ -63,6 +64,18 @@ const CheckoutHistory = ({ user }) => {
 
     const currentData = viewMode === 'current' ? checkoutHistory : archivedCheckouts;
 
+    // Filter data based on search term
+    const filteredData = currentData.filter(record => {
+        if (!searchTerm) return true;
+        const search = searchTerm.toLowerCase();
+        return (
+            (record.itemName || record.item || '').toLowerCase().includes(search) ||
+            (record.userName || record.user || '').toLowerCase().includes(search) ||
+            (record.departmentId || record.costCode || '').toLowerCase().includes(search) ||
+            (record.quantity?.toString() || '').includes(search)
+        );
+    });
+
     const formatDate = (dateField) => {
         if (!dateField) return 'Unknown';
         if (dateField.toDate) return dateField.toDate().toLocaleDateString();
@@ -91,19 +104,20 @@ const CheckoutHistory = ({ user }) => {
         <div className="space-y-6">
             {/* Header with Toggle */}
             <div className="bg-[var(--md-sys-color-surface-container)] rounded-lg p-6 md-elevation-1">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-[var(--md-sys-color-on-surface)] flex items-center">
-                            <span className="material-icons mr-2">history</span>
-                            Checkout History
-                        </h2>
-                        <p className="text-sm text-[var(--md-sys-color-on-surface-variant)] mt-1">
-                            {viewMode === 'current'
-                                ? 'View active checkout records awaiting processing'
-                                : 'View processed and archived checkout records'}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-[var(--md-sys-color-on-surface)] flex items-center">
+                                <span className="material-icons mr-2">history</span>
+                                Checkout History
+                            </h2>
+                            <p className="text-sm text-[var(--md-sys-color-on-surface-variant)] mt-1">
+                                {viewMode === 'current'
+                                    ? 'View active checkout records awaiting processing'
+                                    : 'View processed and archived checkout records'}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
                         <button
                             onClick={() => setViewMode('current')}
                             className={`px-4 py-2 rounded-full flex items-center gap-2 transition-all ${
@@ -134,6 +148,35 @@ const CheckoutHistory = ({ user }) => {
                         </button>
                     </div>
                 </div>
+
+                {/* Search Bar */}
+                <div className="relative">
+                    <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-on-surface-variant)]">
+                        search
+                    </span>
+                    <input
+                        type="text"
+                        placeholder="Search by item, user, department, or quantity..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-lg border border-[var(--md-sys-color-outline-variant)] focus:outline-none focus:ring-2 focus:ring-[var(--md-sys-color-primary)]"
+                    />
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
+                        >
+                            <span className="material-icons text-sm">close</span>
+                        </button>
+                    )}
+                </div>
+
+                {searchTerm && (
+                    <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">
+                        Found {filteredData.length} of {currentData.length} records
+                    </p>
+                )}
+            </div>
             </div>
 
             {/* Table */}
@@ -165,7 +208,7 @@ const CheckoutHistory = ({ user }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--md-sys-color-outline-variant)]">
-                            {currentData.length === 0 ? (
+                            {filteredData.length === 0 ? (
                                 <tr>
                                     <td colSpan={viewMode === 'archive' ? 6 : 5} className="px-6 py-8 text-center">
                                         <div className="flex flex-col items-center gap-2">
@@ -173,13 +216,15 @@ const CheckoutHistory = ({ user }) => {
                                                 inbox
                                             </span>
                                             <p className="text-[var(--md-sys-color-on-surface-variant)]">
-                                                No {viewMode === 'archive' ? 'archived' : 'current'} records found
+                                                {searchTerm
+                                                    ? `No records matching "${searchTerm}"`
+                                                    : `No ${viewMode === 'archive' ? 'archived' : 'current'} records found`}
                                             </p>
                                         </div>
                                     </td>
                                 </tr>
                             ) : (
-                                currentData.map(record => (
+                                filteredData.map(record => (
                                     <tr key={record.id} className="hover:bg-[var(--md-sys-color-surface-container-highest)] transition-colors">
                                         <td className="px-6 py-4 font-medium text-[var(--md-sys-color-on-surface)]">
                                             {record.itemName || record.item}

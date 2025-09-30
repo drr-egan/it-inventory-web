@@ -32,6 +32,12 @@ const InventoryManager = ({ user }) => {
     });
     const [isCreatingItem, setIsCreatingItem] = useState(false);
 
+    // Bulk edit
+    const [selectedItems, setSelectedItems] = useState(new Set());
+    const [bulkAction, setBulkAction] = useState('');
+    const [bulkValue, setBulkValue] = useState('');
+    const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
     const scanInputRef = useRef(null);
 
     useEffect(() => {
@@ -203,6 +209,85 @@ const InventoryManager = ({ user }) => {
         a.href = url;
         a.download = `inventory-export-${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
+    };
+
+    const toggleSelectItem = (itemId) => {
+        setSelectedItems(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(itemId)) {
+                newSet.delete(itemId);
+            } else {
+                newSet.add(itemId);
+            }
+            return newSet;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedItems.size === getPaginatedItems().length) {
+            setSelectedItems(new Set());
+        } else {
+            setSelectedItems(new Set(getPaginatedItems().map(item => item.id)));
+        }
+    };
+
+    const handleBulkAction = async () => {
+        if (selectedItems.size === 0) {
+            alert('Please select items to perform bulk action');
+            return;
+        }
+
+        if (!bulkAction) {
+            alert('Please select a bulk action');
+            return;
+        }
+
+        if ((bulkAction === 'setQuantity' || bulkAction === 'setPrice') && !bulkValue) {
+            alert('Please enter a value');
+            return;
+        }
+
+        const confirmMsg = `Are you sure you want to ${bulkAction} for ${selectedItems.size} items?`;
+        if (!confirm(confirmMsg)) return;
+
+        setIsBulkProcessing(true);
+        try {
+            const updates = [];
+
+            for (const itemId of selectedItems) {
+                const updateData = { lastUpdated: serverTimestamp() };
+
+                switch (bulkAction) {
+                    case 'setQuantity':
+                        updateData.quantity = parseInt(bulkValue);
+                        break;
+                    case 'setPrice':
+                        updateData.price = parseFloat(bulkValue);
+                        break;
+                    case 'setZero':
+                        updateData.quantity = 0;
+                        break;
+                    case 'incrementQuantity':
+                        const item = items.find(i => i.id === itemId);
+                        updateData.quantity = (item?.quantity || 0) + (parseInt(bulkValue) || 1);
+                        break;
+                }
+
+                updates.push(updateDoc(doc(db, 'items', itemId), updateData));
+            }
+
+            await Promise.all(updates);
+
+            setSelectedItems(new Set());
+            setBulkAction('');
+            setBulkValue('');
+            alert(`Bulk action completed for ${selectedItems.size} items!`);
+        } catch (error) {
+            console.error('Bulk action error:', error);
+            alert(`Bulk action failed: ${error.message}`);
+        } finally {
+            setIsBulkProcessing(false);
+        }
     };
 
     if (loading) {
@@ -383,12 +468,76 @@ const InventoryManager = ({ user }) => {
                         </div>
                     </MaterialCard>
 
+                    {/* Bulk Edit Actions */}
+                    {selectedItems.size > 0 && (
+                        <MaterialCard elevation={2} className="!bg-blue-50 dark:!bg-blue-900/20 !border !border-blue-200 dark:!border-blue-800">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+                                        <span className="material-icons mr-2 text-blue-600">check_circle</span>
+                                        Bulk Actions
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
+                                    </p>
+                                </div>
+                                <MaterialButton
+                                    onClick={() => setSelectedItems(new Set())}
+                                    variant="text"
+                                    color="secondary"
+                                >
+                                    Clear Selection
+                                </MaterialButton>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <select
+                                    value={bulkAction}
+                                    onChange={(e) => setBulkAction(e.target.value)}
+                                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                >
+                                    <option value="">Select Action</option>
+                                    <option value="setQuantity">Set Quantity</option>
+                                    <option value="setPrice">Set Price</option>
+                                    <option value="incrementQuantity">Increment Quantity</option>
+                                    <option value="setZero">Set All to Zero</option>
+                                </select>
+                                {(bulkAction === 'setQuantity' || bulkAction === 'setPrice' || bulkAction === 'incrementQuantity') && (
+                                    <MaterialInput
+                                        label={bulkAction === 'setPrice' ? 'Price' : 'Quantity'}
+                                        type="number"
+                                        step={bulkAction === 'setPrice' ? '0.01' : '1'}
+                                        value={bulkValue}
+                                        onChange={(e) => setBulkValue(e.target.value)}
+                                    />
+                                )}
+                                <MaterialButton
+                                    onClick={handleBulkAction}
+                                    disabled={isBulkProcessing || !bulkAction}
+                                    variant="contained"
+                                    color="primary"
+                                    className="md:col-span-2"
+                                >
+                                    <span className="material-icons mr-2">done_all</span>
+                                    {isBulkProcessing ? 'Processing...' : 'Apply to Selected'}
+                                </MaterialButton>
+                            </div>
+                        </MaterialCard>
+                    )}
+
                     {/* Editable Inventory Table */}
                     <MaterialCard elevation={1}>
                         <div className="overflow-x-auto">
                             <table className="min-w-full">
                                 <thead className="bg-gray-50 dark:bg-gray-700">
                                     <tr>
+                                        <th className="px-6 py-3 text-left">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedItems.size === getPaginatedItems().length && getPaginatedItems().length > 0}
+                                                onChange={toggleSelectAll}
+                                                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                            />
+                                        </th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Item</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Quantity</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Price</th>
@@ -398,7 +547,15 @@ const InventoryManager = ({ user }) => {
                                 </thead>
                                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                     {getPaginatedItems().map(item => (
-                                        <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <tr key={item.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${selectedItems.has(item.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                                            <td className="px-6 py-4">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedItems.has(item.id)}
+                                                    onChange={() => toggleSelectItem(item.id)}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                                />
+                                            </td>
                                             <td className="px-6 py-4">
                                                 <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
                                                 {item.asin && <div className="text-sm text-gray-500 dark:text-gray-400">{item.asin}</div>}

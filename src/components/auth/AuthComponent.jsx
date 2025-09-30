@@ -29,16 +29,9 @@ const AuthComponent = () => {
         }
     };
 
-    // Temporary bypass for testing (remove this in production)
-    const handleTestMode = () => {
-        console.log('Test mode - bypassing authentication');
-        // You could set a fake user here for testing
-        alert('Test mode - Firebase auth needs domain configuration. Please add localhost:8080 to Firebase authorized domains.');
-    };
-
     return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+            <div className="bg-gray-800 rounded-lg shadow-2xl p-8 max-w-md w-full border border-gray-700">
                 {/* Header */}
                 <div className="text-center mb-8">
                     <div style={{
@@ -49,28 +42,26 @@ const AuthComponent = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        margin: '0 auto 16px'
+                        margin: '0 auto 16px',
+                        boxShadow: '0 4px 6px rgba(25, 118, 210, 0.3)'
                     }}>
                         <span className="material-icons text-white text-2xl">inventory_2</span>
                     </div>
-                    <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                    <h2 className="text-xl font-semibold text-white mb-2">
                         IT Inventory Management
                     </h2>
-                    <p className="text-gray-600">
+                    <p className="text-gray-400">
                         Sign in to access your inventory dashboard
                     </p>
                 </div>
 
                 {/* Error Message */}
                 {error && (
-                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                    <div className="mb-6 p-4 bg-red-900/20 border border-red-700 rounded-md">
                         <div className="flex">
-                            <span className="material-icons text-red-500 mr-2">error</span>
+                            <span className="material-icons text-red-400 mr-2">error</span>
                             <div>
-                                <p className="text-red-700 text-sm">{error}</p>
-                                <p className="text-red-600 text-xs mt-2">
-                                    <strong>Fix:</strong> Add localhost:8080 to Firebase Console → Authentication → Settings → Authorized domains
-                                </p>
+                                <p className="text-red-300 text-sm">{error}</p>
                             </div>
                         </div>
                     </div>
@@ -80,7 +71,7 @@ const AuthComponent = () => {
                 <button
                     onClick={handleGoogleSignIn}
                     disabled={loading}
-                    className="w-full bg-white border border-gray-300 rounded-md py-3 px-4 flex items-center justify-center space-x-3 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-4"
+                    className="w-full bg-white border border-gray-600 rounded-md py-3 px-4 flex items-center justify-center space-x-3 text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                 >
                     {loading ? (
                         <LoadingSpinner />
@@ -97,18 +88,10 @@ const AuthComponent = () => {
                     )}
                 </button>
 
-                {/* Test Mode Button */}
-                <button
-                    onClick={handleTestMode}
-                    className="w-full bg-gray-600 text-white rounded-md py-3 px-4 hover:bg-gray-700 transition-colors"
-                >
-                    Test Mode (Skip Auth)
-                </button>
-
                 {/* Footer */}
                 <div className="mt-6 text-center">
                     <p className="text-xs text-gray-500">
-                        <strong>Phase 1 Testing:</strong> Add localhost:8080 to Firebase authorized domains to enable authentication.
+                        Secure authentication powered by Firebase
                     </p>
                 </div>
             </div>

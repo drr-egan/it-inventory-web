@@ -8,6 +8,7 @@ const ShoppingCart = ({ cart, addToCart, removeFromCart, clearCart, users, onChe
     const [selectedUser, setSelectedUser] = useState('');
     const [jobNumber, setJobNumber] = useState('');
     const [notes, setNotes] = useState('');
+    const [userSearchTerm, setUserSearchTerm] = useState('');
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.price || 0) * item.cartQuantity, 0);
 
@@ -21,6 +22,18 @@ const ShoppingCart = ({ cart, addToCart, removeFromCart, clearCart, users, onChe
         }
         return deptId;
     };
+
+    // Filter users based on search term
+    const filteredUsers = users.filter(user => {
+        if (!userSearchTerm) return true;
+        const search = userSearchTerm.toLowerCase();
+        const userName = user.name || `${user.firstName} ${user.lastName}`;
+        const costCode = formatDepartmentId(user.costCode || user.cost_code);
+        return (
+            userName.toLowerCase().includes(search) ||
+            costCode.toLowerCase().includes(search)
+        );
+    });
 
     const handleCheckout = async () => {
         if (cart.length === 0) return;
@@ -183,23 +196,37 @@ const ShoppingCart = ({ cart, addToCart, removeFromCart, clearCart, users, onChe
 
                         {/* User Selection */}
                         {checkoutMethod === 'user' && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                     Select User
                                 </label>
+                                <input
+                                    type="text"
+                                    placeholder="Search by name or cost code..."
+                                    value={userSearchTerm}
+                                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                />
                                 <select
                                     value={selectedUser}
                                     onChange={(e) => setSelectedUser(e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                    size="5"
                                     required
                                 >
                                     <option value="">Choose a user...</option>
-                                    {users.slice(0, 50).map(user => (
+                                    {filteredUsers.slice(0, 100).map(user => (
                                         <option key={user.id} value={user.id}>
                                             {user.name || `${user.firstName} ${user.lastName}`} - {formatDepartmentId(user.costCode || user.cost_code)}
                                         </option>
                                     ))}
+                                    {filteredUsers.length === 0 && userSearchTerm && (
+                                        <option disabled>No users found</option>
+                                    )}
                                 </select>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Showing {Math.min(100, filteredUsers.length)} of {filteredUsers.length} users
+                                </p>
                             </div>
                         )}
 
