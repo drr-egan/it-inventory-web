@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import LoadingSpinner from '../shared/LoadingSpinner';
+import ShoppingCart from '../cart/ShoppingCart';
 
-const ShopManager = ({ user, cart, setCart }) => {
+const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
     const [items, setItems] = useState([]);
+    const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
 
     useEffect(() => {
-        const q = query(collection(db, 'items'), orderBy('name'));
-        const unsubscribe = onSnapshot(q,
+        const itemsQuery = query(collection(db, 'items'), orderBy('name'));
+        const itemsUnsub = onSnapshot(itemsQuery,
             (snapshot) => {
                 const itemsData = snapshot.docs.map(doc => ({
                     id: doc.id,
@@ -26,7 +28,24 @@ const ShopManager = ({ user, cart, setCart }) => {
             }
         );
 
-        return () => unsubscribe();
+        const usersQuery = query(collection(db, 'users'), orderBy('firstName'));
+        const usersUnsub = onSnapshot(usersQuery,
+            (snapshot) => {
+                const usersData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setUsers(usersData);
+            },
+            (error) => {
+                console.error('Error fetching users:', error);
+            }
+        );
+
+        return () => {
+            itemsUnsub();
+            usersUnsub();
+        };
     }, []);
 
     const categories = ['all', ...new Set(items.map(item => item.category || 'Uncategorized'))];
@@ -37,87 +56,116 @@ const ShopManager = ({ user, cart, setCart }) => {
         return matchesSearch && matchesCategory && (item.quantity || 0) > 0;
     });
 
-    const addToCart = (item) => {
-        const existingItem = cart.find(c => c.id === item.id);
-        if (existingItem) {
-            setCart(cart.map(c => c.id === item.id ? { ...c, cartQuantity: c.cartQuantity + 1 } : c));
-        } else {
-            setCart([...cart, { ...item, cartQuantity: 1 }]);
-        }
-    };
-
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
                 <LoadingSpinner size="large" />
-                <span className="ml-4">Loading shop...</span>
+                <span className="ml-4 dark:text-gray-300">Loading shop...</span>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            <div className="bg-[var(--md-sys-color-surface-container)] rounded-lg p-6 md-elevation-1">
-                <h2 className="text-2xl font-bold text-[var(--md-sys-color-on-surface)] flex items-center mb-4">
-                    <span className="material-icons mr-2">storefront</span>
-                    Shop
-                </h2>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6">
+            {/* Shop Items - 2/3 width on desktop */}
+            <div className="xl:col-span-2 space-y-4 lg:space-y-6 order-2 xl:order-1">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center mb-4">
+                        <span className="material-icons mr-2">storefront</span>
+                        Shop Items
+                    </h2>
 
-                {/* Search and Filter */}
-                <div className="flex gap-4 mb-4">
-                    <input
-                        type="text"
-                        placeholder="Search items..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="flex-1 px-4 py-2 border border-[var(--md-sys-color-outline)] rounded-lg bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)]"
-                    />
-                    <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="px-4 py-2 border border-[var(--md-sys-color-outline)] rounded-lg bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)]"
-                    >
-                        {categories.map(cat => (
-                            <option key={cat} value={cat}>{cat === 'all' ? 'All Categories' : cat}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
-            {/* Items Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredItems.map(item => (
-                    <div key={item.id} className="bg-[var(--md-sys-color-surface-container)] rounded-lg p-4 md-elevation-1 hover:md-elevation-2 transition-all">
-                        <h3 className="font-semibold text-[var(--md-sys-color-on-surface)] mb-2">{item.name}</h3>
-                        <p className="text-sm text-[var(--md-sys-color-on-surface-variant)] mb-2">{item.category || 'Uncategorized'}</p>
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">
-                                    Stock: <span className={item.quantity <= (item.minThreshold || 0) ? 'text-[var(--md-sys-color-error)]' : 'text-[var(--md-sys-color-success)]'}>
-                                        {item.quantity}
-                                    </span>
-                                </p>
-                                {item.price > 0 && (
-                                    <p className="text-lg font-bold text-[var(--md-sys-color-primary)]">${Number(item.price).toFixed(2)}</p>
-                                )}
-                            </div>
-                            <button
-                                onClick={() => addToCart(item)}
-                                className="md-button primary"
-                            >
-                                <span className="material-icons">add_shopping_cart</span>
-                            </button>
-                        </div>
+                    {/* Search and Filter */}
+                    <div className="flex gap-4 mb-6">
+                        <input
+                            type="text"
+                            placeholder="Search items..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        />
+                        <select
+                            value={selectedCategory}
+                            onChange={(e) => setSelectedCategory(e.target.value)}
+                            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        >
+                            {categories.map(cat => (
+                                <option key={cat} value={cat}>{cat === 'all' ? 'All Categories' : cat}</option>
+                            ))}
+                        </select>
                     </div>
-                ))}
+
+                    {/* Items Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredItems.map(item => (
+                            <div key={item.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:shadow-lg transition-all">
+                                <div className="flex justify-between items-start mb-3">
+                                    <h3 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">
+                                        {item.name}
+                                    </h3>
+                                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        item.quantity <= (item.minThreshold || 5)
+                                            ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                                            : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                    }`}>
+                                        {item.quantity}
+                                    </div>
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400 mb-4">
+                                    <div className="flex items-center">
+                                        <span className="material-icons text-xs mr-1">category</span>
+                                        {item.category || 'Uncategorized'}
+                                    </div>
+                                    {item.price > 0 && (
+                                        <div className="flex items-center mt-1 text-green-600 dark:text-green-400 font-medium">
+                                            <span className="material-icons text-xs mr-1">attach_money</span>
+                                            ${item.price}
+                                        </div>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => addToCart(item)}
+                                    disabled={item.quantity === 0}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-all flex items-center justify-center"
+                                >
+                                    {item.quantity === 0 ? (
+                                        <>
+                                            <span className="material-icons mr-2 text-sm">block</span>
+                                            Out of Stock
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-icons mr-2 text-sm">add_shopping_cart</span>
+                                            Add to Cart
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    {filteredItems.length === 0 && (
+                        <div className="text-center py-8">
+                            <span className="material-icons text-4xl text-gray-400 dark:text-gray-500">inbox</span>
+                            <p className="text-gray-500 dark:text-gray-400 mt-2">No items found</p>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {filteredItems.length === 0 && (
-                <div className="text-center py-8">
-                    <span className="material-icons text-4xl text-[var(--md-sys-color-on-surface-variant)]">inbox</span>
-                    <p className="text-[var(--md-sys-color-on-surface-variant)] mt-2">No items found</p>
-                </div>
-            )}
+            {/* Shopping Cart - 1/3 width on desktop, sticky */}
+            <div className="order-1 xl:order-2">
+                <ShoppingCart
+                    cart={cart}
+                    addToCart={addToCart}
+                    removeFromCart={removeFromCart}
+                    clearCart={clearCart}
+                    users={users}
+                    onCheckout={() => {
+                        console.log('Checkout completed');
+                    }}
+                />
+            </div>
         </div>
     );
 };

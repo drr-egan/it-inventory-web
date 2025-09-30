@@ -1,4 +1,4 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { auth } from '../services/firebase';
 import LoadingSpinner from './shared/LoadingSpinner';
 
@@ -15,6 +15,98 @@ const ShoppingCart = React.lazy(() => import('./cart/ShoppingCart'));
 const MainApp = ({ user }) => {
     const [activeTab, setActiveTab] = useState('shop');
     const [cart, setCart] = useState([]);
+    const [isDarkMode, setIsDarkMode] = useState(() => {
+        const saved = localStorage.getItem('materialYouTheme');
+        return saved ? JSON.parse(saved) : true; // Default to dark mode
+    });
+
+    // Dark mode theme handler
+    useEffect(() => {
+        localStorage.setItem('materialYouTheme', JSON.stringify(isDarkMode));
+
+        const root = document.documentElement;
+
+        if (isDarkMode) {
+            // Material You Dark Theme with dark blue
+            root.classList.add('dark');
+            root.style.setProperty('--md-sys-color-primary', '#A6C8FF');
+            root.style.setProperty('--md-sys-color-on-primary', '#002E69');
+            root.style.setProperty('--md-sys-color-primary-container', '#004494');
+            root.style.setProperty('--md-sys-color-on-primary-container', '#D1E4FF');
+            root.style.setProperty('--md-sys-color-surface', '#101418');
+            root.style.setProperty('--md-sys-color-on-surface', '#E1E2E8');
+            root.style.setProperty('--md-sys-color-surface-variant', '#42474E');
+            root.style.setProperty('--md-sys-color-on-surface-variant', '#C2C7CF');
+            root.style.setProperty('--md-sys-color-surface-container', '#1C2024');
+            root.style.setProperty('--md-sys-color-surface-container-high', '#272A2F');
+            root.style.setProperty('--md-sys-color-surface-container-highest', '#31353A');
+            root.style.setProperty('--md-sys-color-outline', '#8C9199');
+            root.style.setProperty('--md-sys-color-outline-variant', '#42474E');
+            root.style.setProperty('--md-sys-color-error', '#FFB4AB');
+            root.style.setProperty('--md-sys-color-error-container', '#93000A');
+            root.style.setProperty('--md-sys-color-warning', '#FFB951');
+            root.style.setProperty('--md-sys-color-warning-container', '#7F4F00');
+            root.style.setProperty('--md-sys-color-success', '#4DD865');
+            root.style.setProperty('--md-sys-color-success-container', '#00390F');
+        } else {
+            // Material You Light Theme
+            root.classList.remove('dark');
+            root.style.setProperty('--md-sys-color-primary', '#1B5FBF');
+            root.style.setProperty('--md-sys-color-on-primary', '#FFFFFF');
+            root.style.setProperty('--md-sys-color-primary-container', '#D1E4FF');
+            root.style.setProperty('--md-sys-color-on-primary-container', '#001D35');
+            root.style.setProperty('--md-sys-color-surface', '#FCFCFF');
+            root.style.setProperty('--md-sys-color-on-surface', '#1A1C1E');
+            root.style.setProperty('--md-sys-color-surface-variant', '#E1E2E8');
+            root.style.setProperty('--md-sys-color-on-surface-variant', '#42474E');
+            root.style.setProperty('--md-sys-color-surface-container', '#F3F4FA');
+            root.style.setProperty('--md-sys-color-surface-container-high', '#ECEEF4');
+            root.style.setProperty('--md-sys-color-surface-container-highest', '#E6E7ED');
+            root.style.setProperty('--md-sys-color-outline', '#73777F');
+            root.style.setProperty('--md-sys-color-outline-variant', '#C2C7CF');
+            root.style.setProperty('--md-sys-color-error', '#BA1A1A');
+            root.style.setProperty('--md-sys-color-error-container', '#FFDAD6');
+            root.style.setProperty('--md-sys-color-warning', '#A06500');
+            root.style.setProperty('--md-sys-color-warning-container', '#FFDDB3');
+            root.style.setProperty('--md-sys-color-success', '#146C2E');
+            root.style.setProperty('--md-sys-color-success-container', '#B7F4B7');
+        }
+    }, [isDarkMode]);
+
+    // Cart management functions
+    const addToCart = (item, quantity = 1) => {
+        const existingItem = cart.find(c => c.id === item.id);
+        if (existingItem) {
+            setCart(cart.map(c =>
+                c.id === item.id
+                    ? { ...c, cartQuantity: c.cartQuantity + quantity }
+                    : c
+            ));
+        } else {
+            setCart([...cart, { ...item, cartQuantity: quantity }]);
+        }
+    };
+
+    const removeFromCart = (itemId) => {
+        const existingItem = cart.find(c => c.id === itemId);
+        if (existingItem && existingItem.cartQuantity > 1) {
+            setCart(cart.map(c =>
+                c.id === itemId
+                    ? { ...c, cartQuantity: c.cartQuantity - 1 }
+                    : c
+            ));
+        } else {
+            setCart(cart.filter(c => c.id !== itemId));
+        }
+    };
+
+    const clearCart = () => {
+        setCart([]);
+    };
+
+    const toggleDarkMode = () => {
+        setIsDarkMode(!isDarkMode);
+    };
 
     const tabs = [
         { id: 'shop', name: 'Shop', icon: 'storefront', count: cart.length },
@@ -27,7 +119,14 @@ const MainApp = ({ user }) => {
     ];
 
     const renderTabContent = () => {
-        const commonProps = { user, cart, setCart };
+        const commonProps = {
+            user,
+            cart,
+            setCart,
+            addToCart,
+            removeFromCart,
+            clearCart
+        };
 
         switch (activeTab) {
             case 'shop':
@@ -65,6 +164,15 @@ const MainApp = ({ user }) => {
                             <span className="text-sm text-[var(--md-sys-color-on-surface-variant)]">
                                 Welcome, {user.displayName || user.email}
                             </span>
+                            <button
+                                onClick={toggleDarkMode}
+                                className="p-2 rounded-full hover:bg-[var(--md-sys-color-surface-variant)] transition-colors"
+                                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                            >
+                                <span className="material-icons text-[var(--md-sys-color-on-surface-variant)]">
+                                    {isDarkMode ? 'light_mode' : 'dark_mode'}
+                                </span>
+                            </button>
                             <button
                                 onClick={() => auth.signOut()}
                                 className="text-sm text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
