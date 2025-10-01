@@ -6730,7 +6730,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                         }}
                                                     >
                                                         {tab.count}
-                                                    </div>
+                                                    </span>
                                                 )}
                                             </button>
                                         ))}
@@ -6967,13 +6967,15 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                         <label>Qty</label>
                                                                     </div>
                                                                 ) : (
-                                                                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                                                                        item.quantity <= (item.minThreshold || 5)
-                                                                            ? 'bg-red-900/20 text-red-300'
-                                                                            : 'bg-green-900/20 text-green-300'
+                                                                    <span className={`quantity-badge ${
+                                                                        item.quantity === 0
+                                                                            ? 'out-of-stock'
+                                                                            : item.quantity <= (item.minThreshold || 5)
+                                                                            ? 'low-stock'
+                                                                            : 'adequate-stock'
                                                                     }`}>
                                                                         {item.quantity}
-                                                                    </div>
+                                                                    </span>
                                                                 )}
                                                             </td>
 
@@ -7034,8 +7036,12 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                     </div>
                                                                 ) : (
                                                                     item.price > 0 ? (
-                                                                        <span className="text-green-600 text-green-400 font-medium">
-                                                                            ${item.price}
+                                                                        <span style={{
+                                                                            color: 'var(--color-success-green)',
+                                                                            fontSize: '14px',
+                                                                            fontWeight: '600'
+                                                                        }}>
+                                                                            ${parseFloat(item.price).toFixed(2)}
                                                                         </span>
                                                                     ) : (
                                                                         <span className="text-gray-400">-</span>
@@ -7299,14 +7305,14 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <code className="text-sm bg-gray-700 px-2 py-1 rounded">
+                                                            <span className="pill-badge">
                                                                 {formatDepartmentId(user.costCode || user.cost_code)}
-                                                            </code>
+                                                            </span>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <code className="text-sm bg-gray-700 px-2 py-1 rounded">
+                                                            <span className="pill-badge">
                                                                 {user.employeeId || user.employee_id || 'N/A'}
-                                                            </code>
+                                                            </span>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="flex gap-2">

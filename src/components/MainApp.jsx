@@ -189,64 +189,135 @@ const MainApp = ({ user }) => {
     };
 
     return (
-        <div className="min-h-screen bg-[var(--md-sys-color-surface)]">
-            {/* Header */}
-            <header className="bg-[var(--md-sys-color-surface-container)] md-elevation-1">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-16">
-                        <div className="flex items-center">
-                            <span className="material-icons text-[var(--md-sys-color-primary)] mr-2">inventory_2</span>
-                            <h1 className="text-xl font-semibold text-[var(--md-sys-color-on-surface)]">
-                                IT Inventory Management
-                            </h1>
-                        </div>
-                        <div className="flex items-center space-x-4">
-                            <span className="text-sm text-[var(--md-sys-color-on-surface-variant)]">
-                                Welcome, {user.displayName || user.email}
-                            </span>
-                            <button
-                                onClick={toggleDarkMode}
-                                className="p-2 rounded-full hover:bg-[var(--md-sys-color-surface-variant)] transition-colors"
-                                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                            >
-                                <span className="material-icons text-[var(--md-sys-color-on-surface-variant)]">
-                                    {isDarkMode ? 'light_mode' : 'dark_mode'}
-                                </span>
-                            </button>
-                            <button
-                                onClick={() => auth.signOut()}
-                                className="text-sm text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
-                            >
-                                Sign Out
-                            </button>
-                        </div>
+        <div className="min-h-screen transition-colors duration-300">
+            {/* Top Blue Banner */}
+            <div style={{
+                background: 'var(--color-primary-blue)',
+                padding: '12px 24px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                boxShadow: 'var(--md-elevation-2)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span className="material-icons" style={{ fontSize: '28px', color: 'white' }}>inventory_2</span>
+                    <div>
+                        <h1 style={{
+                            color: 'white',
+                            fontSize: '20px',
+                            fontWeight: '500',
+                            margin: 0,
+                            lineHeight: '1.2'
+                        }}>IT Inventory System</h1>
+                        <p style={{
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            fontSize: '12px',
+                            margin: 0,
+                            lineHeight: '1.2'
+                        }}>Firebase powered</p>
                     </div>
                 </div>
-            </header>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            background: 'var(--color-success-green)',
+                            boxShadow: '0 0 8px var(--color-success-green)'
+                        }}></div>
+                        <span style={{ color: 'white', fontSize: '14px' }}>{user.email}</span>
+                    </div>
+                    <button
+                        onClick={() => auth.signOut()}
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.2)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: 'var(--md-sys-shape-corner-full)',
+                            padding: '6px 16px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)'}
+                        onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
+                    >
+                        <span className="material-icons" style={{ fontSize: '18px' }}>logout</span>
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+
+            {/* Firebase Connection Status Bar */}
+            <div style={{
+                background: 'var(--color-success-green)',
+                padding: '8px 16px',
+                textAlign: 'center',
+                color: 'white',
+                fontSize: '14px'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <span className="material-icons" style={{ fontSize: '16px' }}>cloud_done</span>
+                    <span>Firebase Connected - Real-time sync active</span>
+                </div>
+            </div>
 
             {/* Navigation Tabs */}
-            <nav className="bg-[var(--md-sys-color-surface-container-high)] md-navigation-bar">
+            <nav style={{
+                backgroundColor: 'rgba(31, 41, 55, 0.8)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                borderBottom: '1px solid rgba(59, 130, 246, 0.2)'
+            }}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex space-x-2 overflow-x-auto">
-                        {tabs.map((tab) => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`md-navigation-tab ${
-                                    activeTab === tab.id
-                                        ? 'text-[var(--md-sys-color-primary)] border-b-2 border-[var(--md-sys-color-primary)]'
-                                        : 'text-[var(--md-sys-color-on-surface-variant)]'
-                                }`}
-                            >
-                                <span className="material-icons">{tab.icon}</span>
-                                <span>{tab.name}</span>
-                                {tab.count > 0 && (
-                                    <span className="md-badge bg-[var(--md-sys-color-error)] text-[var(--md-sys-color-on-error)]">
-                                        {tab.count}
-                                    </span>
-                                )}
-                            </button>
-                        ))}
+                    <div className="flex justify-between items-center">
+                        <div className="flex space-x-2 overflow-x-auto">
+                            {tabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className="md-navigation-tab"
+                                    style={{
+                                        backgroundColor: activeTab === tab.id ? 'var(--color-primary-blue)' : 'transparent',
+                                        color: activeTab === tab.id ? 'white' : 'var(--color-text-muted)',
+                                        borderRadius: 'var(--md-sys-shape-corner-small)'
+                                    }}
+                                >
+                                    <span className="material-icons">{tab.icon}</span>
+                                    <span>{tab.name}</span>
+                                    {tab.count !== undefined && tab.count > 0 && (
+                                        <span className="count-badge">
+                                            {tab.count}
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 16px',
+                            background: 'var(--color-success-green)',
+                            color: 'white',
+                            borderRadius: 'var(--md-sys-shape-corner-full)',
+                            fontSize: '12px',
+                            fontWeight: '600'
+                        }}>
+                            <div style={{
+                                width: '8px',
+                                height: '8px',
+                                background: 'white',
+                                borderRadius: '50%',
+                                animation: 'md-pulse 2s ease-in-out infinite'
+                            }}></div>
+                            <span>Connected</span>
+                        </div>
                     </div>
                 </div>
             </nav>
