@@ -233,12 +233,14 @@ const CheckoutHistory = ({ user }) => {
                                             {record.userName || record.user}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]">
+                                            <span className="quantity-badge adequate-stock">
                                                 {record.quantity}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-[var(--md-sys-color-on-surface-variant)]">
-                                            {record.departmentId || record.costCode || '-'}
+                                        <td className="px-6 py-4">
+                                            <span className="pill-badge">
+                                                {record.departmentId || record.costCode || '-'}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-[var(--md-sys-color-on-surface-variant)]">
                                             {formatDate(record.dateEntered || record.date)}

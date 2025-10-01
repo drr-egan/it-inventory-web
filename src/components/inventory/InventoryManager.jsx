@@ -569,10 +569,12 @@ const InventoryManager = ({ user }) => {
                                                         className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                                     />
                                                 ) : (
-                                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                                                        item.quantity <= (item.minThreshold || 5)
-                                                            ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300'
-                                                            : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                                    <span className={`quantity-badge ${
+                                                        item.quantity === 0
+                                                            ? 'out-of-stock'
+                                                            : item.quantity <= (item.minThreshold || 5)
+                                                            ? 'low-stock'
+                                                            : 'adequate-stock'
                                                     }`}>
                                                         {item.quantity || 0}
                                                     </span>
@@ -589,7 +591,13 @@ const InventoryManager = ({ user }) => {
                                                     />
                                                 ) : (
                                                     item.price > 0 ? (
-                                                        <span className="text-green-600 dark:text-green-400 font-medium">${item.price}</span>
+                                                        <span style={{
+                                                            color: 'var(--color-success-green)',
+                                                            fontSize: '14px',
+                                                            fontWeight: '600'
+                                                        }}>
+                                                            ${parseFloat(item.price).toFixed(2)}
+                                                        </span>
                                                     ) : (
                                                         <span className="text-gray-400">-</span>
                                                     )
