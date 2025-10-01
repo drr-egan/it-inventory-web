@@ -6,6 +6,15 @@
 
 body {
     font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: linear-gradient(135deg, var(--color-bg-gradient-start) 0%, var(--color-bg-gradient-end) 100%) !important;
+    background-attachment: fixed !important;
+    color: var(--color-text-light) !important;
+    min-height: 100vh !important;
+}
+
+/* Ensure the root app container also has the gradient */
+#root {
+    min-height: 100vh;
 }
 
 /* Loading spinner custom animation */
