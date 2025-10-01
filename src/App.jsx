@@ -24,21 +24,21 @@ function App() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="min-h-screen flex items-center justify-center">
                 <LoadingSpinner size="large" />
-                <span className="ml-4 text-gray-600">Loading application...</span>
+                <span className="ml-4" style={{ color: 'var(--color-text-light)' }}>Loading application...</span>
             </div>
         );
     }
 
     return (
         <ErrorBoundary>
-            <div className="App min-h-screen bg-gray-50">
+            <div className="App min-h-screen">
                 <Suspense
                     fallback={
-                        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                        <div className="min-h-screen flex items-center justify-center">
                             <LoadingSpinner size="large" />
-                            <span className="ml-4 text-gray-600">
+                            <span className="ml-4" style={{ color: 'var(--color-text-light)' }}>
                                 {user ? 'Loading dashboard...' : 'Loading authentication...'}
                             </span>
                         </div>
