@@ -103,6 +103,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
     // Process receipt
     const handleProcessShipment = async () => {
+        if (!uploadedPdf) {
+            setStatus('❌ Please upload a receipt PDF first');
+            return;
+        }
+
         if (matchedCheckouts.length === 0) {
             setStatus('❌ Please select at least one item from inventory');
             return;
@@ -131,7 +136,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 const itemFees = feePerItem * qty;
 
                 // Use checkout record details for user and cost code
-                let userName = 'System Receipt';
+                let userName = 'IT Stock';
                 let costCode = 'IT Stock 1-20-000-5770';
 
                 if (match.checkoutRecords.length > 0) {
@@ -157,8 +162,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
             const total = subtotal + tax + fees;
 
-            // Generate PDF report
-            await generateCostAllocationReport(allocation, { subtotal, tax, fees, total });
+            // Generate PDF report (append to uploaded PDF)
+            await generateCostAllocationReport(allocation, { subtotal, tax, fees, total }, uploadedPdf);
 
             // Use batch for atomic operations
             const batch = writeBatch(db);
@@ -233,12 +238,14 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     };
 
     // Generate PDF cost allocation report matching oldinvoice.pdf format
-    const generateCostAllocationReport = async (allocation, totals) => {
+    const generateCostAllocationReport = async (allocation, totals, uploadedPdf) => {
         try {
             const PDFLib = window.PDFLib;
             const { PDFDocument, rgb, StandardFonts } = PDFLib;
 
-            const pdfDoc = await PDFDocument.create();
+            // Load the uploaded PDF as base document
+            const uploadedPdfBytes = await uploadedPdf.arrayBuffer();
+            const pdfDoc = await PDFDocument.load(uploadedPdfBytes);
             const page = pdfDoc.addPage([612, 792]); // Letter size
             const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -379,8 +386,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const link = document.createElement('a');
             link.href = url;
             const filename = orderNumber ?
-                `shipment-allocation-${orderNumber}.pdf` :
-                `shipment-allocation-${new Date().toISOString().split('T')[0]}.pdf`;
+                `receipt-with-allocation-${orderNumber}.pdf` :
+                `receipt-with-allocation-${new Date().toISOString().split('T')[0]}.pdf`;
             link.download = filename;
             link.click();
             URL.revokeObjectURL(url);
@@ -600,7 +607,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 {/* PDF Upload Section */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text-light)' }}>
-                        Upload Receipt PDF (Optional)
+                        Upload Receipt PDF (Required)
                     </label>
                     <div className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-lg p-6 text-center hover:border-[var(--color-primary-blue)] transition-colors">
                         <input
@@ -670,7 +677,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 <MaterialButton
                     color="success"
                     className="w-full mt-6"
-                    disabled={isProcessing || matchedCheckouts.length === 0}
+                    disabled={isProcessing || !uploadedPdf || matchedCheckouts.length === 0}
                     onClick={handleProcessShipment}
                 >
                     {isProcessing ? (
