@@ -19,6 +19,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     const [receiptDate, setReceiptDate] = useState('');
     const [manualTax, setManualTax] = useState('');
     const [manualFees, setManualFees] = useState('');
+    const [uploadedPdf, setUploadedPdf] = useState(null);
     const [status, setStatus] = useState('');
     const [processingResults, setProcessingResults] = useState([]);
 
@@ -88,6 +89,16 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 ? { ...match, [field]: parseFloat(value) || 0 }
                 : match
         ));
+    };
+
+    // Handle PDF file upload
+    const handlePdfUpload = (event) => {
+        const file = event.target.files[0];
+        if (file && file.type === 'application/pdf') {
+            setUploadedPdf(file);
+        } else {
+            alert('Please select a valid PDF file.');
+        }
     };
 
     // Process receipt
@@ -209,6 +220,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             setReceiptDate('');
             setManualTax('');
             setManualFees('');
+            setUploadedPdf(null);
 
             setStatus('✅ Shipment processed successfully! Report downloaded and items archived.');
             setIsProcessing(false);
@@ -584,6 +596,34 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     <span className="material-icons mr-2" style={{ color: 'var(--color-success-green)' }}>settings</span>
                     Shipment Details
                 </h3>
+
+                {/* PDF Upload Section */}
+                <div className="mb-6">
+                    <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text-light)' }}>
+                        Upload Receipt PDF (Optional)
+                    </label>
+                    <div className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-lg p-6 text-center hover:border-[var(--color-primary-blue)] transition-colors">
+                        <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={handlePdfUpload}
+                            className="hidden"
+                            id="pdf-upload"
+                        />
+                        <label htmlFor="pdf-upload" className="cursor-pointer">
+                            <span className="material-icons text-4xl" style={{ color: 'var(--color-text-muted)' }}>upload_file</span>
+                            <p className="mt-2 text-sm" style={{ color: 'var(--color-text-light)' }}>
+                                Click to upload PDF receipt or drag and drop
+                            </p>
+                            {uploadedPdf && (
+                                <p className="mt-2 text-sm font-medium" style={{ color: 'var(--color-success-green)' }}>
+                                    Selected: {uploadedPdf.name}
+                                </p>
+                            )}
+                        </label>
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <MaterialInput
                         type="text"
