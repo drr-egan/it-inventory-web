@@ -22,6 +22,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     const [vendorName, setVendorName] = useState('');
     const [receiptDate, setReceiptDate] = useState('');
     const [processingNotes, setProcessingNotes] = useState('');
+    const [manualTax, setManualTax] = useState(0);
+    const [manualFees, setManualFees] = useState(0);
     const [status, setStatus] = useState('');
     const [processingResults, setProcessingResults] = useState([]);
 
@@ -188,32 +190,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
         setStatus('⏳ Processing shipment and generating report...');
 
         try {
-            // Extract financial data from PDF text (if available)
+            // Use manually entered tax and fees
             let subtotal = 0;
-            let tax = 0;
-            let fees = 0;
+            let tax = parseFloat(manualTax) || 0;
+            let fees = parseFloat(manualFees) || 0;
             let total = 0;
-
-            if (pdfText && allocationMethod === 'auto') {
-                // Extract all prices from PDF
-                const priceMatches = pdfText.match(/\$(\d+\.?\d{0,2})/g) || [];
-                const prices = priceMatches.map(p => parseFloat(p.replace('$', ''))).filter(p => p > 0);
-
-                if (prices.length > 0) {
-                    // Simple heuristic: largest number is likely the total
-                    total = Math.max(...prices);
-
-                    // Look for tax patterns
-                    const taxMatch = pdfText.match(/tax[:\s]*\$?(\d+\.?\d{0,2})/i);
-                    tax = taxMatch ? parseFloat(taxMatch[1]) : total * 0.08; // Default 8% tax
-
-                    // Look for fee patterns
-                    const feeMatch = pdfText.match(/(?:fee|shipping|handling)[:\s]*\$?(\d+\.?\d{0,2})/i);
-                    fees = feeMatch ? parseFloat(feeMatch[1]) : 0;
-
-                    subtotal = total - tax - fees;
-                }
-            }
 
             // Calculate totals based on allocation method
             let allocation;
@@ -246,12 +227,9 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     };
                 });
 
-                // Recalculate subtotal from extracted prices if available
-                if (subtotal === 0) {
-                    subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-                    tax = subtotal * 0.08;
-                    total = subtotal + tax + fees;
-                }
+                // Calculate subtotal from item prices
+                subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+                total = subtotal + tax + fees;
             } else {
                 // Use manually selected items
                 allocation = selectedShipmentItems.map(itemName => {
@@ -275,7 +253,6 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
                 // Calculate totals for manual mode
                 subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-                tax = subtotal * 0.08;
                 total = subtotal + tax + fees;
             }
 
@@ -301,6 +278,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             setVendorName('');
             setReceiptDate('');
             setProcessingNotes('');
+            setManualTax(0);
+            setManualFees(0);
             if (document.getElementById('pdf-upload')) {
                 document.getElementById('pdf-upload').value = '';
             }
@@ -437,18 +416,18 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             yPos -= 20;
             page.drawText(`Subtotal (Items Only): $${totals.subtotal.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
             yPos -= 15;
-            page.drawText(`Tax (distributed evenly): $${totals.tax.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
+            page.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
             yPos -= 15;
             if (totals.fees > 0) {
-                page.drawText(`Fees (distributed evenly): $${totals.fees.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
+                page.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
                 yPos -= 15;
             }
             page.drawText(`Grand Total: $${totals.total.toFixed(2)}`, { x: 50, y: yPos, size: 12, font: boldFont });
             yPos -= 20;
 
             // Cost allocation note
-            if (yPos > 50) {
-                page.drawText('Note: Tax and fees have been distributed evenly across all items.', {
+            if (yPos > 50 && (totals.tax > 0 || totals.fees > 0)) {
+                page.drawText('Note: Tax and fees are distributed evenly across all items based on quantity.', {
                     x: 50,
                     y: yPos,
                     size: 8,
@@ -456,7 +435,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     color: rgb(0.5, 0.5, 0.5)
                 });
                 yPos -= 12;
-                page.drawText('Each item\'s Total Cost includes its share of tax and fees.', {
+                page.drawText('Each item\'s Total Cost includes its proportional share of tax and fees.', {
                     x: 50,
                     y: yPos,
                     size: 8,
@@ -753,6 +732,26 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                             onChange={(e) => setVendorName(e.target.value)}
                             placeholder="Optional vendor name"
                         />
+                        <div className="grid grid-cols-2 gap-4">
+                            <MaterialInput
+                                type="number"
+                                label="Tax Amount"
+                                value={manualTax}
+                                onChange={(e) => setManualTax(e.target.value)}
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                            />
+                            <MaterialInput
+                                type="number"
+                                label="Fees (Shipping/Handling)"
+                                value={manualFees}
+                                onChange={(e) => setManualFees(e.target.value)}
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                            />
+                        </div>
                         <div>
                             <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text-light)' }}>
                                 Notes
