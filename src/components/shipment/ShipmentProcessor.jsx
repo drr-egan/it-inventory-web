@@ -446,10 +446,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                         <tbody>
                             {filteredInventoryItems.slice(0, 20).map((item) => {
                                 const isSelected = selectedInventoryItems.some(selected => selected.id === item.id);
-                                const hasJobAssociation = item.category?.toLowerCase().includes('job') ||
-                                                         item.name?.toLowerCase().includes('job') ||
-                                                         jobNumber.trim();
-                                const costCode = hasJobAssociation ? `Job ${jobNumber || 'x-xx-xxx'}-5770` : 'IT Stock 1-20-000-5770';
+                                const costCode = 'IT Stock 1-20-000-5770'; // Default, will be updated from checkout records during processing
 
                                 return (
                                     <tr
