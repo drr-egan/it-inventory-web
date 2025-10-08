@@ -14,7 +14,8 @@
       "Bash(npm install:*)",
       "Bash(cp:*)",
       "Bash(npm run build:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
