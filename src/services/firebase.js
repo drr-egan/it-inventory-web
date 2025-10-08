@@ -1,7 +1,7 @@
 // Firebase Configuration - Simplified
 import { initializeApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 const firebaseConfig = {
     apiKey: "AIzaSyCBOBb7mJPoI7cwubp12xnmjglLkuWYWYI",
@@ -18,17 +18,6 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
-// Connect to emulators in development
-if (import.meta.env.DEV) {
-    try {
-        connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
-        connectFirestoreEmulator(db, 'localhost', 8080);
-        console.log('Connected to Firebase emulators');
-    } catch (error) {
-        console.log('Emulators not running, using production Firebase');
-    }
-}
 
 // Initialize Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();

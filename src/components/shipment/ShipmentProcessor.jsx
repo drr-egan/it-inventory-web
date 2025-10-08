@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { db } from '../../services/firebase';
-import { collection, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, Timestamp, writeBatch } from 'firebase/firestore';
 import MaterialButton from '../shared/MaterialButton';
 import MaterialInput from '../shared/MaterialInput';
 
@@ -8,6 +8,9 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     // Item selection from inventory
     const [selectedInventoryItems, setSelectedInventoryItems] = useState([]);
     const [inventorySearchQuery, setInventorySearchQuery] = useState('');
+
+    // Matched checkout records with confirmation details
+    const [matchedCheckouts, setMatchedCheckouts] = useState([]);
 
     // Processing state
     const [isProcessing, setIsProcessing] = useState(false);
@@ -42,14 +45,54 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
         const index = selectedInventoryItems.findIndex(selected => selected.id === item.id);
         if (index >= 0) {
             setSelectedInventoryItems(prev => prev.filter(selected => selected.id !== item.id));
+            // Remove from matched checkouts
+            setMatchedCheckouts(prev => prev.filter(match => match.inventoryItem.id !== item.id));
         } else {
             setSelectedInventoryItems(prev => [...prev, item]);
+            // Find and match checkout records
+            matchCheckoutRecords(item);
         }
+    };
+
+    // Match inventory item to checkout records
+    const matchCheckoutRecords = (inventoryItem) => {
+        const matchingCheckouts = checkoutHistory.filter(checkout =>
+            checkout.itemName?.toLowerCase() === inventoryItem.name?.toLowerCase() ||
+            checkout.item?.toLowerCase() === inventoryItem.name?.toLowerCase()
+        );
+
+        if (matchingCheckouts.length > 0) {
+            const match = {
+                inventoryItem,
+                checkoutRecords: matchingCheckouts,
+                confirmedQuantity: matchingCheckouts.reduce((sum, checkout) => sum + (checkout.quantity || 1), 0),
+                confirmedPrice: inventoryItem.price || 0
+            };
+            setMatchedCheckouts(prev => [...prev, match]);
+        } else {
+            // No matches found, create with defaults
+            const match = {
+                inventoryItem,
+                checkoutRecords: [],
+                confirmedQuantity: 1,
+                confirmedPrice: inventoryItem.price || 0
+            };
+            setMatchedCheckouts(prev => [...prev, match]);
+        }
+    };
+
+    // Update confirmed quantity or price for a matched item
+    const updateConfirmedDetails = (inventoryItemId, field, value) => {
+        setMatchedCheckouts(prev => prev.map(match =>
+            match.inventoryItem.id === inventoryItemId
+                ? { ...match, [field]: parseFloat(value) || 0 }
+                : match
+        ));
     };
 
     // Process receipt
     const handleProcessShipment = async () => {
-        if (selectedInventoryItems.length === 0) {
+        if (matchedCheckouts.length === 0) {
             setStatus('❌ Please select at least one item from inventory');
             return;
         }
@@ -63,36 +106,38 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const fees = parseFloat(manualFees) || 0;
 
             // Calculate total quantity for distribution
-            const totalQuantity = selectedInventoryItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+            const totalQuantity = matchedCheckouts.reduce((sum, match) => sum + match.confirmedQuantity, 0);
 
             // Distribute tax and fees per item unit (quantity-based)
             const taxPerItem = totalQuantity > 0 ? tax / totalQuantity : 0;
             const feePerItem = totalQuantity > 0 ? fees / totalQuantity : 0;
 
             // Build allocation records with specific billing codes
-            const allocation = selectedInventoryItems.map(item => {
-                const qty = item.quantity || 1;
-                const unitPrice = item.price || 0;
+            const allocation = matchedCheckouts.map(match => {
+                const qty = match.confirmedQuantity;
+                const unitPrice = match.confirmedPrice;
                 const itemTax = taxPerItem * qty;
                 const itemFees = feePerItem * qty;
 
-                // Determine billing code based on item type
-                // For Jobs, bill to "Job x-xx-xxx-5770"
-                // For any item that doesn't have a checkout item associated with it, charge to "IT Stock 1-20-000-5770"
-                // Since we're now processing from inventory directly, check if it has job-related info
-                const hasJobAssociation = item.category?.toLowerCase().includes('job') ||
-                                         item.name?.toLowerCase().includes('job') ||
-                                         jobNumber.trim();
-                const costCode = hasJobAssociation ? `Job ${jobNumber || 'x-xx-xxx'}-5770` : 'IT Stock 1-20-000-5770';
+                // Use checkout record details for user and cost code
+                let userName = 'System Receipt';
+                let costCode = 'IT Stock 1-20-000-5770';
+
+                if (match.checkoutRecords.length > 0) {
+                    // Use the first checkout record's details
+                    const checkout = match.checkoutRecords[0];
+                    userName = checkout.userName || checkout.user || 'System Receipt';
+                    costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
+                }
 
                 return {
-                    itemName: item.name,
+                    itemName: match.inventoryItem.name,
                     quantity: qty,
                     unitPrice: unitPrice,
                     totalCost: (unitPrice * qty) + itemTax + itemFees,
                     taxAllocation: itemTax,
                     feeAllocation: itemFees,
-                    userName: 'System Receipt',
+                    userName: userName,
                     costCode: costCode
                 };
             });
@@ -104,14 +149,18 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             // Generate PDF report
             await generateCostAllocationReport(allocation, { subtotal, tax, fees, total });
 
-            // Archive processed inventory items to cost allocation
-            for (const item of selectedInventoryItems) {
-                const allocationRecord = allocation.find(a => a.itemName === item.name);
-                await addDoc(collection(db, 'costAllocation'), {
-                    itemId: item.id,
-                    itemName: item.name,
-                    quantity: item.quantity || 1,
-                    unitPrice: item.price || 0,
+            // Use batch for atomic operations
+            const batch = writeBatch(db);
+
+            // Archive processed items to cost allocation
+            for (const match of matchedCheckouts) {
+                const allocationRecord = allocation.find(a => a.itemName === match.inventoryItem.name);
+                const costAllocationRef = doc(collection(db, 'costAllocation'));
+                batch.set(costAllocationRef, {
+                    itemId: match.inventoryItem.id,
+                    itemName: match.inventoryItem.name,
+                    quantity: match.confirmedQuantity,
+                    unitPrice: match.confirmedPrice,
                     totalCost: allocationRecord.totalCost,
                     taxAllocation: allocationRecord.taxAllocation,
                     feeAllocation: allocationRecord.feeAllocation,
@@ -123,13 +172,30 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     processedBy: user?.email || 'Unknown',
                     type: allocationRecord.costCode.includes('Job') ? 'job' : 'it_stock'
                 });
+
+                // Archive matched checkout records
+                for (const checkout of match.checkoutRecords) {
+                    const archivedRef = doc(collection(db, 'archivedCheckouts'));
+                    batch.set(archivedRef, {
+                        ...checkout,
+                        archivedAt: Timestamp.now(),
+                        archivedBy: user?.email || 'Unknown',
+                        archiveReason: 'Processed receipt'
+                    });
+
+                    // Remove from active checkout history
+                    const checkoutRef = doc(db, 'checkoutHistory', checkout.id);
+                    batch.delete(checkoutRef);
+                }
             }
+
+            await batch.commit();
 
             // Save processing result
             const result = {
                 timestamp: new Date().toISOString(),
                 orderNumber: orderNumber || 'N/A',
-                itemsProcessed: selectedInventoryItems.length,
+                itemsProcessed: matchedCheckouts.length,
                 totalAmount: total,
                 vendor: vendorName || 'Unknown'
             };
@@ -137,6 +203,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Reset form
             setSelectedInventoryItems([]);
+            setMatchedCheckouts([]);
             setVendorName('');
             setOrderNumber('');
             setReceiptDate('');
@@ -434,6 +501,86 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 </div>
             </div>
 
+            {/* Matched Checkout Records */}
+            {matchedCheckouts.length > 0 && (
+                <div className="mat-card p-6">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
+                        <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>link</span>
+                        Matched Checkout Records ({matchedCheckouts.length} items)
+                    </h3>
+
+                    <div className="space-y-4">
+                        {matchedCheckouts.map((match, index) => (
+                            <div key={match.inventoryItem.id} className="border border-[var(--md-sys-color-outline-variant)] rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="font-medium" style={{ color: 'var(--color-text-light)' }}>
+                                        {match.inventoryItem.name}
+                                    </h4>
+                                    <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                        {match.checkoutRecords.length} checkout{match.checkoutRecords.length !== 1 ? 's' : ''} matched
+                                    </span>
+                                </div>
+
+                                {/* Checkout Details */}
+                                {match.checkoutRecords.length > 0 && (
+                                    <div className="mb-3">
+                                        <h5 className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-light)' }}>Checkout Details:</h5>
+                                        <div className="space-y-1">
+                                            {match.checkoutRecords.map((checkout, idx) => (
+                                                <div key={checkout.id} className="text-xs p-2 rounded" style={{ background: 'var(--md-sys-color-surface-container-high)', color: 'var(--color-text-muted)' }}>
+                                                    {checkout.userName || checkout.user} • Qty: {checkout.quantity} • Dept: {checkout.departmentId || checkout.costCode} • {new Date(checkout.dateEntered?.toDate?.() || checkout.dateEntered || checkout.date).toLocaleDateString()}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Confirmation Fields */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-light)' }}>
+                                            Received Quantity
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={match.confirmedQuantity}
+                                            onChange={(e) => updateConfirmedDetails(match.inventoryItem.id, 'confirmedQuantity', e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg border border-[var(--md-sys-color-outline-variant)]"
+                                            style={{
+                                                background: 'var(--md-sys-color-surface)',
+                                                color: 'var(--color-text-light)'
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text-light)' }}>
+                                            Unit Price
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={match.confirmedPrice}
+                                            onChange={(e) => updateConfirmedDetails(match.inventoryItem.id, 'confirmedPrice', e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg border border-[var(--md-sys-color-outline-variant)]"
+                                            style={{
+                                                background: 'var(--md-sys-color-surface)',
+                                                color: 'var(--color-text-light)'
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                    Total: ${(match.confirmedQuantity * match.confirmedPrice).toFixed(2)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Processing Options */}
             <div className="mat-card p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
@@ -486,7 +633,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 <MaterialButton
                     color="success"
                     className="w-full mt-6"
-                    disabled={isProcessing || selectedInventoryItems.length === 0}
+                    disabled={isProcessing || matchedCheckouts.length === 0}
                     onClick={handleProcessShipment}
                 >
                     {isProcessing ? (
@@ -497,7 +644,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     ) : (
                         <>
                             <span className="material-icons mr-2">receipt_long</span>
-                            Process Receipt ({selectedInventoryItems.length} items)
+                            Process Receipt ({matchedCheckouts.length} items)
                         </>
                     )}
                 </MaterialButton>
