@@ -188,41 +188,96 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
         setStatus('⏳ Processing shipment and generating report...');
 
         try {
+            // Extract financial data from PDF text (if available)
+            let subtotal = 0;
+            let tax = 0;
+            let fees = 0;
+            let total = 0;
+
+            if (pdfText && allocationMethod === 'auto') {
+                // Extract all prices from PDF
+                const priceMatches = pdfText.match(/\$(\d+\.?\d{0,2})/g) || [];
+                const prices = priceMatches.map(p => parseFloat(p.replace('$', ''))).filter(p => p > 0);
+
+                if (prices.length > 0) {
+                    // Simple heuristic: largest number is likely the total
+                    total = Math.max(...prices);
+
+                    // Look for tax patterns
+                    const taxMatch = pdfText.match(/tax[:\s]*\$?(\d+\.?\d{0,2})/i);
+                    tax = taxMatch ? parseFloat(taxMatch[1]) : total * 0.08; // Default 8% tax
+
+                    // Look for fee patterns
+                    const feeMatch = pdfText.match(/(?:fee|shipping|handling)[:\s]*\$?(\d+\.?\d{0,2})/i);
+                    fees = feeMatch ? parseFloat(feeMatch[1]) : 0;
+
+                    subtotal = total - tax - fees;
+                }
+            }
+
             // Calculate totals based on allocation method
             let allocation;
+            const totalItems = itemsToProcess.reduce((sum, item) => {
+                return sum + (allocationMethod === 'auto' ? (item.extractedQuantity || item.quantity) : shipmentItemDetails[item]?.quantity || 0);
+            }, 0);
+
+            // Distribute tax and fees per item
+            const taxPerItem = totalItems > 0 ? tax / totalItems : 0;
+            const feePerItem = totalItems > 0 ? fees / totalItems : 0;
 
             if (allocationMethod === 'auto') {
                 // Use matched items from checkout history
-                allocation = matchedItems.map(record => ({
-                    itemName: record.itemName,
-                    quantity: record.extractedQuantity || record.quantity,
-                    unitPrice: record.extractedPrice || 0,
-                    totalCost: (record.extractedQuantity || record.quantity) * (record.extractedPrice || 0),
-                    userName: record.userName,
-                    departmentId: record.departmentId,
-                    costCode: formatDepartmentId(record.departmentId)
-                }));
+                allocation = matchedItems.map(record => {
+                    const qty = record.extractedQuantity || record.quantity;
+                    const unitPrice = record.extractedPrice || 0;
+                    const itemTax = taxPerItem * qty;
+                    const itemFees = feePerItem * qty;
+
+                    return {
+                        itemName: record.itemName,
+                        quantity: qty,
+                        unitPrice: unitPrice,
+                        totalCost: (unitPrice * qty) + itemTax + itemFees,
+                        taxAllocation: itemTax,
+                        feeAllocation: itemFees,
+                        userName: record.userName,
+                        departmentId: record.departmentId,
+                        costCode: formatDepartmentId(record.departmentId)
+                    };
+                });
+
+                // Recalculate subtotal from extracted prices if available
+                if (subtotal === 0) {
+                    subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+                    tax = subtotal * 0.08;
+                    total = subtotal + tax + fees;
+                }
             } else {
                 // Use manually selected items
                 allocation = selectedShipmentItems.map(itemName => {
                     const details = shipmentItemDetails[itemName];
                     const item = items.find(i => i.name === itemName);
+                    const qty = details.quantity;
+                    const itemTax = taxPerItem * qty;
+                    const itemFees = feePerItem * qty;
 
                     return {
                         itemName,
-                        quantity: details.quantity,
+                        quantity: qty,
                         unitPrice: details.price,
-                        totalCost: details.quantity * details.price,
+                        totalCost: (details.price * qty) + itemTax + itemFees,
+                        taxAllocation: itemTax,
+                        feeAllocation: itemFees,
                         category: item?.category || 'Uncategorized',
                         asin: item?.asin || ''
                     };
                 });
-            }
 
-            const subtotal = allocation.reduce((sum, item) => sum + item.totalCost, 0);
-            const tax = subtotal * 0.08; // 8% tax
-            const fees = 0; // Can be added if needed
-            const total = subtotal + tax + fees;
+                // Calculate totals for manual mode
+                subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+                tax = subtotal * 0.08;
+                total = subtotal + tax + fees;
+            }
 
             // Generate PDF report
             await generateCostAllocationReport(allocation, { subtotal, tax, fees, total });
@@ -328,9 +383,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Table header
             page.drawText('Item Description', { x: 50, y: yPos, size: 10, font: boldFont });
-            page.drawText('Qty', { x: 250, y: yPos, size: 10, font: boldFont });
-            page.drawText('Unit Price', { x: 310, y: yPos, size: 10, font: boldFont });
-            page.drawText('Total Cost', { x: 420, y: yPos, size: 10, font: boldFont });
+            page.drawText('User', { x: 200, y: yPos, size: 10, font: boldFont });
+            page.drawText('Qty', { x: 280, y: yPos, size: 10, font: boldFont });
+            page.drawText('Cost Code', { x: 320, y: yPos, size: 10, font: boldFont });
+            page.drawText('Unit $', { x: 420, y: yPos, size: 10, font: boldFont });
+            page.drawText('Total $', { x: 480, y: yPos, size: 10, font: boldFont });
             yPos -= 15;
 
             // Draw line
@@ -350,13 +407,18 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     yPos = height - 50;
                 }
 
-                const itemName = item.itemName.length > 30 ?
-                    item.itemName.substring(0, 30) + '...' : item.itemName;
+                const itemName = item.itemName.length > 25 ?
+                    item.itemName.substring(0, 25) + '...' : item.itemName;
+                const userName = item.userName ?
+                    (item.userName.length > 15 ? item.userName.substring(0, 15) + '...' : item.userName) : '-';
+                const costCode = item.costCode || '-';
 
-                page.drawText(itemName, { x: 50, y: yPos, size: 9, font });
-                page.drawText(String(item.quantity), { x: 250, y: yPos, size: 9, font });
-                page.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 310, y: yPos, size: 9, font });
-                page.drawText(`$${item.totalCost.toFixed(2)}`, { x: 420, y: yPos, size: 9, font });
+                page.drawText(itemName, { x: 50, y: yPos, size: 8, font });
+                page.drawText(userName, { x: 200, y: yPos, size: 8, font });
+                page.drawText(String(item.quantity), { x: 280, y: yPos, size: 8, font });
+                page.drawText(costCode, { x: 320, y: yPos, size: 8, font });
+                page.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 420, y: yPos, size: 8, font });
+                page.drawText(`$${item.totalCost.toFixed(2)}`, { x: 480, y: yPos, size: 8, font });
                 yPos -= 15;
             }
 
@@ -373,15 +435,35 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             page.drawText('FINANCIAL SUMMARY', { x: 50, y: yPos, size: 12, font: boldFont });
             yPos -= 20;
-            page.drawText(`Subtotal: $${totals.subtotal.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
+            page.drawText(`Subtotal (Items Only): $${totals.subtotal.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
             yPos -= 15;
-            page.drawText(`Tax (8%): $${totals.tax.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
+            page.drawText(`Tax (distributed evenly): $${totals.tax.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
             yPos -= 15;
             if (totals.fees > 0) {
-                page.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
+                page.drawText(`Fees (distributed evenly): $${totals.fees.toFixed(2)}`, { x: 50, y: yPos, size: 10, font });
                 yPos -= 15;
             }
             page.drawText(`Grand Total: $${totals.total.toFixed(2)}`, { x: 50, y: yPos, size: 12, font: boldFont });
+            yPos -= 20;
+
+            // Cost allocation note
+            if (yPos > 50) {
+                page.drawText('Note: Tax and fees have been distributed evenly across all items.', {
+                    x: 50,
+                    y: yPos,
+                    size: 8,
+                    font,
+                    color: rgb(0.5, 0.5, 0.5)
+                });
+                yPos -= 12;
+                page.drawText('Each item\'s Total Cost includes its share of tax and fees.', {
+                    x: 50,
+                    y: yPos,
+                    size: 8,
+                    font,
+                    color: rgb(0.5, 0.5, 0.5)
+                });
+            }
 
             // Notes section
             if (processingNotes) {
