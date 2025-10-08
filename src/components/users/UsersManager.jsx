@@ -252,7 +252,7 @@ const UsersManager = ({ users }) => {
             <div className="mat-card p-6">
                 <div className="flex flex-wrap gap-4 mb-4">
                     <MaterialButton
-                        variant="primary"
+                        color="primary"
                         onClick={() => {
                             setShowAddForm(!showAddForm);
                             if (editingUser) cancelEdit();
@@ -263,7 +263,7 @@ const UsersManager = ({ users }) => {
                     </MaterialButton>
 
                     <MaterialButton
-                        variant="secondary"
+                        variant="outlined"
                         onClick={handleExportCsv}
                         disabled={users.length === 0}
                     >
@@ -281,7 +281,7 @@ const UsersManager = ({ users }) => {
                         />
                         <label htmlFor="user-csv-input">
                             <MaterialButton
-                                variant="secondary"
+                                variant="outlined"
                                 onClick={() => document.getElementById('user-csv-input').click()}
                             >
                                 <span className="material-icons">upload_file</span>
@@ -290,7 +290,7 @@ const UsersManager = ({ users }) => {
                         </label>
                         {csvFile && (
                             <MaterialButton
-                                variant="primary"
+                                color="primary"
                                 onClick={handleCsvUpload}
                                 disabled={uploading}
                             >
@@ -359,11 +359,11 @@ const UsersManager = ({ users }) => {
                             />
                         </div>
                         <div className="flex gap-3">
-                            <MaterialButton type="submit" variant="primary">
+                            <MaterialButton type="submit" color="primary">
                                 <span className="material-icons">save</span>
                                 {editingUser ? 'Update User' : 'Add User'}
                             </MaterialButton>
-                            <MaterialButton type="button" variant="secondary" onClick={cancelEdit}>
+                            <MaterialButton type="button" variant="outlined" onClick={cancelEdit}>
                                 <span className="material-icons">cancel</span>
                                 Cancel
                             </MaterialButton>

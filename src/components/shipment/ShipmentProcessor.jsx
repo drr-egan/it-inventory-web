@@ -446,7 +446,7 @@ const ShipmentProcessor = ({ checkoutHistory, user }) => {
                     />
                     <label htmlFor="pdf-upload">
                         <MaterialButton
-                            variant="secondary"
+                            variant="outlined"
                             onClick={() => document.getElementById('pdf-upload').click()}
                         >
                             <span className="material-icons">upload_file</span>
@@ -456,7 +456,7 @@ const ShipmentProcessor = ({ checkoutHistory, user }) => {
 
                     {pdfFile && (
                         <MaterialButton
-                            variant="primary"
+                            color="primary"
                             onClick={handleProcessShipment}
                             disabled={processing}
                         >
@@ -580,7 +580,7 @@ const ShipmentProcessor = ({ checkoutHistory, user }) => {
                     </div>
 
                     <MaterialButton
-                        variant="primary"
+                        color="primary"
                         onClick={handleGenerateReport}
                         disabled={processing}
                     >
