@@ -150,7 +150,7 @@ const MainApp = ({ user }) => {
         { id: 'inventory', name: 'Inventory', icon: 'inventory_2', count: items.length },
         { id: 'users', name: 'Users', icon: 'people', count: users.length },
         { id: 'admin', name: 'Admin', icon: 'admin_panel_settings' },
-        { id: 'shipment', name: 'Process Shipment', icon: 'local_shipping' },
+        { id: 'shipment', name: 'Process Receipt', icon: 'receipt_long' },
         { id: 'history', name: 'History', icon: 'history', count: checkoutHistory.length },
     ];
 

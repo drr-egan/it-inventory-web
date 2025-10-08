@@ -57,6 +57,7 @@ def create_database():
             quantity INTEGER DEFAULT 1
         )
     ''')
+
     
     # Create indexes for better performance
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_items_name ON items(name)')

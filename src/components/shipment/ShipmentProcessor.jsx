@@ -5,9 +5,9 @@ import MaterialButton from '../shared/MaterialButton';
 import MaterialInput from '../shared/MaterialInput';
 
 const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
-    // Item selection from checkout history
-    const [selectedCheckoutItems, setSelectedCheckoutItems] = useState([]);
-    const [checkoutSearchQuery, setCheckoutSearchQuery] = useState('');
+    // Item selection from inventory
+    const [selectedInventoryItems, setSelectedInventoryItems] = useState([]);
+    const [inventorySearchQuery, setInventorySearchQuery] = useState('');
 
     // Processing state
     const [isProcessing, setIsProcessing] = useState(false);
@@ -37,25 +37,25 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
         return deptId;
     };
 
-    // Toggle selection of checkout item
-    const handleToggleCheckoutItem = (record) => {
-        const index = selectedCheckoutItems.findIndex(item => item.id === record.id);
+    // Toggle selection of inventory item
+    const handleToggleInventoryItem = (item) => {
+        const index = selectedInventoryItems.findIndex(selected => selected.id === item.id);
         if (index >= 0) {
-            setSelectedCheckoutItems(prev => prev.filter(item => item.id !== record.id));
+            setSelectedInventoryItems(prev => prev.filter(selected => selected.id !== item.id));
         } else {
-            setSelectedCheckoutItems(prev => [...prev, record]);
+            setSelectedInventoryItems(prev => [...prev, item]);
         }
     };
 
-    // Process shipment
+    // Process receipt
     const handleProcessShipment = async () => {
-        if (selectedCheckoutItems.length === 0) {
-            setStatus('❌ Please select at least one item from checkout history');
+        if (selectedInventoryItems.length === 0) {
+            setStatus('❌ Please select at least one item from inventory');
             return;
         }
 
         setIsProcessing(true);
-        setStatus('⏳ Processing shipment and generating report...');
+        setStatus('⏳ Processing receipt and generating cost allocation...');
 
         try {
             // Parse tax and fees
@@ -63,28 +63,37 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const fees = parseFloat(manualFees) || 0;
 
             // Calculate total quantity for distribution
-            const totalQuantity = selectedCheckoutItems.reduce((sum, record) => sum + (record.quantity || 1), 0);
+            const totalQuantity = selectedInventoryItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
 
             // Distribute tax and fees per item unit (quantity-based)
             const taxPerItem = totalQuantity > 0 ? tax / totalQuantity : 0;
             const feePerItem = totalQuantity > 0 ? fees / totalQuantity : 0;
 
-            // Build allocation records
-            const allocation = selectedCheckoutItems.map(record => {
-                const qty = record.quantity || 1;
-                const unitPrice = record.price || 0;
+            // Build allocation records with specific billing codes
+            const allocation = selectedInventoryItems.map(item => {
+                const qty = item.quantity || 1;
+                const unitPrice = item.price || 0;
                 const itemTax = taxPerItem * qty;
                 const itemFees = feePerItem * qty;
 
+                // Determine billing code based on item type
+                // For Jobs, bill to "Job x-xx-xxx-5770"
+                // For any item that doesn't have a checkout item associated with it, charge to "IT Stock 1-20-000-5770"
+                // Since we're now processing from inventory directly, check if it has job-related info
+                const hasJobAssociation = item.category?.toLowerCase().includes('job') ||
+                                         item.name?.toLowerCase().includes('job') ||
+                                         jobNumber.trim();
+                const costCode = hasJobAssociation ? `Job ${jobNumber || 'x-xx-xxx'}-5770` : 'IT Stock 1-20-000-5770';
+
                 return {
-                    itemName: record.itemName,
+                    itemName: item.name,
                     quantity: qty,
                     unitPrice: unitPrice,
                     totalCost: (unitPrice * qty) + itemTax + itemFees,
                     taxAllocation: itemTax,
                     feeAllocation: itemFees,
-                    userName: record.userName,
-                    costCode: formatCostCode(record)
+                    userName: 'System Receipt',
+                    costCode: costCode
                 };
             });
 
@@ -95,30 +104,39 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             // Generate PDF report
             await generateCostAllocationReport(allocation, { subtotal, tax, fees, total });
 
-            // Archive processed checkout items
-            for (const record of selectedCheckoutItems) {
-                await addDoc(collection(db, 'archivedCheckouts'), {
-                    ...record,
-                    archivedAt: Timestamp.now(),
-                    processedBy: user?.email || 'Unknown',
+            // Archive processed inventory items to cost allocation
+            for (const item of selectedInventoryItems) {
+                const allocationRecord = allocation.find(a => a.itemName === item.name);
+                await addDoc(collection(db, 'costAllocation'), {
+                    itemId: item.id,
+                    itemName: item.name,
+                    quantity: item.quantity || 1,
+                    unitPrice: item.price || 0,
+                    totalCost: allocationRecord.totalCost,
+                    taxAllocation: allocationRecord.taxAllocation,
+                    feeAllocation: allocationRecord.feeAllocation,
+                    costCode: allocationRecord.costCode,
+                    vendor: vendorName || 'Unknown',
                     orderNumber: orderNumber || 'N/A',
-                    vendor: vendorName || 'Unknown'
+                    receiptDate: receiptDate || new Date().toISOString().split('T')[0],
+                    processedAt: Timestamp.now(),
+                    processedBy: user?.email || 'Unknown',
+                    type: allocationRecord.costCode.includes('Job') ? 'job' : 'it_stock'
                 });
-                await deleteDoc(doc(db, 'checkoutHistory', record.id));
             }
 
             // Save processing result
             const result = {
                 timestamp: new Date().toISOString(),
                 orderNumber: orderNumber || 'N/A',
-                itemsProcessed: selectedCheckoutItems.length,
+                itemsProcessed: selectedInventoryItems.length,
                 totalAmount: total,
                 vendor: vendorName || 'Unknown'
             };
             setProcessingResults(prev => [...prev, result]);
 
             // Reset form
-            setSelectedCheckoutItems([]);
+            setSelectedInventoryItems([]);
             setVendorName('');
             setOrderNumber('');
             setReceiptDate('');
@@ -294,14 +312,14 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
         }
     };
 
-    // Filter checkout history
-    const filteredCheckoutHistory = checkoutHistory.filter(record => {
-        if (!checkoutSearchQuery) return true;
-        const searchLower = checkoutSearchQuery.toLowerCase();
+    // Filter inventory items
+    const filteredInventoryItems = items.filter(item => {
+        if (!inventorySearchQuery) return true;
+        const searchLower = inventorySearchQuery.toLowerCase();
         return (
-            record.itemName?.toLowerCase().includes(searchLower) ||
-            record.userName?.toLowerCase().includes(searchLower) ||
-            record.departmentId?.toLowerCase().includes(searchLower)
+            item.name?.toLowerCase().includes(searchLower) ||
+            item.category?.toLowerCase().includes(searchLower) ||
+            item.asin?.toLowerCase().includes(searchLower)
         );
     });
 
@@ -310,19 +328,19 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             {/* Header */}
             <div className="mat-card p-6">
                 <h2 className="text-2xl font-bold flex items-center mb-4" style={{ color: 'var(--color-text-light)' }}>
-                    <span className="material-icons mr-2">local_shipping</span>
-                    Process Shipment
+                    <span className="material-icons mr-2">receipt_long</span>
+                    Process Receipt
                 </h2>
                 <p style={{ color: 'var(--color-text-muted)' }}>
-                    Select items from checkout history and allocate costs with tax and fee distribution.
+                    Select items from inventory and process receipts with cost allocation to appropriate billing codes.
                 </p>
             </div>
 
-            {/* Checkout History Selection */}
+            {/* Inventory Item Selection */}
             <div className="mat-card p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
-                    <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>checklist</span>
-                    Select from Checkout History ({selectedCheckoutItems.length} selected)
+                    <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>inventory_2</span>
+                    Select from Inventory ({selectedInventoryItems.length} selected)
                 </h3>
 
                 {/* Search */}
@@ -330,9 +348,9 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     <div className="relative">
                         <input
                             type="text"
-                            placeholder="Search by item name, user, or department..."
-                            value={checkoutSearchQuery}
-                            onChange={(e) => setCheckoutSearchQuery(e.target.value)}
+                            placeholder="Search by item name, category, or ASIN..."
+                            value={inventorySearchQuery}
+                            onChange={(e) => setInventorySearchQuery(e.target.value)}
                             className="w-full px-4 py-2 rounded-lg border border-[var(--md-sys-color-outline-variant)]"
                             style={{
                                 background: 'var(--md-sys-color-surface)',
@@ -345,29 +363,34 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     </div>
                 </div>
 
-                {/* Checkout History Table */}
+                {/* Inventory Items Table */}
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
                         <thead style={{ background: 'var(--md-sys-color-surface-container-high)' }}>
                             <tr>
                                 <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Select</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Item</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>User</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Category</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Qty</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Price</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Department</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Cost Code</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredCheckoutHistory.slice(0, 20).map((record) => {
-                                const isSelected = selectedCheckoutItems.some(item => item.id === record.id);
+                            {filteredInventoryItems.slice(0, 20).map((item) => {
+                                const isSelected = selectedInventoryItems.some(selected => selected.id === item.id);
+                                const hasJobAssociation = item.category?.toLowerCase().includes('job') ||
+                                                         item.name?.toLowerCase().includes('job') ||
+                                                         jobNumber.trim();
+                                const costCode = hasJobAssociation ? `Job ${jobNumber || 'x-xx-xxx'}-5770` : 'IT Stock 1-20-000-5770';
+
                                 return (
                                     <tr
-                                        key={record.id}
+                                        key={item.id}
                                         className={`border-b border-[var(--md-sys-color-outline-variant)] cursor-pointer hover:bg-[var(--md-sys-color-surface-container-highest)] ${
                                             isSelected ? 'bg-[rgba(59,130,246,0.15)]' : ''
                                         }`}
-                                        onClick={() => handleToggleCheckoutItem(record)}
+                                        onClick={() => handleToggleInventoryItem(item)}
                                     >
                                         <td className="px-4 py-2">
                                             <input
@@ -378,33 +401,34 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                                             />
                                         </td>
                                         <td className="px-4 py-2 text-sm font-medium" style={{ color: 'var(--color-text-light)' }}>
-                                            {record.itemName}
+                                            {item.name}
+                                            {item.asin && <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{item.asin}</div>}
                                         </td>
                                         <td className="px-4 py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                            {record.userName}
+                                            {item.category || 'Uncategorized'}
                                         </td>
                                         <td className="px-4 py-2 text-sm">
-                                            <span className="quantity-badge adequate-stock">{record.quantity || 1}</span>
+                                            <span className="quantity-badge adequate-stock">{item.quantity || 0}</span>
                                         </td>
                                         <td className="px-4 py-2 text-sm" style={{ color: 'var(--color-success-green)' }}>
-                                            {record.price > 0 ? `$${record.price.toFixed(2)}` : '-'}
+                                            {item.price > 0 ? `$${item.price.toFixed(2)}` : '-'}
                                         </td>
                                         <td className="px-4 py-2 text-sm">
-                                            <span className="pill-badge">{record.departmentId || record.jobNum || '-'}</span>
+                                            <span className="pill-badge">{costCode}</span>
                                         </td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
-                    {filteredCheckoutHistory.length === 0 && (
+                    {filteredInventoryItems.length === 0 && (
                         <div className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
-                            No checkout history available
+                            No inventory items available
                         </div>
                     )}
-                    {filteredCheckoutHistory.length > 20 && (
+                    {filteredInventoryItems.length > 20 && (
                         <div className="text-center py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                            Showing first 20 of {filteredCheckoutHistory.length} records
+                            Showing first 20 of {filteredInventoryItems.length} items
                         </div>
                     )}
                 </div>
@@ -462,7 +486,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 <MaterialButton
                     color="success"
                     className="w-full mt-6"
-                    disabled={isProcessing || selectedCheckoutItems.length === 0}
+                    disabled={isProcessing || selectedInventoryItems.length === 0}
                     onClick={handleProcessShipment}
                 >
                     {isProcessing ? (
@@ -473,7 +497,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     ) : (
                         <>
                             <span className="material-icons mr-2">receipt_long</span>
-                            Process Shipment ({selectedCheckoutItems.length} items)
+                            Process Receipt ({selectedInventoryItems.length} items)
                         </>
                     )}
                 </MaterialButton>
