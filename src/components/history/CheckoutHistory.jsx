@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
-import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import LoadingSpinner from '../shared/LoadingSpinner';
 import MaterialButton from '../shared/MaterialButton';
 import MaterialInput from '../shared/MaterialInput';
@@ -159,8 +159,11 @@ const CheckoutHistory = ({ user }) => {
             };
             delete archiveData.id;
 
-            await setDoc(doc(db, 'archivedCheckouts', record.id), archiveData);
-            await deleteDoc(doc(db, 'checkoutHistory', record.id));
+            // Use batch for atomic operations
+            const batch = writeBatch(db);
+            batch.set(doc(db, 'archivedCheckouts', record.id), archiveData);
+            batch.delete(doc(db, 'checkoutHistory', record.id));
+            await batch.commit();
 
             // Update local state immediately for instant UI feedback
             setCheckoutHistory(prev => prev.filter(r => r.id !== record.id));
@@ -182,8 +185,11 @@ const CheckoutHistory = ({ user }) => {
             delete recordData.shipmentDetails;
             delete recordData.id;
 
-            await setDoc(doc(db, 'checkoutHistory', record.id), recordData);
-            await deleteDoc(doc(db, 'archivedCheckouts', record.id));
+            // Use batch for atomic operations
+            const batch = writeBatch(db);
+            batch.set(doc(db, 'checkoutHistory', record.id), recordData);
+            batch.delete(doc(db, 'archivedCheckouts', record.id));
+            await batch.commit();
 
             // Update local state immediately for instant UI feedback
             setArchivedCheckouts(prev => prev.filter(r => r.id !== record.id));
