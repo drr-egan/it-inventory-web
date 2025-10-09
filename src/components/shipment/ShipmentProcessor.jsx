@@ -108,10 +108,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             return;
         }
 
-        if (matchedCheckouts.length === 0) {
-            setStatus('❌ Please select at least one item from inventory');
-            return;
-        }
+        // Process all checkout records
 
         setIsProcessing(true);
         setStatus('⏳ Processing receipt and generating cost allocation...');
@@ -121,16 +118,17 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const tax = parseFloat(manualTax) || 0;
             const fees = parseFloat(manualFees) || 0;
 
-            // Collect all checkout records from matched items
-            const allCheckoutRecords = [];
-            matchedCheckouts.forEach(match => {
-                match.checkoutRecords.forEach(checkout => {
-                    allCheckoutRecords.push({
-                        ...checkout,
-                        inventoryItem: match.inventoryItem,
-                        confirmedPrice: match.confirmedPrice
-                    });
-                });
+            // Collect all checkout records with their inventory
+            const allCheckoutRecords = checkoutHistory.map(checkout => {
+                const inventoryItem = items.find(item =>
+                    item.name?.toLowerCase() === checkout.itemName?.toLowerCase() ||
+                    item.name?.toLowerCase() === checkout.item?.toLowerCase()
+                );
+                return {
+                    ...checkout,
+                    inventoryItem: inventoryItem || { name: checkout.itemName || checkout.item, price: 0 },
+                    confirmedPrice: inventoryItem?.price || 0
+                };
             });
 
             // Calculate total quantity for distribution
@@ -705,7 +703,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 <MaterialButton
                     color="success"
                     className="w-full mt-6"
-                    disabled={isProcessing || !uploadedPdf || matchedCheckouts.length === 0}
+                    disabled={isProcessing || !uploadedPdf || checkoutHistory.length === 0}
                     onClick={handleProcessShipment}
                 >
                     {isProcessing ? (
