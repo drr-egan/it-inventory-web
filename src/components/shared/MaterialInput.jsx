@@ -6,7 +6,7 @@ const MaterialInput = forwardRef(({ label, type = 'text', value, onChange, place
             <input
                 ref={ref}
                 type={type}
-                value={value}
+                value={value ?? ''}
                 onChange={onChange}
                 placeholder={placeholder}
                 {...props}
