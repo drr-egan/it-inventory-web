@@ -3730,6 +3730,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                     // Combine matched records and items without checkout
                     const allocation = [...matchedCheckoutRecords, ...itemsWithoutCheckout];
+                    console.log('🔍 DEBUG: Allocation array after creation:', allocation.length, 'entries');
+                    console.log('🔍 DEBUG: Allocation details:', allocation.map(a => ({
+                        item: a.itemName,
+                        qty: a.allocatedQuantity || a.quantity,
+                        user: a.displayUser || a.userName,
+                        costCode: a.costCode || a.departmentId
+                    })));
 
                     // Calculate per-item tax and fee distribution
                     const totalQuantity = allocation.reduce((sum, item) => sum + (item.allocatedQuantity || item.quantity), 0);
@@ -3785,6 +3792,14 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     }
 
                     // Generate PDF report and upload to Firebase Storage
+                    console.log('🔍 DEBUG: Passing to PDF generation:', allocationWithDistribution.length, 'entries');
+                    console.log('🔍 DEBUG: Allocation with distribution:', allocationWithDistribution.map(a => ({
+                        item: a.itemName,
+                        qty: a.allocatedQuantity || a.quantity,
+                        user: a.displayUser || a.userName,
+                        costCode: a.costCode || a.departmentId,
+                        adjustedCost: a.adjustedTotalCost
+                    })));
                     const pdfStorageData = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
 
                     // Archive processed checkout records and remove from checkout history
@@ -4059,6 +4074,14 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
             const generateCostAllocationReport = async (allocation, totals) => {
                 try {
+                    console.log('🔍 DEBUG: PDF function received:', allocation.length, 'entries');
+                    console.log('🔍 DEBUG: PDF allocation data:', allocation.map(a => ({
+                        item: a.itemName,
+                        qty: a.allocatedQuantity || a.quantity,
+                        user: a.displayUser || a.userName,
+                        costCode: a.costCode || a.departmentId
+                    })));
+
                     const { PDFDocument, rgb, StandardFonts } = PDFLib;
 
                     // Load the original PDF
@@ -4084,9 +4107,6 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     y -= 25;
 
                     // Metadata
-                    const now = new Date();
-                    page.drawText(`Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, { x: leftMargin, y, size: 10, font });
-                    y -= 15;
                     page.drawText(`Tax ($${totals.tax.toFixed(2)}) and Fees ($${totals.fees.toFixed(2)}) distributed evenly per item`, { x: leftMargin, y, size: 10, font });
                     y -= 30;
 
@@ -4104,9 +4124,8 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     page.drawText('Item Description', { x: leftMargin, y, size: 10, font: boldFont });
                     page.drawText('Qty', { x: 220, y, size: 10, font: boldFont });
                     page.drawText('Job/Cost Code', { x: 250, y, size: 10, font: boldFont });
-                    page.drawText('Units', { x: 360, y, size: 10, font: boldFont });
-                    page.drawText('Unit Price', { x: 400, y, size: 10, font: boldFont });
-                    page.drawText('Total Cost', { x: 470, y, size: 10, font: boldFont });
+                    page.drawText('Unit Price', { x: 380, y, size: 10, font: boldFont });
+                    page.drawText('Total Cost', { x: 460, y, size: 10, font: boldFont });
                     y -= 20;
 
                     // Draw line
@@ -4119,6 +4138,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     y -= 15;
 
                     // Allocation details
+                    console.log('🔍 DEBUG: Rendering Cost Allocation Summary, allocation entries:', allocation.length);
                     let currentPage = page;
                     for (const item of allocation) {
                         if (y < 100) {
@@ -4129,19 +4149,19 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                         const itemName = item.itemName.length > 30 ?
                             item.itemName.substring(0, 30) + '...' : item.itemName;
+                        const qty = item.allocatedQuantity || item.quantity;
+                        const costCode = item.costCode || item.departmentId || '-';
+                        const finalCost = item.adjustedTotalCost || item.totalCost;
+
+                        console.log('🔍 DEBUG: Rendering summary row:', itemName, 'Qty:', qty, 'CostCode:', costCode, 'at y:', y);
 
                         currentPage.drawText(itemName, { x: leftMargin, y, size: 9, font });
-                        currentPage.drawText((item.allocatedQuantity || item.quantity).toString(), { x: 220, y, size: 9, font });
-
-                        const costCode = item.costCode || item.departmentId || '-';
+                        currentPage.drawText(qty.toString(), { x: 220, y, size: 9, font });
                         currentPage.drawText(costCode.length > 15 ? costCode.substring(0, 15) + '...' : costCode, { x: 250, y, size: 9, font });
-
-                        currentPage.drawText((item.allocatedQuantity || item.quantity).toString(), { x: 360, y, size: 9, font });
-                        currentPage.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 400, y, size: 9, font });
+                        currentPage.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 380, y, size: 9, font });
 
                         // Show adjusted total cost (includes tax and fees)
-                        const finalCost = item.adjustedTotalCost || item.totalCost;
-                        currentPage.drawText(`$${finalCost.toFixed(2)}`, { x: 470, y, size: 9, font });
+                        currentPage.drawText(`$${finalCost.toFixed(2)}`, { x: 460, y, size: 9, font });
                         y -= 15;
                     }
 
@@ -4170,6 +4190,78 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     y -= 10;
                     currentPage.drawText(`Grand Total: $${totals.total.toFixed(2)}`, { x: leftMargin, y, size: 12, font: boldFont });
 
+                    // Cost Allocation by Cost Code section
+                    y -= 40;
+                    if (y < 200) {
+                        currentPage = originalPdfDoc.addPage([612, 792]);
+                        y = 750;
+                    }
+
+                    currentPage.drawText('Cost Allocation by Cost Code', {
+                        x: leftMargin,
+                        y,
+                        size: 14,
+                        font: boldFont,
+                        color: rgb(0, 0, 0)
+                    });
+                    y -= 25;
+
+                    // Group allocation by cost code
+                    const allocationByCostCode = {};
+                    for (const item of allocation) {
+                        const costCode = item.costCode || item.departmentId || 'Unknown';
+                        if (!allocationByCostCode[costCode]) {
+                            allocationByCostCode[costCode] = [];
+                        }
+                        allocationByCostCode[costCode].push(item);
+                    }
+
+                    // Display each cost code group
+                    for (const [costCode, items] of Object.entries(allocationByCostCode)) {
+                        if (y < 100) {
+                            currentPage = originalPdfDoc.addPage([612, 792]);
+                            y = 750;
+                        }
+
+                        // Cost code header
+                        currentPage.drawText(costCode + ':', { x: leftMargin, y, size: 11, font: boldFont });
+                        y -= 18;
+
+                        let costCodeTotal = 0;
+
+                        // List items under this cost code
+                        for (const item of items) {
+                            if (y < 80) {
+                                currentPage = originalPdfDoc.addPage([612, 792]);
+                                y = 750;
+                            }
+
+                            const itemName = item.itemName.length > 35 ?
+                                item.itemName.substring(0, 35) + '...' : item.itemName;
+                            const qty = item.allocatedQuantity || item.quantity;
+                            const itemCost = item.adjustedTotalCost || item.totalCost;
+                            costCodeTotal += itemCost;
+
+                            currentPage.drawText(`  ${itemName}`, { x: leftMargin + 10, y, size: 9, font });
+                            currentPage.drawText(`Qty: ${qty}`, { x: 300, y, size: 9, font });
+                            currentPage.drawText(`Subtotal: $${itemCost.toFixed(2)}`, { x: 380, y, size: 9, font });
+                            y -= 15;
+                        }
+
+                        // Cost code subtotal
+                        if (y < 80) {
+                            currentPage = originalPdfDoc.addPage([612, 792]);
+                            y = 750;
+                        }
+                        currentPage.drawText(`Total for ${costCode}: $${costCodeTotal.toFixed(2)}`, {
+                            x: leftMargin,
+                            y,
+                            size: 10,
+                            font: boldFont
+                        });
+                        y -= 25;
+                    }
+
                     // Individual Checkout Details section
                     y -= 40;
                     if (y < 200) {
@@ -4188,8 +4280,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                     // Individual checkout table header
                     currentPage.drawText('Item Description', { x: leftMargin, y, size: 10, font: boldFont });
-                    currentPage.drawText('User', { x: 250, y, size: 10, font: boldFont });
-                    currentPage.drawText('Cost Code', { x: 400, y, size: 10, font: boldFont });
+                    currentPage.drawText('Qty', { x: 230, y, size: 10, font: boldFont });
+                    currentPage.drawText('User', { x: 270, y, size: 10, font: boldFont });
+                    currentPage.drawText('Cost Code', { x: 420, y, size: 10, font: boldFont });
                     y -= 20;
 
                     // Draw line for individual checkout table
@@ -4202,20 +4295,25 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     y -= 15;
 
                     // Individual checkout details
+                    console.log('🔍 DEBUG: Rendering Individual Checkout Details, allocation entries:', allocation.length);
                     for (const item of allocation) {
                         if (y < 100) {
                             currentPage = originalPdfDoc.addPage([612, 792]);
                             y = 750;
                         }
 
-                        const itemName = item.itemName.length > 35 ?
-                            item.itemName.substring(0, 35) + '...' : item.itemName;
+                        const itemName = item.itemName.length > 30 ?
+                            item.itemName.substring(0, 30) + '...' : item.itemName;
                         const userName = (item.displayUser || item.userName || 'Unknown').toUpperCase();
                         const costCode = item.costCode || item.departmentId || '-';
+                        const qty = item.allocatedQuantity || item.quantity;
+
+                        console.log('🔍 DEBUG: Rendering row:', itemName, 'Qty:', qty, 'User:', userName, 'at y:', y);
 
                         currentPage.drawText(itemName, { x: leftMargin, y, size: 9, font });
-                        currentPage.drawText(userName, { x: 250, y, size: 9, font });
-                        currentPage.drawText(costCode, { x: 400, y, size: 9, font });
+                        currentPage.drawText(qty.toString(), { x: 230, y, size: 9, font });
+                        currentPage.drawText(userName, { x: 270, y, size: 9, font });
+                        currentPage.drawText(costCode, { x: 420, y, size: 9, font });
                         y -= 15;
                     }
 
