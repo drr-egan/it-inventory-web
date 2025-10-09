@@ -121,39 +121,50 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const tax = parseFloat(manualTax) || 0;
             const fees = parseFloat(manualFees) || 0;
 
+            // Collect all checkout records from matched items
+            const allCheckoutRecords = [];
+            matchedCheckouts.forEach(match => {
+                match.checkoutRecords.forEach(checkout => {
+                    allCheckoutRecords.push({
+                        ...checkout,
+                        inventoryItem: match.inventoryItem,
+                        confirmedPrice: match.confirmedPrice
+                    });
+                });
+            });
+
             // Calculate total quantity for distribution
-            const totalQuantity = matchedCheckouts.reduce((sum, match) => sum + match.confirmedQuantity, 0);
+            const totalQuantity = allCheckoutRecords.reduce((sum, checkout) => sum + (checkout.quantity || 1), 0);
 
             // Distribute tax and fees per item unit (quantity-based)
             const taxPerItem = totalQuantity > 0 ? tax / totalQuantity : 0;
             const feePerItem = totalQuantity > 0 ? fees / totalQuantity : 0;
 
-            // Build allocation records with specific billing codes
-            const allocation = matchedCheckouts.map(match => {
-                const qty = match.confirmedQuantity;
-                const unitPrice = match.confirmedPrice;
-                const itemTax = taxPerItem * qty;
-                const itemFees = feePerItem * qty;
-
-                // Use checkout record details for user and cost code
-                let userName = 'IT Stock';
-                let costCode = 'IT Stock 1-20-000-5770';
-
-                if (match.checkoutRecords.length > 0) {
-                    // Use the first checkout record's details
-                    const checkout = match.checkoutRecords[0];
-                    userName = checkout.userName || checkout.user || 'System Receipt';
-                    costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
+            // Group checkout records by cost code
+            const groupedByCostCode = allCheckoutRecords.reduce((groups, checkout) => {
+                const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
+                if (!groups[costCode]) {
+                    groups[costCode] = [];
                 }
+                groups[costCode].push(checkout);
+                return groups;
+            }, {});
+
+            // Build allocation records aggregated by cost code
+            const allocation = Object.entries(groupedByCostCode).map(([costCode, checkouts]) => {
+                const totalQty = checkouts.reduce((sum, c) => sum + (c.quantity || 1), 0);
+                const unitPrice = checkouts[0].confirmedPrice;
+                const itemName = checkouts[0].inventoryItem.name;
+                const itemTax = taxPerItem * totalQty;
+                const itemFees = feePerItem * totalQty;
 
                 return {
-                    itemName: match.inventoryItem.name,
-                    quantity: qty,
+                    itemName: itemName,
+                    quantity: totalQty,
                     unitPrice: unitPrice,
-                    totalCost: (unitPrice * qty) + itemTax + itemFees,
+                    totalCost: (unitPrice * totalQty) + itemTax + itemFees,
                     taxAllocation: itemTax,
                     feeAllocation: itemFees,
-                    userName: userName,
                     costCode: costCode
                 };
             });
@@ -163,46 +174,50 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const total = subtotal + tax + fees;
 
             // Generate PDF report (append to uploaded PDF)
-            await generateCostAllocationReport(allocation, { subtotal, tax, fees, total }, uploadedPdf);
+            await generateCostAllocationReport(allocation, { subtotal, tax, fees, total }, uploadedPdf, allCheckoutRecords);
 
             // Use batch for atomic operations
             const batch = writeBatch(db);
 
-            // Archive processed items to cost allocation
-            for (const match of matchedCheckouts) {
-                const allocationRecord = allocation.find(a => a.itemName === match.inventoryItem.name);
+            // Create cost allocation records per checkout
+            for (const checkout of allCheckoutRecords) {
+                const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
+                const qty = checkout.quantity || 1;
+                const unitPrice = checkout.confirmedPrice;
+                const itemTax = taxPerItem * qty;
+                const itemFees = feePerItem * qty;
+
                 const costAllocationRef = doc(collection(db, 'costAllocation'));
                 batch.set(costAllocationRef, {
-                    itemId: match.inventoryItem.id,
-                    itemName: match.inventoryItem.name,
-                    quantity: match.confirmedQuantity,
-                    unitPrice: match.confirmedPrice,
-                    totalCost: allocationRecord.totalCost,
-                    taxAllocation: allocationRecord.taxAllocation,
-                    feeAllocation: allocationRecord.feeAllocation,
-                    costCode: allocationRecord.costCode,
+                    itemId: checkout.inventoryItem.id,
+                    itemName: checkout.inventoryItem.name,
+                    quantity: qty,
+                    unitPrice: unitPrice,
+                    totalCost: (unitPrice * qty) + itemTax + itemFees,
+                    taxAllocation: itemTax,
+                    feeAllocation: itemFees,
+                    costCode: costCode,
+                    userName: checkout.userName || checkout.user || 'Unknown',
                     vendor: vendorName || 'Unknown',
                     orderNumber: orderNumber || 'N/A',
                     receiptDate: receiptDate || new Date().toISOString().split('T')[0],
                     processedAt: Timestamp.now(),
                     processedBy: user?.email || 'Unknown',
-                    type: allocationRecord.costCode.includes('Job') ? 'job' : 'it_stock'
+                    type: costCode.includes('Job') ? 'job' : 'it_stock'
                 });
 
-                // Archive matched checkout records
-                for (const checkout of match.checkoutRecords) {
-                    const archivedRef = doc(collection(db, 'archivedCheckouts'));
-                    batch.set(archivedRef, {
-                        ...checkout,
-                        archivedAt: Timestamp.now(),
-                        archivedBy: user?.email || 'Unknown',
-                        archiveReason: 'Processed receipt'
-                    });
+                // Archive checkout record
+                const archivedRef = doc(collection(db, 'archivedCheckouts'));
+                batch.set(archivedRef, {
+                    ...checkout,
+                    archivedAt: Timestamp.now(),
+                    archivedBy: user?.email || 'Unknown',
+                    archiveReason: 'Processed receipt'
+                });
 
-                    // Remove from active checkout history
-                    const checkoutRef = doc(db, 'checkoutHistory', checkout.id);
-                    batch.delete(checkoutRef);
-                }
+                // Remove from active checkout history
+                const checkoutRef = doc(db, 'checkoutHistory', checkout.id);
+                batch.delete(checkoutRef);
             }
 
             await batch.commit();
@@ -211,7 +226,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const result = {
                 timestamp: new Date().toISOString(),
                 orderNumber: orderNumber || 'N/A',
-                itemsProcessed: matchedCheckouts.length,
+                itemsProcessed: allCheckoutRecords.length,
                 totalAmount: total,
                 vendor: vendorName || 'Unknown'
             };
@@ -238,7 +253,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     };
 
     // Generate PDF cost allocation report matching oldinvoice.pdf format
-    const generateCostAllocationReport = async (allocation, totals, uploadedPdf) => {
+    const generateCostAllocationReport = async (allocation, totals, uploadedPdf, allCheckoutRecords) => {
         try {
             const PDFLib = window.PDFLib;
             const { PDFDocument, rgb, StandardFonts } = PDFLib;
@@ -364,18 +379,19 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             yPos -= 15;
 
             // Checkout details data
-            for (const item of allocation) {
+            for (const checkout of allCheckoutRecords) {
                 if (yPos < 100) {
                     break; // Stop if running out of space
                 }
 
-                const itemName = item.itemName.length > 35 ?
-                    item.itemName.substring(0, 35) + '...' : item.itemName;
-                const userName = item.userName || 'N/A';
+                const itemName = checkout.inventoryItem.name.length > 35 ?
+                    checkout.inventoryItem.name.substring(0, 35) + '...' : checkout.inventoryItem.name;
+                const userName = checkout.userName || checkout.user || 'N/A';
+                const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
 
                 page.drawText(itemName, { x: 50, y: yPos, size: 9, font });
                 page.drawText(userName, { x: 280, y: yPos, size: 9, font });
-                page.drawText(item.costCode || '-', { x: 450, y: yPos, size: 9, font });
+                page.drawText(costCode, { x: 450, y: yPos, size: 9, font });
                 yPos -= 15;
             }
 
