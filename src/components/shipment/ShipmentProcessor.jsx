@@ -309,15 +309,15 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             // Load the uploaded PDF as base document
             const uploadedPdfBytes = await uploadedPdf.arrayBuffer();
             const pdfDoc = await PDFDocument.load(uploadedPdfBytes);
-            const page = pdfDoc.addPage([612, 792]); // Letter size
+            let currentPage = pdfDoc.addPage([612, 792]); // Letter size
             const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-            const { width, height } = page.getSize();
+            const { width, height } = currentPage.getSize();
             let yPos = height - 50;
 
             // Title
-            page.drawText('Shipment Cost Allocation Report', {
+            currentPage.drawText('Shipment Cost Allocation Report', {
                 x: 50,
                 y: yPos,
                 size: 16,
@@ -336,7 +336,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 second: 'numeric',
                 hour12: true
             });
-            page.drawText(`Generated: ${generatedDate}`, {
+            currentPage.drawText(`Generated: ${generatedDate}`, {
                 x: 50,
                 y: yPos,
                 size: 10,
@@ -348,7 +348,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             // Tax and fees distribution note
             if (totals.tax > 0 || totals.fees > 0) {
                 const taxFeeNote = `Tax ($${totals.tax.toFixed(2)}) and Fees ($${totals.fees.toFixed(2)}) distributed evenly per item`;
-                page.drawText(taxFeeNote, {
+                currentPage.drawText(taxFeeNote, {
                     x: 50,
                     y: yPos,
                     size: 10,
@@ -359,7 +359,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             }
 
             // Cost Allocation Summary heading
-            page.drawText('Cost Allocation Summary', {
+            currentPage.drawText('Cost Allocation Summary', {
                 x: 50,
                 y: yPos,
                 size: 14,
@@ -369,31 +369,39 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             yPos -= 25;
 
             // Table header
-            page.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
-            page.drawText('Qty', { x: 250, y: yPos, size: 9, font: boldFont });
-            page.drawText('Job/Cost Code', { x: 280, y: yPos, size: 9, font: boldFont });
-            page.drawText('Units', { x: 380, y: yPos, size: 9, font: boldFont });
-            page.drawText('Unit Price', { x: 420, y: yPos, size: 9, font: boldFont });
-            page.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Qty', { x: 250, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Job/Cost Code', { x: 280, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Units', { x: 380, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Unit Price', { x: 420, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
             yPos -= 15;
 
             // Table data
             for (const item of allocation) {
                 if (yPos < 150) {
                     // Create new page if needed
-                    const newPage = pdfDoc.addPage([612, 792]);
+                    currentPage = pdfDoc.addPage([612, 792]);
                     yPos = height - 50;
+                    // Re-draw table header on new page
+                    currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Qty', { x: 250, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Job/Cost Code', { x: 280, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Units', { x: 380, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Unit Price', { x: 420, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
+                    yPos -= 15;
                 }
 
                 const itemName = item.itemName.length > 35 ?
                     item.itemName.substring(0, 35) + '...' : item.itemName;
 
-                page.drawText(itemName, { x: 50, y: yPos, size: 9, font });
-                page.drawText(String(item.quantity), { x: 250, y: yPos, size: 9, font });
-                page.drawText(item.costCode || '-', { x: 280, y: yPos, size: 9, font });
-                page.drawText(String(item.quantity), { x: 380, y: yPos, size: 9, font });
-                page.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 420, y: yPos, size: 9, font });
-                page.drawText(`$${item.totalCost.toFixed(2)}`, { x: 500, y: yPos, size: 9, font });
+                currentPage.drawText(itemName, { x: 50, y: yPos, size: 9, font });
+                currentPage.drawText(String(item.quantity), { x: 250, y: yPos, size: 9, font });
+                currentPage.drawText(item.costCode || '-', { x: 280, y: yPos, size: 9, font });
+                currentPage.drawText(String(item.quantity), { x: 380, y: yPos, size: 9, font });
+                currentPage.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 420, y: yPos, size: 9, font });
+                currentPage.drawText(`$${item.totalCost.toFixed(2)}`, { x: 500, y: yPos, size: 9, font });
                 yPos -= 15;
             }
 
@@ -401,17 +409,23 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Financial totals (right-aligned like the invoice)
             const totalsX = 420;
-            page.drawText(`Subtotal (Items): $${totals.subtotal.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
+            currentPage.drawText(`Subtotal (Items): $${totals.subtotal.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
             yPos -= 12;
-            page.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
+            currentPage.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
             yPos -= 12;
-            page.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
+            currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
             yPos -= 15;
-            page.drawText(`Grand Total: $${totals.total.toFixed(2)}`, { x: totalsX, y: yPos, size: 10, font: boldFont });
+            currentPage.drawText(`Grand Total: $${totals.total.toFixed(2)}`, { x: totalsX, y: yPos, size: 10, font: boldFont });
             yPos -= 30;
 
+            // Check if we need a new page for Individual Checkout Details
+            if (yPos < 150) {
+                currentPage = pdfDoc.addPage([612, 792]);
+                yPos = height - 50;
+            }
+
             // Individual Checkout Details heading
-            page.drawText('Individual Checkout Details', {
+            currentPage.drawText('Individual Checkout Details', {
                 x: 50,
                 y: yPos,
                 size: 14,
@@ -421,17 +435,25 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             yPos -= 25;
 
             // Checkout details table header
-            page.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
-            page.drawText('User', { x: 200, y: yPos, size: 9, font: boldFont });
-            page.drawText('Cost Code', { x: 320, y: yPos, size: 9, font: boldFont });
-            page.drawText('Unit Price', { x: 440, y: yPos, size: 9, font: boldFont });
-            page.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('User', { x: 200, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Cost Code', { x: 320, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Unit Price', { x: 440, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
             yPos -= 15;
 
             // Checkout details data
             for (const checkout of allCheckoutRecords) {
                 if (yPos < 100) {
-                    break; // Stop if running out of space
+                    // Create new page and re-draw header
+                    currentPage = pdfDoc.addPage([612, 792]);
+                    yPos = height - 50;
+                    currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('User', { x: 200, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Cost Code', { x: 320, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Unit Price', { x: 440, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
+                    yPos -= 15;
                 }
 
                 const itemName = checkout.inventoryItem.name.length > 25 ?
@@ -445,11 +467,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 const itemFees = feePerItem * qty;
                 const totalCost = (unitPrice * qty) + itemTax + itemFees;
 
-                page.drawText(itemName, { x: 50, y: yPos, size: 9, font });
-                page.drawText(userName, { x: 200, y: yPos, size: 9, font });
-                page.drawText(costCode, { x: 320, y: yPos, size: 9, font });
-                page.drawText(`$${unitPrice.toFixed(2)}`, { x: 440, y: yPos, size: 9, font });
-                page.drawText(`$${totalCost.toFixed(2)}`, { x: 500, y: yPos, size: 9, font });
+                currentPage.drawText(itemName, { x: 50, y: yPos, size: 9, font });
+                currentPage.drawText(userName, { x: 200, y: yPos, size: 9, font });
+                currentPage.drawText(costCode, { x: 320, y: yPos, size: 9, font });
+                currentPage.drawText(`$${unitPrice.toFixed(2)}`, { x: 440, y: yPos, size: 9, font });
+                currentPage.drawText(`$${totalCost.toFixed(2)}`, { x: 500, y: yPos, size: 9, font });
                 yPos -= 15;
             }
 
