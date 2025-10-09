@@ -29,8 +29,8 @@ const CheckoutHistory = ({ user }) => {
         const unsubscribe = onSnapshot(q,
             (snapshot) => {
                 const history = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
+                    ...doc.data(),
+                    id: doc.id
                 }));
                 setCheckoutHistory(history);
                 setLoading(false);
@@ -56,8 +56,8 @@ const CheckoutHistory = ({ user }) => {
         const unsubscribe = onSnapshot(q,
             (snapshot) => {
                 const archived = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
+                    ...doc.data(),
+                    id: doc.id
                 }));
                 setArchivedCheckouts(archived);
             },
