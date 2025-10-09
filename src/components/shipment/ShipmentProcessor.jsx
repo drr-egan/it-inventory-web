@@ -108,7 +108,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             return;
         }
 
-        // Process all checkout records
+        if (matchedCheckouts.length === 0) {
+            setStatus('❌ Please select at least one item from inventory');
+            return;
+        }
 
         setIsProcessing(true);
         setStatus('⏳ Processing receipt and generating cost allocation...');
@@ -118,20 +121,14 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const tax = parseFloat(manualTax) || 0;
             const fees = parseFloat(manualFees) || 0;
 
-            // Collect all checkout records with their inventory
-            const allCheckoutRecords = checkoutHistory.map(checkout => {
-                const checkoutName = (checkout.itemName || checkout.item || '').toLowerCase();
-                const inventoryItem = items.find(item => {
-                    const itemName = (item.name || '').toLowerCase();
-                    return itemName === checkoutName ||
-                           itemName.includes(checkoutName) ||
-                           checkoutName.includes(itemName);
-                });
-                return {
+            // Build checkout records from the matched checkouts (selected items only)
+            const allCheckoutRecords = matchedCheckouts.flatMap(match => {
+                // Use the confirmed price and quantity from the match
+                return match.checkoutRecords.map(checkout => ({
                     ...checkout,
-                    inventoryItem: inventoryItem || { name: checkout.itemName || checkout.item, price: 0 },
-                    confirmedPrice: inventoryItem?.price || 0
-                };
+                    inventoryItem: match.inventoryItem,
+                    confirmedPrice: match.confirmedPrice
+                }));
             });
 
             // Calculate total quantity for distribution
@@ -177,7 +174,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const total = subtotal + tax + fees;
 
             // Generate PDF report (append to uploaded PDF)
-            await generateCostAllocationReport(allocation, { subtotal, tax, fees, total }, uploadedPdf, allCheckoutRecords);
+            await generateCostAllocationReport(allocation, { subtotal, tax, fees, total, taxPerItem, feePerItem }, uploadedPdf, allCheckoutRecords);
 
             // Use batch for atomic operations
             const batch = writeBatch(db);
@@ -262,6 +259,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
         try {
             const PDFLib = window.PDFLib;
             const { PDFDocument, rgb, StandardFonts } = PDFLib;
+
+            // Extract taxPerItem and feePerItem from totals
+            const taxPerItem = totals.taxPerItem || 0;
+            const feePerItem = totals.feePerItem || 0;
 
             // Load the uploaded PDF as base document
             const uploadedPdfBytes = await uploadedPdf.arrayBuffer();
@@ -708,7 +709,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 <MaterialButton
                     color="success"
                     className="w-full mt-6"
-                    disabled={isProcessing || !uploadedPdf || checkoutHistory.length === 0}
+                    disabled={isProcessing || !uploadedPdf || matchedCheckouts.length === 0}
                     onClick={handleProcessShipment}
                 >
                     {isProcessing ? (
