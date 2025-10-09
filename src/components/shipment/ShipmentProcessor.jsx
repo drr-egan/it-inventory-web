@@ -123,7 +123,21 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Build checkout records from the matched checkouts (selected items only)
             const allCheckoutRecords = matchedCheckouts.flatMap(match => {
-                // Use the confirmed price and quantity from the match
+                // If no checkout records exist, create a synthetic entry with confirmedQuantity
+                if (match.checkoutRecords.length === 0) {
+                    return [{
+                        id: `synthetic-${match.inventoryItem.id}-${Date.now()}`,
+                        itemName: match.inventoryItem.name,
+                        userName: 'IT Stock',
+                        quantity: match.confirmedQuantity,
+                        departmentId: '1-20-000-5770',
+                        dateEntered: new Date(),
+                        inventoryItem: match.inventoryItem,
+                        confirmedPrice: match.confirmedPrice
+                    }];
+                }
+
+                // Has checkout records - use them with confirmed price
                 return match.checkoutRecords.map(checkout => ({
                     ...checkout,
                     inventoryItem: match.inventoryItem,
@@ -206,20 +220,22 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     type: costCode.includes('Job') ? 'job' : 'it_stock'
                 });
 
-                // Archive checkout record
-                const archivedData = {
-                    ...checkout,
-                    archivedAt: Timestamp.now(),
-                    archivedBy: user?.email || 'Unknown',
-                    archiveReason: 'Processed receipt'
-                };
-                delete archivedData.id;
-                const archivedRef = doc(db, 'archivedCheckouts', checkout.id);
-                batch.set(archivedRef, archivedData);
+                // Archive checkout record (skip synthetic entries)
+                if (!checkout.id.startsWith('synthetic-')) {
+                    const archivedData = {
+                        ...checkout,
+                        archivedAt: Timestamp.now(),
+                        archivedBy: user?.email || 'Unknown',
+                        archiveReason: 'Processed receipt'
+                    };
+                    delete archivedData.id;
+                    const archivedRef = doc(db, 'archivedCheckouts', checkout.id);
+                    batch.set(archivedRef, archivedData);
 
-                // Remove from active checkout history
-                const checkoutRef = doc(db, 'checkoutHistory', checkout.id);
-                batch.delete(checkoutRef);
+                    // Remove from active checkout history
+                    const checkoutRef = doc(db, 'checkoutHistory', checkout.id);
+                    batch.delete(checkoutRef);
+                }
             }
 
             await batch.commit();
