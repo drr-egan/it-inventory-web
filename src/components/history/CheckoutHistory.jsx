@@ -163,6 +163,9 @@ const CheckoutHistory = ({ user }) => {
             await setDoc(doc(db, 'archivedCheckouts', record.id), archiveData);
             await deleteDoc(doc(db, 'checkoutHistory', record.id));
 
+            // Update local state immediately for instant UI feedback
+            setCheckoutHistory(prev => prev.filter(r => r.id !== record.id));
+
             console.log(`Manually archived checkout record for ${record.itemName}`);
         } catch (error) {
             console.error('Error manually archiving record:', error);
@@ -172,7 +175,6 @@ const CheckoutHistory = ({ user }) => {
 
     // Un-archive function
     const unarchiveRecord = async (record) => {
-        if (!confirm(`Move ${record.itemName} back to current checkout history?`)) return;
 
         try {
             const recordData = { ...record };
@@ -183,6 +185,9 @@ const CheckoutHistory = ({ user }) => {
 
             await setDoc(doc(db, 'checkoutHistory', record.id), recordData);
             await deleteDoc(doc(db, 'archivedCheckouts', record.id));
+
+            // Update local state immediately for instant UI feedback
+            setArchivedCheckouts(prev => prev.filter(r => r.id !== record.id));
 
             console.log(`Unarchived checkout record for ${record.itemName}`);
         } catch (error) {

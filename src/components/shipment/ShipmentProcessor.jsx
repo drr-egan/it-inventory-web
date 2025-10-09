@@ -210,13 +210,15 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 });
 
                 // Archive checkout record
-                const archivedRef = doc(collection(db, 'archivedCheckouts'));
-                batch.set(archivedRef, {
+                const archivedData = {
                     ...checkout,
                     archivedAt: Timestamp.now(),
                     archivedBy: user?.email || 'Unknown',
                     archiveReason: 'Processed receipt'
-                });
+                };
+                delete archivedData.id;
+                const archivedRef = doc(db, 'archivedCheckouts', checkout.id);
+                batch.set(archivedRef, archivedData);
 
                 // Remove from active checkout history
                 const checkoutRef = doc(db, 'checkoutHistory', checkout.id);
