@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import LoadingSpinner from '../shared/LoadingSpinner';
+import MaterialButton from '../shared/MaterialButton';
+import MaterialInput from '../shared/MaterialInput';
 
 const CheckoutHistory = ({ user }) => {
     const [checkoutHistory, setCheckoutHistory] = useState([]);
@@ -10,6 +12,11 @@ const CheckoutHistory = ({ user }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Edit modal state
+    const [editCheckoutRecord, setEditCheckoutRecord] = useState(null);
+    const [showEditCheckoutModal, setShowEditCheckoutModal] = useState(false);
+    const [editRecordSource, setEditRecordSource] = useState('checkoutHistory');
 
     // Load current checkout history
     useEffect(() => {
@@ -81,6 +88,107 @@ const CheckoutHistory = ({ user }) => {
         if (dateField.toDate) return dateField.toDate().toLocaleDateString();
         if (typeof dateField === 'string') return new Date(dateField).toLocaleDateString();
         return 'Unknown';
+    };
+
+    // Format department ID
+    const formatDepartmentId = (deptId) => {
+        if (!deptId) return '';
+        const parts = deptId.split('-');
+        if (parts.length >= 3) {
+            const [first, second, third] = parts;
+            const formattedThird = third.padStart(3, '0');
+            return `${first}-${second}-${formattedThird}-5770`;
+        }
+        return deptId;
+    };
+
+    // Edit checkout record functions
+    const openEditCheckoutModal = (record, source = 'checkoutHistory') => {
+        setEditCheckoutRecord({
+            id: record.id,
+            itemName: record.itemName,
+            userName: record.userName,
+            quantity: record.quantity,
+            departmentId: record.departmentId || record.costCode || '',
+            jobNumber: record.jobNumber || '',
+            notes: record.notes || ''
+        });
+        setEditRecordSource(source);
+        setShowEditCheckoutModal(true);
+    };
+
+    const closeEditCheckoutModal = () => {
+        setEditCheckoutRecord(null);
+        setShowEditCheckoutModal(false);
+    };
+
+    const saveEditCheckoutRecord = async () => {
+        if (!editCheckoutRecord || !editCheckoutRecord.id) return;
+
+        try {
+            const collectionName = editRecordSource === 'archivedCheckouts' ? 'archivedCheckouts' : 'checkoutHistory';
+            const docRef = doc(db, collectionName, editCheckoutRecord.id);
+
+            await updateDoc(docRef, {
+                itemName: editCheckoutRecord.itemName,
+                userName: editCheckoutRecord.userName,
+                quantity: parseInt(editCheckoutRecord.quantity),
+                departmentId: formatDepartmentId(editCheckoutRecord.departmentId),
+                jobNumber: editCheckoutRecord.jobNumber,
+                notes: editCheckoutRecord.notes,
+                lastUpdated: serverTimestamp()
+            });
+
+            closeEditCheckoutModal();
+            alert('Checkout record updated successfully');
+        } catch (error) {
+            console.error('Error updating checkout record:', error);
+            alert('Failed to update checkout record');
+        }
+    };
+
+    // Manual archive function
+    const manualArchiveRecord = async (record) => {
+        if (!confirm(`Archive checkout record for ${record.itemName}?`)) return;
+
+        try {
+            const archiveData = {
+                ...record,
+                archivedAt: serverTimestamp(),
+                manuallyArchived: true,
+                archivedBy: user?.email || 'unknown'
+            };
+            delete archiveData.id;
+
+            await setDoc(doc(db, 'archivedCheckouts', record.id), archiveData);
+            await deleteDoc(doc(db, 'checkoutHistory', record.id));
+
+            console.log(`Manually archived checkout record for ${record.itemName}`);
+        } catch (error) {
+            console.error('Error manually archiving record:', error);
+            alert('Failed to archive record. Please try again.');
+        }
+    };
+
+    // Un-archive function
+    const unarchiveRecord = async (record) => {
+        if (!confirm(`Move ${record.itemName} back to current checkout history?`)) return;
+
+        try {
+            const recordData = { ...record };
+            delete recordData.archivedAt;
+            delete recordData.manuallyArchived;
+            delete recordData.shipmentDetails;
+            delete recordData.id;
+
+            await setDoc(doc(db, 'checkoutHistory', record.id), recordData);
+            await deleteDoc(doc(db, 'archivedCheckouts', record.id));
+
+            console.log(`Unarchived checkout record for ${record.itemName}`);
+        } catch (error) {
+            console.error('Error unarchiving record:', error);
+            alert('Failed to unarchive record. Please try again.');
+        }
     };
 
     if (loading) {
@@ -205,12 +313,18 @@ const CheckoutHistory = ({ user }) => {
                                         Archived Date
                                     </th>
                                 )}
+                                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--md-sys-color-on-surface-variant)] uppercase">
+                                    <div className="flex items-center">
+                                        <span className="material-icons mr-1 text-sm">settings</span>
+                                        Actions
+                                    </div>
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--md-sys-color-outline-variant)]">
                             {filteredData.length === 0 ? (
                                 <tr>
-                                    <td colSpan={viewMode === 'archive' ? 6 : 5} className="px-6 py-8 text-center">
+                                    <td colSpan={viewMode === 'archive' ? 7 : 6} className="px-6 py-8 text-center">
                                         <div className="flex flex-col items-center gap-2">
                                             <span className="material-icons text-4xl text-[var(--md-sys-color-on-surface-variant)]">
                                                 inbox
@@ -250,6 +364,49 @@ const CheckoutHistory = ({ user }) => {
                                                 {formatDate(record.archivedAt)}
                                             </td>
                                         )}
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center space-x-2">
+                                                {viewMode === 'current' ? (
+                                                    <>
+                                                        <MaterialButton
+                                                            variant="text"
+                                                            color="primary"
+                                                            className="!p-2 !min-w-0"
+                                                            onClick={() => openEditCheckoutModal(record)}
+                                                        >
+                                                            <span className="material-icons text-sm">edit</span>
+                                                        </MaterialButton>
+                                                        <MaterialButton
+                                                            variant="text"
+                                                            color="secondary"
+                                                            className="!p-2 !min-w-0"
+                                                            onClick={() => manualArchiveRecord(record)}
+                                                        >
+                                                            <span className="material-icons text-sm">archive</span>
+                                                        </MaterialButton>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <MaterialButton
+                                                            variant="text"
+                                                            color="primary"
+                                                            className="!p-2 !min-w-0"
+                                                            onClick={() => openEditCheckoutModal(record, 'archivedCheckouts')}
+                                                        >
+                                                            <span className="material-icons text-sm">edit</span>
+                                                        </MaterialButton>
+                                                        <MaterialButton
+                                                            variant="text"
+                                                            color="secondary"
+                                                            className="!p-2 !min-w-0"
+                                                            onClick={() => unarchiveRecord(record)}
+                                                        >
+                                                            <span className="material-icons text-sm">unarchive</span>
+                                                        </MaterialButton>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -257,6 +414,79 @@ const CheckoutHistory = ({ user }) => {
                     </table>
                 </div>
             </div>
+
+            {/* Edit Checkout Record Modal */}
+            {showEditCheckoutModal && editCheckoutRecord && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={closeEditCheckoutModal}>
+                    <div className="bg-[var(--md-sys-color-surface-container)] rounded-lg p-6 max-w-2xl w-full mx-4 md-elevation-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-2xl font-bold text-[var(--md-sys-color-on-surface)] flex items-center">
+                                <span className="material-icons mr-2 text-[var(--md-sys-color-primary)]">edit</span>
+                                Edit Checkout Record
+                            </h2>
+                            <button onClick={closeEditCheckoutModal} className="text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]">
+                                <span className="material-icons">close</span>
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <MaterialInput
+                                label="Item Name"
+                                value={editCheckoutRecord.itemName}
+                                onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, itemName: e.target.value }))}
+                                required
+                            />
+
+                            <MaterialInput
+                                label="User Name"
+                                value={editCheckoutRecord.userName}
+                                onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, userName: e.target.value }))}
+                                required
+                            />
+
+                            <MaterialInput
+                                label="Quantity"
+                                type="number"
+                                value={editCheckoutRecord.quantity}
+                                onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, quantity: e.target.value }))}
+                                required
+                                min="1"
+                            />
+
+                            <MaterialInput
+                                label="Department ID"
+                                value={editCheckoutRecord.departmentId}
+                                onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, departmentId: e.target.value }))}
+                                placeholder="e.g., 2-20-060"
+                            />
+
+                            <MaterialInput
+                                label="Job Number"
+                                value={editCheckoutRecord.jobNumber}
+                                onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, jobNumber: e.target.value }))}
+                                placeholder="Optional job number"
+                            />
+
+                            <MaterialInput
+                                label="Notes"
+                                value={editCheckoutRecord.notes}
+                                onChange={(e) => setEditCheckoutRecord(prev => ({ ...prev, notes: e.target.value }))}
+                                placeholder="Optional notes"
+                            />
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <MaterialButton variant="outlined" onClick={closeEditCheckoutModal}>
+                                Cancel
+                            </MaterialButton>
+                            <MaterialButton variant="contained" color="primary" onClick={saveEditCheckoutRecord}>
+                                <span className="material-icons mr-2">save</span>
+                                Save Changes
+                            </MaterialButton>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
