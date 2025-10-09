@@ -120,10 +120,13 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Collect all checkout records with their inventory
             const allCheckoutRecords = checkoutHistory.map(checkout => {
-                const inventoryItem = items.find(item =>
-                    item.name?.toLowerCase() === checkout.itemName?.toLowerCase() ||
-                    item.name?.toLowerCase() === checkout.item?.toLowerCase()
-                );
+                const checkoutName = (checkout.itemName || checkout.item || '').toLowerCase();
+                const inventoryItem = items.find(item => {
+                    const itemName = (item.name || '').toLowerCase();
+                    return itemName === checkoutName ||
+                           itemName.includes(checkoutName) ||
+                           checkoutName.includes(itemName);
+                });
                 return {
                     ...checkout,
                     inventoryItem: inventoryItem || { name: checkout.itemName || checkout.item, price: 0 },
