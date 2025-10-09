@@ -264,6 +264,14 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 }
             }
 
+            // Update inventory quantities (add confirmed quantities to stock)
+            for (const match of matchedCheckouts) {
+                const inventoryRef = doc(db, 'items', match.inventoryItem.id);
+                const currentQty = match.inventoryItem.quantity || 0;
+                const newQty = currentQty + match.confirmedQuantity;
+                batch.update(inventoryRef, { quantity: newQty });
+            }
+
             await batch.commit();
 
             // Save processing result
