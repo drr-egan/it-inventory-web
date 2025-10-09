@@ -149,7 +149,6 @@ const CheckoutHistory = ({ user }) => {
 
     // Manual archive function
     const manualArchiveRecord = async (record) => {
-        if (!confirm(`Archive checkout record for ${record.itemName}?`)) return;
 
         try {
             const archiveData = {
