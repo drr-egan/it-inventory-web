@@ -3307,6 +3307,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             // Edit checkout record state
             const [editCheckoutRecord, setEditCheckoutRecord] = useState(null);
             const [showEditCheckoutModal, setShowEditCheckoutModal] = useState(false);
+            const [editRecordSource, setEditRecordSource] = useState('checkoutHistory'); // Track which collection
 
             // Form states for Add New Item
             const [newItemForm, setNewItemForm] = useState({
@@ -4497,7 +4498,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             };
 
             // Edit checkout record functions
-            const openEditCheckoutModal = (record) => {
+            const openEditCheckoutModal = (record, source = 'checkoutHistory') => {
                 setEditCheckoutRecord({
                     id: record.id,
                     itemName: record.itemName,
@@ -4507,6 +4508,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     jobNumber: record.jobNumber || '',
                     notes: record.notes || ''
                 });
+                setEditRecordSource(source); // Store which collection this record is from
                 setShowEditCheckoutModal(true);
             };
 
@@ -4519,7 +4521,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                 if (!editCheckoutRecord || !editCheckoutRecord.id) return;
 
                 try {
-                    const docRef = db.collection('checkoutHistory').doc(editCheckoutRecord.id);
+                    // Determine which collection to update based on editRecordSource
+                    const collectionName = editRecordSource === 'archivedCheckouts' ? 'archivedCheckouts' : 'checkoutHistory';
+                    const docRef = db.collection(collectionName).doc(editCheckoutRecord.id);
+
                     await docRef.update({
                         itemName: editCheckoutRecord.itemName,
                         userName: editCheckoutRecord.userName,
@@ -4530,12 +4535,20 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                     });
 
-                    // Update local state
-                    setCheckoutHistory(prev => prev.map(record =>
-                        record.id === editCheckoutRecord.id
-                            ? { ...record, ...editCheckoutRecord, quantity: parseInt(editCheckoutRecord.quantity) }
-                            : record
-                    ));
+                    // Update the appropriate local state array
+                    if (collectionName === 'archivedCheckouts') {
+                        setArchivedCheckouts(prev => prev.map(record =>
+                            record.id === editCheckoutRecord.id
+                                ? { ...record, ...editCheckoutRecord, quantity: parseInt(editCheckoutRecord.quantity) }
+                                : record
+                        ));
+                    } else {
+                        setCheckoutHistory(prev => prev.map(record =>
+                            record.id === editCheckoutRecord.id
+                                ? { ...record, ...editCheckoutRecord, quantity: parseInt(editCheckoutRecord.quantity) }
+                                : record
+                        ));
+                    }
 
                     closeEditCheckoutModal();
                     showSnackbar('Checkout record updated successfully', 'success');
@@ -8626,14 +8639,24 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                         </MaterialButton>
                                                                     </>
                                                                 ) : (
-                                                                    <MaterialButton
-                                                                        variant="text"
-                                                                        color="primary"
-                                                                        className="!p-2 !min-w-0"
-                                                                        onClick={() => unarchiveRecord(record)}
-                                                                    >
-                                                                        <span className="material-icons text-sm">unarchive</span>
-                                                                    </MaterialButton>
+                                                                    <>
+                                                                        <MaterialButton
+                                                                            variant="text"
+                                                                            color="primary"
+                                                                            className="!p-2 !min-w-0"
+                                                                            onClick={() => openEditCheckoutModal(record, 'archivedCheckouts')}
+                                                                        >
+                                                                            <span className="material-icons text-sm">edit</span>
+                                                                        </MaterialButton>
+                                                                        <MaterialButton
+                                                                            variant="text"
+                                                                            color="secondary"
+                                                                            className="!p-2 !min-w-0"
+                                                                            onClick={() => unarchiveRecord(record)}
+                                                                        >
+                                                                            <span className="material-icons text-sm">unarchive</span>
+                                                                        </MaterialButton>
+                                                                    </>
                                                                 )}
                                                             </div>
                                                         </td>
