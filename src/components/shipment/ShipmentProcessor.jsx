@@ -123,26 +123,52 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Build checkout records from the matched checkouts (selected items only)
             const allCheckoutRecords = matchedCheckouts.flatMap(match => {
-                // If no checkout records exist, create a synthetic entry with confirmedQuantity
-                if (match.checkoutRecords.length === 0) {
-                    return [{
-                        id: `synthetic-${match.inventoryItem.id}-${Date.now()}`,
-                        itemName: match.inventoryItem.name,
-                        userName: 'IT Stock',
-                        quantity: match.confirmedQuantity,
-                        departmentId: '1-20-000-5770',
-                        dateEntered: new Date(),
-                        inventoryItem: match.inventoryItem,
-                        confirmedPrice: match.confirmedPrice
-                    }];
+                const confirmedQty = match.confirmedQuantity;
+
+                // Sort checkout records by date (oldest first)
+                const sortedCheckouts = [...match.checkoutRecords].sort((a, b) => {
+                    const dateA = a.dateEntered?.toDate?.() || a.dateEntered || new Date(0);
+                    const dateB = b.dateEntered?.toDate?.() || b.dateEntered || new Date(0);
+                    return dateA - dateB;
+                });
+
+                // Take oldest records until we've accounted for confirmedQuantity units
+                const recordsToUse = [];
+                let accumulatedQty = 0;
+
+                for (const checkout of sortedCheckouts) {
+                    if (accumulatedQty >= confirmedQty) break;
+                    recordsToUse.push(checkout);
+                    accumulatedQty += (checkout.quantity || 1);
                 }
 
-                // Has checkout records - use them with confirmed price
-                return match.checkoutRecords.map(checkout => ({
+                // If we still need more units, create synthetic entries for shortfall
+                const shortfall = confirmedQty - accumulatedQty;
+                const syntheticEntries = [];
+
+                if (shortfall > 0) {
+                    for (let i = 0; i < shortfall; i++) {
+                        syntheticEntries.push({
+                            id: `synthetic-${match.inventoryItem.id}-${Date.now()}-${i}`,
+                            itemName: match.inventoryItem.name,
+                            userName: 'IT Stock',
+                            quantity: 1,
+                            departmentId: '1-20-000-5770',
+                            dateEntered: new Date(),
+                            inventoryItem: match.inventoryItem,
+                            confirmedPrice: match.confirmedPrice
+                        });
+                    }
+                }
+
+                // Map real records to include inventory item and confirmed price
+                const mappedRecords = recordsToUse.map(checkout => ({
                     ...checkout,
                     inventoryItem: match.inventoryItem,
                     confirmedPrice: match.confirmedPrice
                 }));
+
+                return [...mappedRecords, ...syntheticEntries];
             });
 
             // Calculate total quantity for distribution
