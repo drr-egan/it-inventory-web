@@ -5,7 +5,6 @@ import LoadingSpinner from './shared/LoadingSpinner';
 
 // Lazy load feature components
 const ShopManager = React.lazy(() => import('./shop/ShopManager'));
-const BarcodeScanner = React.lazy(() => import('./scanner/BarcodeScanner'));
 const InventoryManager = React.lazy(() => import('./inventory/InventoryManager'));
 const UsersManager = React.lazy(() => import('./users/UsersManager'));
 const AdminPanel = React.lazy(() => import('./admin/AdminPanel'));
@@ -146,7 +145,6 @@ const MainApp = ({ user }) => {
 
     const tabs = [
         { id: 'shop', name: 'Shop', icon: 'storefront', count: cart.length },
-        { id: 'scanner', name: 'Scanner', icon: 'qr_code_scanner' },
         { id: 'inventory', name: 'Inventory', icon: 'inventory_2', count: items.length },
         { id: 'users', name: 'Users', icon: 'people', count: users.length },
         { id: 'admin', name: 'Admin', icon: 'admin_panel_settings' },
@@ -171,8 +169,6 @@ const MainApp = ({ user }) => {
         switch (activeTab) {
             case 'shop':
                 return <ShopManager {...commonProps} />;
-            case 'scanner':
-                return <BarcodeScanner {...commonProps} />;
             case 'inventory':
                 return <InventoryManager {...commonProps} />;
             case 'users':
