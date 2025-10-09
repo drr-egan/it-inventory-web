@@ -140,21 +140,23 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const taxPerItem = totalQuantity > 0 ? tax / totalQuantity : 0;
             const feePerItem = totalQuantity > 0 ? fees / totalQuantity : 0;
 
-            // Group checkout records by cost code
-            const groupedByCostCode = allCheckoutRecords.reduce((groups, checkout) => {
+            // Group checkout records by item name and cost code
+            const groupedByItemAndCostCode = allCheckoutRecords.reduce((groups, checkout) => {
                 const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
-                if (!groups[costCode]) {
-                    groups[costCode] = [];
+                const itemName = checkout.inventoryItem.name;
+                const key = `${itemName}|${costCode}`;
+                if (!groups[key]) {
+                    groups[key] = [];
                 }
-                groups[costCode].push(checkout);
+                groups[key].push(checkout);
                 return groups;
             }, {});
 
-            // Build allocation records aggregated by cost code
-            const allocation = Object.entries(groupedByCostCode).map(([costCode, checkouts]) => {
+            // Build allocation records aggregated by item and cost code
+            const allocation = Object.entries(groupedByItemAndCostCode).map(([key, checkouts]) => {
+                const [itemName, costCode] = key.split('|');
                 const totalQty = checkouts.reduce((sum, c) => sum + (c.quantity || 1), 0);
                 const unitPrice = checkouts[0].confirmedPrice;
-                const itemName = checkouts[0].inventoryItem.name;
                 const itemTax = taxPerItem * totalQty;
                 const itemFees = feePerItem * totalQty;
 
@@ -374,8 +376,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Checkout details table header
             page.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
-            page.drawText('User', { x: 280, y: yPos, size: 9, font: boldFont });
-            page.drawText('Cost Code', { x: 450, y: yPos, size: 9, font: boldFont });
+            page.drawText('User', { x: 200, y: yPos, size: 9, font: boldFont });
+            page.drawText('Cost Code', { x: 320, y: yPos, size: 9, font: boldFont });
+            page.drawText('Unit Price', { x: 440, y: yPos, size: 9, font: boldFont });
+            page.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
             yPos -= 15;
 
             // Checkout details data
@@ -384,14 +388,22 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     break; // Stop if running out of space
                 }
 
-                const itemName = checkout.inventoryItem.name.length > 35 ?
-                    checkout.inventoryItem.name.substring(0, 35) + '...' : checkout.inventoryItem.name;
-                const userName = checkout.userName || checkout.user || 'N/A';
+                const itemName = checkout.inventoryItem.name.length > 25 ?
+                    checkout.inventoryItem.name.substring(0, 25) + '...' : checkout.inventoryItem.name;
+                const userName = (checkout.userName || checkout.user || 'N/A').length > 15 ?
+                    (checkout.userName || checkout.user || 'N/A').substring(0, 15) + '...' : (checkout.userName || checkout.user || 'N/A');
                 const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
+                const unitPrice = checkout.confirmedPrice;
+                const qty = checkout.quantity || 1;
+                const itemTax = taxPerItem * qty;
+                const itemFees = feePerItem * qty;
+                const totalCost = (unitPrice * qty) + itemTax + itemFees;
 
                 page.drawText(itemName, { x: 50, y: yPos, size: 9, font });
-                page.drawText(userName, { x: 280, y: yPos, size: 9, font });
-                page.drawText(costCode, { x: 450, y: yPos, size: 9, font });
+                page.drawText(userName, { x: 200, y: yPos, size: 9, font });
+                page.drawText(costCode, { x: 320, y: yPos, size: 9, font });
+                page.drawText(`$${unitPrice.toFixed(2)}`, { x: 440, y: yPos, size: 9, font });
+                page.drawText(`$${totalCost.toFixed(2)}`, { x: 500, y: yPos, size: 9, font });
                 yPos -= 15;
             }
 
