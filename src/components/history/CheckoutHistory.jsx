@@ -106,9 +106,9 @@ const CheckoutHistory = ({ user }) => {
     const openEditCheckoutModal = (record, source = 'checkoutHistory') => {
         setEditCheckoutRecord({
             id: record.id,
-            itemName: record.itemName,
-            userName: record.userName,
-            quantity: record.quantity,
+            itemName: record.itemName ?? '',
+            userName: record.userName ?? '',
+            quantity: record.quantity ?? '',
             departmentId: record.departmentId || record.costCode || '',
             jobNumber: record.jobNumber || '',
             notes: record.notes || ''

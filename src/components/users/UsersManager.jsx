@@ -116,10 +116,10 @@ const UsersManager = ({ users }) => {
     const startEdit = (user) => {
         setEditingUser(user);
         setFormData({
-            firstName: user.firstName,
-            lastName: user.lastName,
-            costCode: user.costCode,
-            email: user.email || ''
+            firstName: user.firstName ?? '',
+            lastName: user.lastName ?? '',
+            costCode: user.costCode ?? '',
+            email: user.email ?? ''
         });
         setShowAddForm(true);
     };
