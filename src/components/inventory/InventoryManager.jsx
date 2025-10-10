@@ -564,7 +564,7 @@ const InventoryManager = ({ user }) => {
                                                 {editingItems[item.id] ? (
                                                     <input
                                                         type="number"
-                                                        value={editingItems[item.id].quantity ?? item.quantity}
+                                                        value={editingItems[item.id]?.quantity ?? item.quantity ?? 0}
                                                         onChange={(e) => handleEditChange(item.id, 'quantity', e.target.value)}
                                                         className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                                     />
@@ -585,7 +585,7 @@ const InventoryManager = ({ user }) => {
                                                     <input
                                                         type="number"
                                                         step="0.01"
-                                                        value={editingItems[item.id].price ?? item.price}
+                                                        value={editingItems[item.id]?.price ?? item.price ?? 0}
                                                         onChange={(e) => handleEditChange(item.id, 'price', e.target.value)}
                                                         className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                                     />
@@ -634,7 +634,7 @@ const InventoryManager = ({ user }) => {
                                                     <MaterialButton
                                                         onClick={() => setEditingItems(prev => ({
                                                             ...prev,
-                                                            [item.id]: { quantity: item.quantity, price: item.price }
+                                                            [item.id]: { quantity: item.quantity ?? 0, price: item.price ?? 0 }
                                                         }))}
                                                         variant="text"
                                                         color="primary"
