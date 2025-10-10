@@ -1,8 +1,8 @@
 import React, { forwardRef } from 'react';
 
-const MaterialInput = forwardRef(({ label, type = 'text', value, onChange, placeholder = ' ', ...props }, ref) => {
+const MaterialInput = forwardRef(({ label, type = 'text', value, onChange, placeholder = ' ', children, ...props }, ref) => {
     return (
-        <div className="mat-input">
+        <div className="mat-input" style={{ position: 'relative' }}>
             <input
                 ref={ref}
                 type={type}
@@ -12,6 +12,7 @@ const MaterialInput = forwardRef(({ label, type = 'text', value, onChange, place
                 {...props}
             />
             <label>{label}</label>
+            {children}
         </div>
     );
 });
