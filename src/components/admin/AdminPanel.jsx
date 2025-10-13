@@ -268,16 +268,14 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                 if (replaceAllUsers) {
                     if (!confirm(`WARNING: You are about to DELETE ALL ${users.length} existing users and replace them with the CSV data.\n\nThis action CANNOT be undone!\n\nContinue?`)) {
                         setCsvOperations(prev => ({ ...prev, importingUsers: false }));
-                        setUploadStatus('❌ Import cancelled by user');
                         event.target.value = '';
                         return;
                     }
 
-                    setUploadStatus('⏳ Deleting all existing users...');
-
                     try {
                         // Delete all users in batches
                         const batchSize = 100;
+                        let deletedCount = 0;
                         for (let i = 0; i < users.length; i += batchSize) {
                             const batch = writeBatch(db);
                             const batchUsers = users.slice(i, i + batchSize);
@@ -288,13 +286,14 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                             });
 
                             await batch.commit();
+                            deletedCount += batchUsers.length;
                         }
 
-                        setUploadStatus(`⏳ Deleted ${users.length} users. Now importing from CSV...`);
+                        console.log(`Deleted ${deletedCount} users before import`);
                     } catch (deleteError) {
                         console.error('Error deleting users:', deleteError);
                         setCsvOperations(prev => ({ ...prev, importingUsers: false }));
-                        setUploadStatus(`❌ Error deleting users: ${deleteError.message}`);
+                        alert(`Failed to delete existing users: ${deleteError.message}`);
                         event.target.value = '';
                         return;
                     }
