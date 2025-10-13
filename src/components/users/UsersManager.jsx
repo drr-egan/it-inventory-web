@@ -20,7 +20,7 @@ const UsersManager = ({ users }) => {
         firstName: '',
         lastName: '',
         costCode: '',
-        email: ''
+        employeeID: ''
     });
 
     // Search and filter
@@ -29,7 +29,7 @@ const UsersManager = ({ users }) => {
         return users.filter(user =>
             `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.costCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+            user.employeeID?.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [users, searchTerm]);
 
@@ -66,7 +66,7 @@ const UsersManager = ({ users }) => {
             });
 
             setUploadStatus('✅ User added successfully');
-            setFormData({ firstName: '', lastName: '', costCode: '', email: '' });
+            setFormData({ firstName: '', lastName: '', costCode: '', employeeID: '' });
             setShowAddForm(false);
             setTimeout(() => setUploadStatus(''), 3000);
         } catch (error) {
@@ -90,7 +90,7 @@ const UsersManager = ({ users }) => {
 
             setUploadStatus('✅ User updated successfully');
             setEditingUser(null);
-            setFormData({ firstName: '', lastName: '', costCode: '', email: '' });
+            setFormData({ firstName: '', lastName: '', costCode: '', employeeID: '' });
             setTimeout(() => setUploadStatus(''), 3000);
         } catch (error) {
             console.error('Error updating user:', error);
@@ -119,7 +119,7 @@ const UsersManager = ({ users }) => {
             firstName: user.firstName ?? '',
             lastName: user.lastName ?? '',
             costCode: user.costCode ?? '',
-            email: user.email ?? ''
+            employeeID: user.employeeID ?? ''
         });
         setShowAddForm(true);
     };
@@ -127,7 +127,7 @@ const UsersManager = ({ users }) => {
     // Cancel edit
     const cancelEdit = () => {
         setEditingUser(null);
-        setFormData({ firstName: '', lastName: '', costCode: '', email: '' });
+        setFormData({ firstName: '', lastName: '', costCode: '', employeeID: '' });
         setShowAddForm(false);
     };
 
@@ -170,7 +170,7 @@ const UsersManager = ({ users }) => {
                                 firstName: row.FirstName.trim(),
                                 lastName: row.LastName.trim(),
                                 costCode: row.CostCode.trim(),
-                                email: row.Email?.trim() || '',
+                                employeeID: row.EmployeeID?.trim() || '',
                                 createdAt: Timestamp.now(),
                                 updatedAt: Timestamp.now()
                             });
@@ -210,12 +210,12 @@ const UsersManager = ({ users }) => {
             return;
         }
 
-        const headers = ['FirstName', 'LastName', 'CostCode', 'Email'];
+        const headers = ['EmployeeID', 'FirstName', 'LastName', 'CostCode'];
         const rows = users.map(user => [
+            user.employeeID || '',
             user.firstName,
             user.lastName,
-            user.costCode,
-            user.email || ''
+            user.costCode
         ]);
 
         const csvContent = [
@@ -303,9 +303,9 @@ const UsersManager = ({ users }) => {
 
                 {/* CSV Format Info */}
                 <div className="info-box text-sm">
-                    <strong>CSV Format:</strong> FirstName, LastName, CostCode, Email (optional)
+                    <strong>CSV Format:</strong> EmployeeID, FirstName, LastName, CostCode
                     <br />
-                    <strong>Example:</strong> John, Doe, 2-20-060-5770, john.doe@example.com
+                    <strong>Example:</strong> EMP001, John, Doe, 2-20-060-5770
                 </div>
 
                 {/* Status Message */}
@@ -351,11 +351,11 @@ const UsersManager = ({ users }) => {
                                 required
                             />
                             <MaterialInput
-                                label="Email"
-                                name="email"
-                                type="email"
-                                value={formData.email}
+                                label="Employee ID"
+                                name="employeeID"
+                                value={formData.employeeID}
                                 onChange={handleInputChange}
+                                placeholder="e.g., EMP001"
                             />
                         </div>
                         <div className="flex gap-3">
@@ -381,7 +381,7 @@ const UsersManager = ({ users }) => {
                         setSearchTerm(e.target.value);
                         setCurrentPage(1);
                     }}
-                    placeholder="Search by name, cost code, or email..."
+                    placeholder="Search by name, cost code, or employee ID..."
                 >
                     <span className="material-icons" style={{ position: 'absolute', right: '12px', top: '16px', color: 'var(--color-text-muted)' }}>
                         search
@@ -411,7 +411,7 @@ const UsersManager = ({ users }) => {
                                     <tr className="border-b border-[var(--md-sys-color-outline-variant)]">
                                         <th className="text-left p-3" style={{ color: 'var(--color-text-light)' }}>Name</th>
                                         <th className="text-left p-3" style={{ color: 'var(--color-text-light)' }}>Cost Code</th>
-                                        <th className="text-left p-3" style={{ color: 'var(--color-text-light)' }}>Email</th>
+                                        <th className="text-left p-3" style={{ color: 'var(--color-text-light)' }}>Employee ID</th>
                                         <th className="text-right p-3" style={{ color: 'var(--color-text-light)' }}>Actions</th>
                                     </tr>
                                 </thead>
@@ -427,7 +427,7 @@ const UsersManager = ({ users }) => {
                                                 </span>
                                             </td>
                                             <td className="p-3" style={{ color: 'var(--color-text-muted)' }}>
-                                                {user.email || '-'}
+                                                {user.employeeID || '-'}
                                             </td>
                                             <td className="p-3 text-right">
                                                 <div className="flex gap-2 justify-end">
