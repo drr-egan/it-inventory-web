@@ -94,18 +94,19 @@
 2. **Sign In**: Click "Continue with Google" (primary) or 📧 icon (email fallback)
 3. **Explore**: Navigate through tabs - Shop, Scanner, Inventory, Users, Admin, Process Shipment, History
 
-### Local Development
+### For Contributors (Optional)
+To contribute changes, fork the repository and test locally:
 ```bash
-# Clone repository
-git clone https://github.com/drr-egan/it-inventory-web.git
+# Clone your fork
+git clone https://github.com/YOUR-USERNAME/it-inventory-web.git
 cd it-inventory-web
 
-# Serve locally
+# Test locally (optional - connects to live Firebase)
 python3 -m http.server 8080
-
-# Access application
 open http://localhost:8080
 ```
+
+**Note**: The application connects to Firebase regardless of where it's hosted. Local testing is optional - you can develop and test directly on your GitHub Pages fork.
 
 ## 📊 Data Management
 

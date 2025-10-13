@@ -4,38 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an IT Inventory Management web application built with React (via CDN) that runs as a single-page application (SPA). The application supports **multiple deployment models** to accommodate different environments and requirements.
+This is an IT Inventory Management web application built with React (via CDN) that runs as a single-page application (SPA) deployed on GitHub Pages with Firebase backend.
 
-## Architecture & Deployment Models
+## Architecture & Deployment
 
-The application supports three distinct deployment architectures:
+The application uses a cloud-based architecture for production deployment:
 
-### 1. **GitHub Pages + Firebase (Production)**
-*Current production deployment for cloud-based multi-user access*
+### **GitHub Pages + Firebase (Production)**
+*Production deployment for cloud-based multi-user access*
 
 - **Frontend**: GitHub Pages hosting with `index-github-pages.html`
 - **Backend**: Firebase Firestore with real-time synchronization
 - **Authentication**: Firebase Auth with Google sign-in
-- **Data Storage**: Firebase Firestore collections (items, users, checkoutHistory)
+- **Data Storage**: Firebase Firestore collections (items, users, checkoutHistory, archivedCheckouts)
 - **Deployment**: Automated via GitHub Actions workflow
 - **Features**: Multi-user collaboration, real-time updates, authentication, Material Design UI
 
-### 2. **GitHub Pages + LocalStorage (Fallback)**
-*Client-side data storage for offline-capable deployment*
+### **Fallback Mode (Optional)**
+*Client-side data storage for offline scenarios*
 
-- **Frontend**: GitHub Pages hosting with data adapter pattern
-- **Backend**: Mock API using `github-pages-adapter.js`
-- **Data Storage**: Browser localStorage with static JSON file initialization
-- **Features**: Offline functionality, client-side data persistence, no authentication required
-
-### 3. **Local Development (Legacy)**
-*For local development and testing - localhost ports 8080/3001*
-
-- **Frontend**: Local HTTP server (`python3 -m http.server 8080`)
-- **Backend**: SQLite API server (`simple-api-server.py`) on port 3001
-- **Data Storage**: SQLite database (`inventory.db`)
-- **Launcher**: Coordinated startup via `start-app.py`
-- **Note**: All localhost port references (8080, 3001) apply ONLY to this local development mode
+- **Data Storage**: Browser localStorage with static JSON file initialization via `github-pages-adapter.js`
+- **Features**: Offline functionality, client-side data persistence
+- **Note**: Used automatically when Firebase is unavailable
 
 ## Key Components
 
@@ -48,10 +38,10 @@ The application consists of several main functional areas:
 - **Checkout History**: View and import historical checkout records with Current/Archive toggle for processed shipments
 - **Notifications**: Display low stock alerts and export functionality
 
-## Deployment Commands
+## Deployment
 
-### Production (GitHub Pages + Firebase)
-**Current deployment mode - automatically deployed via GitHub Actions**
+### Automated GitHub Actions Deployment
+**Production deployment is fully automated**
 
 No manual commands needed. Push to main branch triggers automatic deployment:
 1. GitHub Actions copies `index-github-pages.html` to `index.html`
@@ -59,34 +49,7 @@ No manual commands needed. Push to main branch triggers automatic deployment:
 3. Deploys to GitHub Pages
 4. Application connects to Firebase for real-time data
 
-**Access**: Via GitHub Pages URL (e.g., `https://username.github.io/it-inventory-app`)
-
-### Local Development (Legacy)
-**For development and testing only - uses localhost ports 8080/3001**
-
-```bash
-# Start complete local environment
-python3 start-app.py
-```
-This starts both the SQLite API server (port 3001) and HTTP server (port 8080).
-
-**Prerequisites**: Python 3 and SQLite support required.
-
-**Database Setup**: Create/update SQLite database from JSON:
-```bash
-python3 convert-to-sqlite.py
-```
-
-**Manual Server Management**:
-```bash
-# Start SQLite API server only (port 3001)
-python3 simple-api-server.py
-
-# Start HTTP server only (port 8080)
-python3 -m http.server 8080
-```
-
-**⚠️ Important**: All localhost port references (8080, 3001) apply ONLY to local development mode and are not relevant for the current GitHub Pages + Firebase production deployment.
+**Access**: Via your GitHub Pages URL
 
 ## Firebase Configuration
 
@@ -174,9 +137,8 @@ Items can be managed through multiple methods:
 
 ### Item Pricing System
 The system includes comprehensive pricing support:
-- **Price Storage**: Items can have price data stored as decimal values in SQLite database
-- **Database Schema**: Items table includes `price REAL DEFAULT 0.0` column
-- **API Support**: PATCH and POST endpoints support price field for updates and creation
+- **Price Storage**: Items can have price data stored in Firestore as decimal values
+- **Firebase Integration**: Items collection includes `price` field for each item
 - **Visual Display**: Prices shown prominently in green ($XX.XX format) throughout the interface
 - **Conditional Rendering**: Prices only display when > 0 to avoid clutter
 - **Cost Allocation**: Prices used in shipment cost calculations and reporting
@@ -367,7 +329,7 @@ The CSV template includes columns:
 ## Data Management APIs
 
 ### Firebase API (Production)
-**Current production backend - cloud-based Firestore**
+**Primary backend - cloud-based Firestore**
 
 Firestore collections:
 - **items**: Inventory management with real-time synchronization
@@ -378,82 +340,37 @@ Firestore collections:
 **Authentication**: Firebase Auth with Google sign-in required
 **Real-time Updates**: Automatic synchronization across all connected clients
 
-### GitHub Pages Adapter API (Fallback)
-**Client-side mock API for offline functionality**
+**Supported Item Fields**: `name`, `asin`, `quantity`, `minThreshold`, `category`, `price`
 
-Mock endpoints via `github-pages-adapter.js`:
-- `GET/POST/PATCH/DELETE /items` - Inventory management
-- `GET/POST/PATCH/DELETE /users` - User management
-- `GET/POST/DELETE /checkoutHistory` - Checkout records
+### Fallback Mode (Offline)
+**Client-side storage for offline scenarios**
 
-**Storage**: Browser localStorage with JSON file initialization
-**Persistence**: Local to browser, no server required
-
-### SQLite API (Local Development Only)
-**Legacy backend for local development - localhost:3001**
-
-REST endpoints at `http://localhost:3001`:
-- `GET/POST/PATCH/DELETE /items` - Inventory management (supports price field)
-- `GET/POST/PATCH/DELETE /users` - User management
-- `GET/POST/DELETE /checkoutHistory` - Checkout records
-
-**⚠️ Note**: SQLite API endpoints are only available in local development mode and do not apply to the current GitHub Pages + Firebase production deployment.
-
-### Supported Item Fields
-All deployment modes support: `name`, `asin`, `quantity`, `minThreshold`, `category`, `price`
-
-## Version Management
-
-The application uses git branching for production vs beta development:
-
-### Branches
-- **production**: Stable, tested version for daily use
-- **beta**: Development branch for testing new features
-
-### Branch Management Scripts
-- `python3 switch-to-production.py` - Switch to stable production version
-- `python3 switch-to-beta.py` - Switch to beta testing version  
-- `python3 version-info.py` - Show current version and server status
-
-### Workflow
-1. **Daily Use**: Stay on production branch for reliable operation
-2. **Feature Testing**: Switch to beta branch to test new features
-3. **Issue Found**: Immediately switch back to production, report issues
-4. **Feature Ready**: New features are merged from beta to production
+Fallback storage via `github-pages-adapter.js`:
+- Uses browser localStorage with JSON file initialization
+- Provides basic CRUD operations when Firebase is unavailable
+- Data persists locally in browser only
+- No authentication required in fallback mode
 
 ## File Structure
 
-### Production Files (GitHub Pages + Firebase)
-- `index-github-pages.html` - **Production application** with Firebase integration
+### Production Files
+- `index-github-pages.html` - **Main production application** with Firebase integration
 - `index.html` - Generated during deployment (copy of index-github-pages.html)
-- `firebase-app-material.html` - Alternative Firebase implementation with Material Design
-- `index-firebase-github.html` - GitHub Pages + Firebase hybrid version
 - `.github/workflows/deploy.yml` - **GitHub Actions deployment workflow**
+- `github-pages-adapter.js` - Client-side data adapter for localStorage fallback mode
+- `cart-icon.png` - Application icon asset
+
+### Data Files
 - `data/` - Static JSON files for fallback initialization
   - `items.json` - Default inventory items
   - `users.json` - Default user data
   - `checkoutHistory.json` - Initial checkout history
-  - `archivedCheckouts.json` - Sample archived checkout records (if needed for fallback mode)
+  - `archivedCheckouts.json` - Sample archived checkout records
 
-### Fallback/Development Files
-- `github-pages-adapter.js` - **Client-side data adapter** for localStorage mode
+### Alternative Implementations
+- `firebase-app-material.html` - Alternative Firebase implementation with Material Design
+- `index-firebase-github.html` - GitHub Pages + Firebase hybrid version
 - `index-firebase.html` - Firebase-only implementation
-- `cart-icon.png` - Application icon asset
-
-### Local Development Files (Legacy)
-- `start-app.py` - Local development launcher script
-- `simple-api-server.py` - SQLite API server (localhost:3001)
-- `convert-to-sqlite.py` - JSON to SQLite migration script
-- `inventory.db` - SQLite database file
-- `db.json` - Legacy JSON data file
-- `switch-to-production.py` - Branch management script
-- `switch-to-beta.py` - Branch management script
-- `version-info.py` - Local version information script
-
-### Development Files
-- `mobile-preview.html` - Mobile interface testing
-- `debug.html` - Debug interface
-- `test-*.html` - Various testing interfaces
 
 ## Development Notes
 
@@ -465,7 +382,7 @@ The application uses git branching for production vs beta development:
 - **Error Boundaries**: Comprehensive error handling with graceful degradation
 
 ### Data Architecture
-- **Adapter Pattern**: Data access abstracted through adapters (Firebase, localStorage, SQLite)
+- **Adapter Pattern**: Data access abstracted through adapters (Firebase primary, localStorage fallback)
 - **Real-time Sync**: Firebase provides real-time data synchronization across clients
 - **Offline Support**: GitHub Pages adapter enables offline functionality with localStorage
 - **Authentication**: Firebase Auth with Google sign-in for multi-user access
@@ -485,24 +402,6 @@ The application uses git branching for production vs beta development:
 
 ## Troubleshooting
 
-### Price Update Issues
-If price updates from Process Shipment aren't reflecting in Inventory Management:
-
-1. **Database Schema**: Ensure items table has price column
-   ```bash
-   python3 -c "import sqlite3; conn = sqlite3.connect('inventory.db'); cursor = conn.cursor(); cursor.execute('PRAGMA table_info(items)'); print([row for row in cursor.fetchall()]); conn.close()"
-   ```
-   Should show price column: `(6, 'price', 'REAL', 0, '0.0', 0)`
-
-2. **API Server**: Verify price field is supported in PATCH requests
-   - Check `simple-api-server.py` line 245 includes 'price' in allowed fields
-   - Restart API server after making changes
-
-3. **Test Price Updates**: Verify API accepts price updates
-   ```bash
-   curl -X PATCH http://localhost:3001/items/{id} -H "Content-Type: application/json" -d '{"price": 99.99}'
-   ```
-
 ### White Screen Issues
 If the app shows a white screen, check:
 
@@ -511,27 +410,13 @@ If the app shows a white screen, check:
    - Ensure all JSX fragments `<>` and `</>` are properly used
    - Check for duplicate function declarations
 
-2. **Data Loading Issues**: Verify `useEffect` hooks are uncommented
-   - Data fetching should occur on component mount
-   - Check API server is running on port 3001
-   - Verify SQLite database exists and has data
+2. **Firebase Connection**: Verify Firebase is properly initialized
+   - Check browser console for Firebase connection errors
+   - Verify Firebase config in `index-github-pages.html`
+   - Check network connectivity to Firebase services
 
 3. **Component Rendering**: Ensure `ReactDOM.render` calls the correct component
    - Should render `<App />` not `<AppDebug />`
-
-### Common Fixes
-```bash
-# Kill all servers and restart fresh
-lsof -ti:8080 | xargs kill -9 2>/dev/null
-lsof -ti:3001 | xargs kill -9 2>/dev/null
-python3 start-app.py
-
-# If database API fails to start automatically
-nohup python3 simple-api-server.py > api_server.log 2>&1 &
-
-# Update database from JSON if needed
-python3 convert-to-sqlite.py
-```
 
 ### PDF Processing Issues
 If PDF appending fails:
@@ -540,7 +425,7 @@ If PDF appending fails:
 3. Test with different PDF file sizes/formats
 4. System automatically falls back to standalone report generation
 
-### Firebase Connection Issues (Production)
+### Firebase Connection Issues
 **For GitHub Pages + Firebase deployment:**
 
 1. **Authentication Problems**:
@@ -558,25 +443,8 @@ If PDF appending fails:
    - Verify `index-github-pages.html` is being copied correctly
    - Ensure static data files are valid JSON
 
-### Local Development Issues (Legacy)
-**For localhost development only:**
-
-```bash
-# Verify local API server is running (localhost:3001)
-curl -s http://localhost:3001/items >/dev/null && echo "API OK" || echo "API Down"
-
-# Check SQLite database exists
-ls -la inventory.db
-
-# Kill conflicting processes
-lsof -ti:8080 | xargs kill -9 2>/dev/null
-lsof -ti:3001 | xargs kill -9 2>/dev/null
-```
-
-**⚠️ Important**: Port issues (8080, 3001) only apply to local development mode and are not relevant for the current GitHub Pages + Firebase production deployment.
-
-### Data Adapter Issues
-**For GitHub Pages + localStorage fallback:**
+### Data Adapter Issues (Fallback Mode)
+**If using localStorage fallback:**
 
 - Check browser console for adapter initialization messages
 - Verify static JSON files in `/data/` directory are valid
