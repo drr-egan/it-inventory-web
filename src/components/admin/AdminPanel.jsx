@@ -30,6 +30,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
         exportingItems: false,
         exportingUsers: false
     });
+    const [replaceAllUsers, setReplaceAllUsers] = useState(false);
 
     // Create new item
     const handleCreateItem = async (e) => {
@@ -263,6 +264,42 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                 const lines = csv.split('\n');
                 const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
 
+                // If Replace All Users option is checked, delete all existing users first
+                if (replaceAllUsers) {
+                    if (!confirm(`WARNING: You are about to DELETE ALL ${users.length} existing users and replace them with the CSV data.\n\nThis action CANNOT be undone!\n\nContinue?`)) {
+                        setCsvOperations(prev => ({ ...prev, importingUsers: false }));
+                        setUploadStatus('❌ Import cancelled by user');
+                        event.target.value = '';
+                        return;
+                    }
+
+                    setUploadStatus('⏳ Deleting all existing users...');
+
+                    try {
+                        // Delete all users in batches
+                        const batchSize = 100;
+                        for (let i = 0; i < users.length; i += batchSize) {
+                            const batch = writeBatch(db);
+                            const batchUsers = users.slice(i, i + batchSize);
+
+                            batchUsers.forEach(u => {
+                                const userRef = doc(db, 'users', u.id);
+                                batch.delete(userRef);
+                            });
+
+                            await batch.commit();
+                        }
+
+                        setUploadStatus(`⏳ Deleted ${users.length} users. Now importing from CSV...`);
+                    } catch (deleteError) {
+                        console.error('Error deleting users:', deleteError);
+                        setCsvOperations(prev => ({ ...prev, importingUsers: false }));
+                        setUploadStatus(`❌ Error deleting users: ${deleteError.message}`);
+                        event.target.value = '';
+                        return;
+                    }
+                }
+
                 let successCount = 0;
                 let errorCount = 0;
 
@@ -303,25 +340,22 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                             continue;
                         }
 
-                        // Check if user already exists by employeeID or by name if no employeeID
-                        let existingUser = null;
-                        if (userData.employeeID) {
-                            existingUser = users.find(u => u.employeeID === userData.employeeID);
-                        } else {
-                            // For users without employeeID, match by firstName + lastName
-                            existingUser = users.find(u =>
-                                !u.employeeID &&
-                                u.firstName === userData.firstName &&
-                                u.lastName === userData.lastName
-                            );
-                        }
+                        // Check if user already exists by NAME FIRST (to prevent duplicates)
+                        // This matches any user with the same firstName + lastName, regardless of employeeID
+                        const normalizedFirstName = userData.firstName.toLowerCase().trim();
+                        const normalizedLastName = userData.lastName.toLowerCase().trim();
+
+                        let existingUser = users.find(u =>
+                            u.firstName?.toLowerCase().trim() === normalizedFirstName &&
+                            u.lastName?.toLowerCase().trim() === normalizedLastName
+                        );
 
                         userData.name = `${userData.firstName} ${userData.lastName}`;
                         userData.status = 'active';
                         userData.costCode = userData.costCode || `${Date.now()}-${Math.floor(Math.random() * 1000)}-5770`;
 
                         if (existingUser) {
-                            // Update existing user if data is different
+                            // Update existing user with new data (including employeeID if present)
                             const hasChanges = (
                                 existingUser.firstName !== userData.firstName ||
                                 existingUser.lastName !== userData.lastName ||
@@ -343,7 +377,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                                 continue;
                             }
                         } else {
-                            // Create new user
+                            // Create new user (only if name doesn't exist)
                             userData.createdAt = serverTimestamp();
                             userData.createdBy = user?.employeeID || user?.email || 'csv-import';
                             await addDoc(collection(db, 'users'), userData);
@@ -355,7 +389,8 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                     }
                 }
 
-                alert(`Import completed: ${successCount} users added, ${errorCount} errors`);
+                const importMode = replaceAllUsers ? 'replaced' : 'added/updated';
+                alert(`Import completed: ${successCount} users ${importMode}, ${errorCount} errors`);
             } catch (error) {
                 alert(`Import failed: ${error.message}`);
             } finally {
@@ -392,82 +427,56 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
 
     // Remove duplicate users based on multiple criteria
     const handleRemoveDuplicateUsers = async () => {
-        if (!confirm('Are you sure you want to remove duplicate users? This will analyze duplicates by employeeID, name, and other criteria, keeping the most complete/recent version of each unique user.')) {
+        if (!confirm('Are you sure you want to remove duplicate users? This will analyze ALL users by name, keeping users with employeeID over those without, and preferring the most complete/recent version.')) {
             return;
         }
 
         try {
             const duplicates = [];
-            const keepUsers = new Set();
+            const keepUsers = new Map(); // Map of normalizedName -> user to keep
 
-            // First pass: Group by employeeID (highest priority)
-            const employeeIdMap = new Map();
-            users.forEach(user => {
-                if (user.employeeID) {
-                    if (!employeeIdMap.has(user.employeeID)) {
-                        employeeIdMap.set(user.employeeID, []);
-                    }
-                    employeeIdMap.get(user.employeeID).push(user);
-                }
-            });
-
-            // Process employeeID groups
-            employeeIdMap.forEach((userList, employeeID) => {
-                if (userList.length > 1) {
-                    // Sort by completeness and recency
-                    const sorted = userList.sort((a, b) => {
-                        // Prefer users with more complete data
-                        const aComplete = (a.firstName ? 1 : 0) + (a.lastName ? 1 : 0) + (a.costCode ? 1 : 0) + (a.department ? 1 : 0);
-                        const bComplete = (b.firstName ? 1 : 0) + (b.lastName ? 1 : 0) + (b.costCode ? 1 : 0) + (b.department ? 1 : 0);
-
-                        if (aComplete !== bComplete) return bComplete - aComplete;
-
-                        // Then by recency
-                        const dateA = a.updatedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0);
-                        const dateB = b.updatedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0);
-                        return dateB - dateA;
-                    });
-
-                    keepUsers.add(sorted[0].id);
-                    duplicates.push(...sorted.slice(1));
-                } else {
-                    keepUsers.add(userList[0].id);
-                }
-            });
-
-            // Second pass: Group remaining users (without employeeID) by normalized name
+            // Group ALL users by normalized name (firstName + lastName)
             const nameMap = new Map();
             users.forEach(user => {
-                if (!user.employeeID && !keepUsers.has(user.id)) {
-                    const normalizedName = `${user.firstName?.toLowerCase().trim()}_${user.lastName?.toLowerCase().trim()}`;
-                    if (!nameMap.has(normalizedName)) {
-                        nameMap.set(normalizedName, []);
-                    }
-                    nameMap.get(normalizedName).push(user);
+                const normalizedName = `${user.firstName?.toLowerCase().trim()}_${user.lastName?.toLowerCase().trim()}`;
+                if (!nameMap.has(normalizedName)) {
+                    nameMap.set(normalizedName, []);
                 }
+                nameMap.get(normalizedName).push(user);
             });
 
-            // Process name groups
+            // Process each name group to find duplicates
             nameMap.forEach((userList, normalizedName) => {
                 if (userList.length > 1) {
-                    // Sort by completeness and recency
+                    // Sort users to find the best one to keep
                     const sorted = userList.sort((a, b) => {
-                        // Prefer users with more complete data
-                        const aComplete = (a.costCode ? 1 : 0) + (a.department ? 1 : 0);
-                        const bComplete = (b.costCode ? 1 : 0) + (b.department ? 1 : 0);
+                        // Priority 1: Prefer users WITH employeeID
+                        const aHasId = a.employeeID ? 1 : 0;
+                        const bHasId = b.employeeID ? 1 : 0;
+                        if (aHasId !== bHasId) return bHasId - aHasId;
 
+                        // Priority 2: Prefer users with more complete data
+                        const aComplete = (a.firstName ? 1 : 0) + (a.lastName ? 1 : 0) +
+                                        (a.costCode ? 1 : 0) + (a.department ? 1 : 0) +
+                                        (a.employeeID ? 1 : 0);
+                        const bComplete = (b.firstName ? 1 : 0) + (b.lastName ? 1 : 0) +
+                                        (b.costCode ? 1 : 0) + (b.department ? 1 : 0) +
+                                        (b.employeeID ? 1 : 0);
                         if (aComplete !== bComplete) return bComplete - aComplete;
 
-                        // Then by recency
+                        // Priority 3: Prefer more recent users
                         const dateA = a.updatedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0);
                         const dateB = b.updatedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0);
                         return dateB - dateA;
                     });
 
-                    keepUsers.add(sorted[0].id);
+                    // Keep the best user (first after sorting)
+                    keepUsers.set(normalizedName, sorted[0]);
+                    // Mark all others as duplicates
                     duplicates.push(...sorted.slice(1));
-                } else if (userList.length === 1) {
-                    keepUsers.add(userList[0].id);
+                } else {
+                    // Only one user with this name, keep it
+                    keepUsers.set(normalizedName, userList[0]);
                 }
             });
 
@@ -476,20 +485,23 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                 return;
             }
 
-            // Show summary before deletion
+            // Show detailed summary before deletion
             const summary = duplicates.reduce((acc, user) => {
+                acc.total++;
                 if (user.employeeID) {
-                    acc.byEmployeeId++;
+                    acc.withEmployeeId++;
                 } else {
-                    acc.byName++;
+                    acc.withoutEmployeeId++;
                 }
                 return acc;
-            }, { byEmployeeId: 0, byName: 0 });
+            }, { total: 0, withEmployeeId: 0, withoutEmployeeId: 0 });
 
             const confirmMessage = `Found ${duplicates.length} duplicate users:\n` +
-                `- ${summary.byEmployeeId} duplicates by Employee ID\n` +
-                `- ${summary.byName} duplicates by name\n\n` +
-                `This will keep ${keepUsers.size} unique users. Continue?`;
+                `- ${summary.withEmployeeId} duplicates WITH employee ID\n` +
+                `- ${summary.withoutEmployeeId} duplicates WITHOUT employee ID\n\n` +
+                `This will keep ${keepUsers.size} unique users.\n` +
+                `Preference: Users WITH employeeID > Complete data > Recent\n\n` +
+                `Continue with deletion?`;
 
             if (!confirm(confirmMessage)) {
                 return;
@@ -497,6 +509,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
 
             // Delete duplicates in batches
             const batchSize = 100;
+            let deletedCount = 0;
             for (let i = 0; i < duplicates.length; i += batchSize) {
                 const batch = writeBatch(db);
                 const batchDuplicates = duplicates.slice(i, i + batchSize);
@@ -507,10 +520,12 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                 });
 
                 await batch.commit();
+                deletedCount += batchDuplicates.length;
             }
 
-            alert(`Successfully removed ${duplicates.length} duplicate users. ${keepUsers.size} unique users remain.`);
+            alert(`Successfully removed ${deletedCount} duplicate users.\n${keepUsers.size} unique users remain.`);
         } catch (error) {
+            console.error('Error removing duplicates:', error);
             alert(`Failed to remove duplicates: ${error.message}`);
         }
     };
@@ -720,6 +735,18 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                                     </MaterialButton>
                                 </div>
                             </div>
+                            <div className="mt-3 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                                <input
+                                    type="checkbox"
+                                    id="replace-all-users"
+                                    checked={replaceAllUsers}
+                                    onChange={(e) => setReplaceAllUsers(e.target.checked)}
+                                    className="mt-1"
+                                />
+                                <label htmlFor="replace-all-users" className="text-xs text-[var(--md-sys-color-on-surface)] cursor-pointer">
+                                    <span className="font-semibold text-orange-600">Replace All Users</span> - Delete all existing users before importing CSV (use with caution!)
+                                </label>
+                            </div>
                         </div>
                         <div className="border-t border-[var(--md-sys-color-outline-variant)] pt-4">
                             <h4 className="font-medium text-[var(--md-sys-color-on-surface)] mb-2">Export Data</h4>
@@ -824,7 +851,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                             <p className="font-medium mb-1">⚠️ Bulk Operations:</p>
                             <p><strong>Edit/Prices:</strong> Use CSV export → edit → import workflow</p>
                             <p><strong>Reset:</strong> Sets ALL item quantities to zero (permanent!)</p>
-                            <p><strong>Duplicates:</strong> Removes duplicate users by employeeID (keeps most recent)</p>
+                            <p><strong>Duplicates:</strong> Removes users with same name (keeps users WITH employeeID over those without)</p>
                         </div>
                     </div>
                 </MaterialCard>
