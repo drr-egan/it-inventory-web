@@ -415,6 +415,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             yPos -= 10;
 
+            // Quantity total for allocation summary
+            const totalAllocationQty = allocation.reduce((sum, item) => sum + item.quantity, 0);
+            currentPage.drawText(`Total Items: ${totalAllocationQty}`, { x: 50, y: yPos, size: 9, font: boldFont });
+            yPos -= 20;
+
             // Financial totals (right-aligned like the invoice)
             const totalsX = 420;
             currentPage.drawText(`Subtotal (Items): $${totals.subtotal.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
@@ -485,6 +490,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 currentPage.drawText(`$${totalCost.toFixed(2)}`, { x: 490, y: yPos, size: 9, font });
                 yPos -= 15;
             }
+
+            // Quantity total for individual checkout details
+            yPos -= 5;
+            const totalIndividualQty = allCheckoutRecords.reduce((sum, checkout) => sum + (checkout.quantity || 1), 0);
+            currentPage.drawText(`Total Items: ${totalIndividualQty}`, { x: 50, y: yPos, size: 9, font: boldFont });
 
             // Save and download PDF
             const pdfBytes = await pdfDoc.save();
