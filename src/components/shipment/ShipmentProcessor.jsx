@@ -138,8 +138,22 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
                 for (const checkout of sortedCheckouts) {
                     if (accumulatedQty >= confirmedQty) break;
-                    recordsToUse.push(checkout);
-                    accumulatedQty += (checkout.quantity || 1);
+
+                    const checkoutQty = checkout.quantity || 1;
+                    const remainingQty = confirmedQty - accumulatedQty;
+
+                    if (remainingQty < checkoutQty) {
+                        // Would overshoot - create partial checkout with only remaining quantity needed
+                        recordsToUse.push({
+                            ...checkout,
+                            quantity: remainingQty
+                        });
+                        accumulatedQty += remainingQty;
+                    } else {
+                        // Won't overshoot - add full checkout
+                        recordsToUse.push(checkout);
+                        accumulatedQty += checkoutQty;
+                    }
                 }
 
                 // If we still need more units, create synthetic entries for shortfall
