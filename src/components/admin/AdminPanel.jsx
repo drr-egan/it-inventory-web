@@ -390,35 +390,84 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
         }
     };
 
-    // Remove duplicate users based on employeeID or name for users without employeeID
+    // Remove duplicate users based on multiple criteria
     const handleRemoveDuplicateUsers = async () => {
-        if (!confirm('Are you sure you want to remove duplicate users? This will keep the most recently updated version of each unique user.')) {
+        if (!confirm('Are you sure you want to remove duplicate users? This will analyze duplicates by employeeID, name, and other criteria, keeping the most complete/recent version of each unique user.')) {
             return;
         }
 
         try {
-            const userMap = new Map();
             const duplicates = [];
+            const keepUsers = new Set();
 
-            // Group users by employeeID or by name for users without employeeID
+            // First pass: Group by employeeID (highest priority)
+            const employeeIdMap = new Map();
             users.forEach(user => {
-                const key = user.employeeID || `${user.firstName}_${user.lastName}`;
-                if (!userMap.has(key)) {
-                    userMap.set(key, []);
+                if (user.employeeID) {
+                    if (!employeeIdMap.has(user.employeeID)) {
+                        employeeIdMap.set(user.employeeID, []);
+                    }
+                    employeeIdMap.get(user.employeeID).push(user);
                 }
-                userMap.get(key).push(user);
             });
 
-            // Find duplicates (more than one user per key)
-            userMap.forEach((userList, key) => {
+            // Process employeeID groups
+            employeeIdMap.forEach((userList, employeeID) => {
                 if (userList.length > 1) {
-                    // Sort by updatedAt (most recent first), keep the first one
+                    // Sort by completeness and recency
                     const sorted = userList.sort((a, b) => {
+                        // Prefer users with more complete data
+                        const aComplete = (a.firstName ? 1 : 0) + (a.lastName ? 1 : 0) + (a.costCode ? 1 : 0) + (a.department ? 1 : 0);
+                        const bComplete = (b.firstName ? 1 : 0) + (b.lastName ? 1 : 0) + (b.costCode ? 1 : 0) + (b.department ? 1 : 0);
+
+                        if (aComplete !== bComplete) return bComplete - aComplete;
+
+                        // Then by recency
                         const dateA = a.updatedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0);
                         const dateB = b.updatedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0);
                         return dateB - dateA;
                     });
-                    duplicates.push(...sorted.slice(1)); // All except the first (most recent)
+
+                    keepUsers.add(sorted[0].id);
+                    duplicates.push(...sorted.slice(1));
+                } else {
+                    keepUsers.add(userList[0].id);
+                }
+            });
+
+            // Second pass: Group remaining users (without employeeID) by normalized name
+            const nameMap = new Map();
+            users.forEach(user => {
+                if (!user.employeeID && !keepUsers.has(user.id)) {
+                    const normalizedName = `${user.firstName?.toLowerCase().trim()}_${user.lastName?.toLowerCase().trim()}`;
+                    if (!nameMap.has(normalizedName)) {
+                        nameMap.set(normalizedName, []);
+                    }
+                    nameMap.get(normalizedName).push(user);
+                }
+            });
+
+            // Process name groups
+            nameMap.forEach((userList, normalizedName) => {
+                if (userList.length > 1) {
+                    // Sort by completeness and recency
+                    const sorted = userList.sort((a, b) => {
+                        // Prefer users with more complete data
+                        const aComplete = (a.costCode ? 1 : 0) + (a.department ? 1 : 0);
+                        const bComplete = (b.costCode ? 1 : 0) + (b.department ? 1 : 0);
+
+                        if (aComplete !== bComplete) return bComplete - aComplete;
+
+                        // Then by recency
+                        const dateA = a.updatedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0);
+                        const dateB = b.updatedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0);
+                        return dateB - dateA;
+                    });
+
+                    keepUsers.add(sorted[0].id);
+                    duplicates.push(...sorted.slice(1));
+                } else if (userList.length === 1) {
+                    keepUsers.add(userList[0].id);
                 }
             });
 
@@ -427,15 +476,40 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                 return;
             }
 
-            // Delete duplicates
-            const batch = writeBatch(db);
-            duplicates.forEach(user => {
-                const userRef = doc(db, 'users', user.id);
-                batch.delete(userRef);
-            });
+            // Show summary before deletion
+            const summary = duplicates.reduce((acc, user) => {
+                if (user.employeeID) {
+                    acc.byEmployeeId++;
+                } else {
+                    acc.byName++;
+                }
+                return acc;
+            }, { byEmployeeId: 0, byName: 0 });
 
-            await batch.commit();
-            alert(`Removed ${duplicates.length} duplicate users.`);
+            const confirmMessage = `Found ${duplicates.length} duplicate users:\n` +
+                `- ${summary.byEmployeeId} duplicates by Employee ID\n` +
+                `- ${summary.byName} duplicates by name\n\n` +
+                `This will keep ${keepUsers.size} unique users. Continue?`;
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            // Delete duplicates in batches
+            const batchSize = 100;
+            for (let i = 0; i < duplicates.length; i += batchSize) {
+                const batch = writeBatch(db);
+                const batchDuplicates = duplicates.slice(i, i + batchSize);
+
+                batchDuplicates.forEach(user => {
+                    const userRef = doc(db, 'users', user.id);
+                    batch.delete(userRef);
+                });
+
+                await batch.commit();
+            }
+
+            alert(`Successfully removed ${duplicates.length} duplicate users. ${keepUsers.size} unique users remain.`);
         } catch (error) {
             alert(`Failed to remove duplicates: ${error.message}`);
         }
