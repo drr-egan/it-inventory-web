@@ -142,11 +142,12 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
         setCsvOperations(prev => ({ ...prev, exportingUsers: true }));
 
         try {
-            const headers = ['First Name', 'Last Name', 'Cost Code', 'Department', 'Status'];
+            const headers = ['EmployeeID', 'First Name', 'Last Name', 'Cost Code', 'Department', 'Status'];
             const csvRows = [headers.join(',')];
 
             users.forEach(user => {
                 const row = [
+                    `"${user.employeeID || ''}"`,
                     `"${user.firstName || ''}"`,
                     `"${user.lastName || ''}"`,
                     `"${user.costCode || user.cost_code || ''}"`,
@@ -274,6 +275,11 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
 
                         headers.forEach((header, index) => {
                             switch(header.toLowerCase()) {
+                                case 'employeeid':
+                                case 'employee id':
+                                case 'employee_id':
+                                    userData.employeeID = values[index];
+                                    break;
                                 case 'first name':
                                 case 'firstname':
                                     userData.firstName = values[index];
@@ -598,7 +604,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                         <div className="text-xs text-[var(--md-sys-color-on-surface-variant)] p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                             <p className="font-medium mb-1">📋 CSV Format Tips:</p>
                             <p><strong>Items:</strong> Item Name, Category, Quantity, Price, ASIN, Min Threshold</p>
-                            <p><strong>Users:</strong> First Name, Last Name, Cost Code, Email, Department</p>
+                            <p><strong>Users:</strong> EmployeeID, First Name, Last Name, Cost Code, Department</p>
                         </div>
                     </div>
                 </MaterialCard>
