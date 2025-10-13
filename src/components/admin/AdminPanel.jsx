@@ -303,14 +303,44 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                             continue;
                         }
 
+                        // Check if user already exists by employeeID
+                        let existingUser = null;
+                        if (userData.employeeID) {
+                            existingUser = users.find(u => u.employeeID === userData.employeeID);
+                        }
+
                         userData.name = `${userData.firstName} ${userData.lastName}`;
                         userData.status = 'active';
                         userData.costCode = userData.costCode || `${Date.now()}-${Math.floor(Math.random() * 1000)}-5770`;
-                        userData.createdAt = serverTimestamp();
-                        userData.createdBy = user?.employeeID || user?.email || 'csv-import';
 
-                        await addDoc(collection(db, 'users'), userData);
-                        successCount++;
+                        if (existingUser) {
+                            // Update existing user if data is different
+                            const hasChanges = (
+                                existingUser.firstName !== userData.firstName ||
+                                existingUser.lastName !== userData.lastName ||
+                                existingUser.costCode !== userData.costCode ||
+                                existingUser.department !== userData.department
+                            );
+
+                            if (hasChanges) {
+                                const userRef = doc(db, 'users', existingUser.id);
+                                await updateDoc(userRef, {
+                                    ...userData,
+                                    updatedAt: serverTimestamp(),
+                                    updatedBy: user?.employeeID || user?.email || 'csv-import'
+                                });
+                                successCount++;
+                            } else {
+                                // No changes needed, skip
+                                continue;
+                            }
+                        } else {
+                            // Create new user
+                            userData.createdAt = serverTimestamp();
+                            userData.createdBy = user?.employeeID || user?.email || 'csv-import';
+                            await addDoc(collection(db, 'users'), userData);
+                            successCount++;
+                        }
                     } catch (userError) {
                         errorCount++;
                         console.error('Error importing user:', userError);
@@ -349,6 +379,58 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
             alert(`Reset quantities for ${items.length} items`);
         } catch (error) {
             alert(`Bulk reset failed: ${error.message}`);
+        }
+    };
+
+    // Remove duplicate users based on employeeID
+    const handleRemoveDuplicateUsers = async () => {
+        if (!confirm('Are you sure you want to remove duplicate users? This will keep the most recently updated version of each employeeID.')) {
+            return;
+        }
+
+        try {
+            const userMap = new Map();
+            const duplicates = [];
+
+            // Group users by employeeID
+            users.forEach(user => {
+                if (user.employeeID) {
+                    if (!userMap.has(user.employeeID)) {
+                        userMap.set(user.employeeID, []);
+                    }
+                    userMap.get(user.employeeID).push(user);
+                }
+            });
+
+            // Find duplicates (more than one user per employeeID)
+            userMap.forEach((userList, employeeID) => {
+                if (userList.length > 1) {
+                    // Sort by updatedAt (most recent first), keep the first one
+                    const sorted = userList.sort((a, b) => {
+                        const dateA = a.updatedAt?.toDate?.() || a.createdAt?.toDate?.() || new Date(0);
+                        const dateB = b.updatedAt?.toDate?.() || b.createdAt?.toDate?.() || new Date(0);
+                        return dateB - dateA;
+                    });
+                    duplicates.push(...sorted.slice(1)); // All except the first (most recent)
+                }
+            });
+
+            if (duplicates.length === 0) {
+                alert('No duplicate users found.');
+                return;
+            }
+
+            // Delete duplicates
+            const batch = writeBatch(db);
+            duplicates.forEach(user => {
+                const userRef = doc(db, 'users', user.id);
+                batch.delete(userRef);
+            });
+
+            await batch.commit();
+            alert(`Removed ${duplicates.length} duplicate users.`);
+        } catch (error) {
+            alert(`Failed to remove duplicates: ${error.message}`);
         }
     };
 
@@ -646,12 +728,22 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                                     <span className="material-icons mr-2">restore</span>
                                     Reset All Quantities to Zero
                                 </MaterialButton>
+                                <MaterialButton
+                                    onClick={handleRemoveDuplicateUsers}
+                                    variant="outlined"
+                                    color="warning"
+                                    className="w-full"
+                                >
+                                    <span className="material-icons mr-2">cleaning_services</span>
+                                    Remove Duplicate Users
+                                </MaterialButton>
                             </div>
                         </div>
                         <div className="text-xs text-[var(--md-sys-color-on-surface-variant)] p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
                             <p className="font-medium mb-1">⚠️ Bulk Operations:</p>
                             <p><strong>Edit/Prices:</strong> Use CSV export → edit → import workflow</p>
                             <p><strong>Reset:</strong> Sets ALL item quantities to zero (permanent!)</p>
+                            <p><strong>Duplicates:</strong> Removes duplicate users by employeeID (keeps most recent)</p>
                         </div>
                     </div>
                 </MaterialCard>
