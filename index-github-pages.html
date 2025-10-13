@@ -4084,9 +4084,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                     const { PDFDocument, rgb, StandardFonts } = PDFLib;
 
-                    // Load the original PDF
+                    // Load the original PDF (with encryption support)
                     const originalPdfBytes = await pdfFile.arrayBuffer();
-                    const originalPdfDoc = await PDFDocument.load(originalPdfBytes);
+                    const originalPdfDoc = await PDFDocument.load(originalPdfBytes, { ignoreEncryption: true });
 
                     // Add a new page for the cost allocation report
                     const page = originalPdfDoc.addPage([612, 792]); // Letter size
