@@ -113,6 +113,31 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             return;
         }
 
+        // Debug logging: Show what's about to be processed
+        console.log('=== SHIPMENT PROCESSING DEBUG ===');
+        console.log('Matched checkouts:', matchedCheckouts.length);
+        matchedCheckouts.forEach((match, index) => {
+            console.log(`Item ${index + 1}: ${match.inventoryItem.name}`);
+            console.log(`  - Confirmed Quantity: ${match.confirmedQuantity}`);
+            console.log(`  - Confirmed Price: $${match.confirmedPrice}`);
+            console.log(`  - Checkout Records: ${match.checkoutRecords.length}`);
+        });
+        const totalExpectedItems = matchedCheckouts.reduce((sum, match) => sum + match.confirmedQuantity, 0);
+        console.log(`Total Expected Items: ${totalExpectedItems}`);
+        console.log('=================================');
+
+        // Confirmation dialog with item breakdown
+        const itemsList = matchedCheckouts.map(match =>
+            `  • ${match.inventoryItem.name}: ${match.confirmedQuantity} items @ $${match.confirmedPrice.toFixed(2)}`
+        ).join('\n');
+
+        const confirmMessage = `You are about to process ${matchedCheckouts.length} item type(s) with a total of ${totalExpectedItems} items:\n\n${itemsList}\n\nDo you want to proceed?`;
+
+        if (!confirm(confirmMessage)) {
+            setStatus('❌ Processing cancelled by user');
+            return;
+        }
+
         setIsProcessing(true);
         setStatus('⏳ Processing receipt and generating cost allocation...');
 
@@ -187,6 +212,17 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Calculate total quantity for distribution
             const totalQuantity = allCheckoutRecords.reduce((sum, checkout) => sum + (checkout.quantity || 1), 0);
+
+            // Debug logging: Verify allocated records match expectations
+            console.log('=== ALLOCATION RESULT ===');
+            console.log(`Total checkout records allocated: ${allCheckoutRecords.length}`);
+            console.log(`Total item quantity: ${totalQuantity}`);
+            if (totalQuantity !== totalExpectedItems) {
+                console.warn(`⚠️ MISMATCH: Expected ${totalExpectedItems} items but allocated ${totalQuantity}!`);
+            } else {
+                console.log(`✓ Quantities match!`);
+            }
+            console.log('========================');
 
             // Distribute tax and fees per item unit (quantity-based)
             const taxPerItem = totalQuantity > 0 ? tax / totalQuantity : 0;
@@ -314,7 +350,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             setManualFees('');
             setUploadedPdf(null);
 
-            setStatus('✅ Shipment processed successfully! Report downloaded and items archived.');
+            setStatus(`✅ Shipment processed successfully! ${totalQuantity} items from ${matchedCheckouts.length} product type(s) included in report. PDF downloaded and items archived.`);
             setIsProcessing(false);
 
         } catch (error) {
@@ -480,11 +516,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Checkout details table header
             currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('User', { x: 180, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Qty', { x: 300, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Cost Code', { x: 330, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Unit Price', { x: 430, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Total Cost', { x: 490, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('User', { x: 210, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Qty', { x: 330, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Cost Code', { x: 360, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Unit Price', { x: 460, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Total Cost', { x: 520, y: yPos, size: 9, font: boldFont });
             yPos -= 15;
 
             // Checkout details data
@@ -494,11 +530,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     currentPage = pdfDoc.addPage([612, 792]);
                     yPos = height - 50;
                     currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('User', { x: 180, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Qty', { x: 300, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Cost Code', { x: 330, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Unit Price', { x: 430, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Total Cost', { x: 490, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('User', { x: 210, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Qty', { x: 330, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Cost Code', { x: 360, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Unit Price', { x: 460, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Total Cost', { x: 520, y: yPos, size: 9, font: boldFont });
                     yPos -= 15;
                 }
 
@@ -514,11 +550,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 const totalCost = (unitPrice * qty) + itemTax + itemFees;
 
                 currentPage.drawText(itemName, { x: 50, y: yPos, size: 9, font });
-                currentPage.drawText(userName, { x: 180, y: yPos, size: 9, font });
-                currentPage.drawText(String(qty), { x: 300, y: yPos, size: 9, font });
-                currentPage.drawText(costCode, { x: 330, y: yPos, size: 9, font });
-                currentPage.drawText(`$${unitPrice.toFixed(2)}`, { x: 430, y: yPos, size: 9, font });
-                currentPage.drawText(`$${totalCost.toFixed(2)}`, { x: 490, y: yPos, size: 9, font });
+                currentPage.drawText(userName, { x: 210, y: yPos, size: 9, font });
+                currentPage.drawText(String(qty), { x: 330, y: yPos, size: 9, font });
+                currentPage.drawText(costCode, { x: 360, y: yPos, size: 9, font });
+                currentPage.drawText(`$${unitPrice.toFixed(2)}`, { x: 460, y: yPos, size: 9, font });
+                currentPage.drawText(`$${totalCost.toFixed(2)}`, { x: 520, y: yPos, size: 9, font });
                 yPos -= 15;
             }
 
