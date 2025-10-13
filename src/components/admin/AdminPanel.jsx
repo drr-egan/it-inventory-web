@@ -303,10 +303,17 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                             continue;
                         }
 
-                        // Check if user already exists by employeeID
+                        // Check if user already exists by employeeID or by name if no employeeID
                         let existingUser = null;
                         if (userData.employeeID) {
                             existingUser = users.find(u => u.employeeID === userData.employeeID);
+                        } else {
+                            // For users without employeeID, match by firstName + lastName
+                            existingUser = users.find(u =>
+                                !u.employeeID &&
+                                u.firstName === userData.firstName &&
+                                u.lastName === userData.lastName
+                            );
                         }
 
                         userData.name = `${userData.firstName} ${userData.lastName}`;
@@ -319,7 +326,8 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                                 existingUser.firstName !== userData.firstName ||
                                 existingUser.lastName !== userData.lastName ||
                                 existingUser.costCode !== userData.costCode ||
-                                existingUser.department !== userData.department
+                                existingUser.department !== userData.department ||
+                                existingUser.employeeID !== userData.employeeID
                             );
 
                             if (hasChanges) {
@@ -382,9 +390,9 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
         }
     };
 
-    // Remove duplicate users based on employeeID
+    // Remove duplicate users based on employeeID or name for users without employeeID
     const handleRemoveDuplicateUsers = async () => {
-        if (!confirm('Are you sure you want to remove duplicate users? This will keep the most recently updated version of each employeeID.')) {
+        if (!confirm('Are you sure you want to remove duplicate users? This will keep the most recently updated version of each unique user.')) {
             return;
         }
 
@@ -392,18 +400,17 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
             const userMap = new Map();
             const duplicates = [];
 
-            // Group users by employeeID
+            // Group users by employeeID or by name for users without employeeID
             users.forEach(user => {
-                if (user.employeeID) {
-                    if (!userMap.has(user.employeeID)) {
-                        userMap.set(user.employeeID, []);
-                    }
-                    userMap.get(user.employeeID).push(user);
+                const key = user.employeeID || `${user.firstName}_${user.lastName}`;
+                if (!userMap.has(key)) {
+                    userMap.set(key, []);
                 }
+                userMap.get(key).push(user);
             });
 
-            // Find duplicates (more than one user per employeeID)
-            userMap.forEach((userList, employeeID) => {
+            // Find duplicates (more than one user per key)
+            userMap.forEach((userList, key) => {
                 if (userList.length > 1) {
                     // Sort by updatedAt (most recent first), keep the first one
                     const sorted = userList.sort((a, b) => {
