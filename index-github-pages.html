@@ -3671,11 +3671,11 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                         if (matchingRecords.length > 0) {
                             // Distribute quantity across matching records
+                            // NOTE: Process ALL matching records to show complete audit trail in PDF
                             let remainingQty = details.quantity;
                             for (const record of matchingRecords) {
-                                if (remainingQty <= 0) break;
-
-                                const allocatedQty = Math.min(record.quantity, remainingQty);
+                                // Calculate allocated quantity (may be 0 if no quantity remaining)
+                                const allocatedQty = remainingQty > 0 ? Math.min(record.quantity, remainingQty) : 0;
                                 const costPerUnit = details.price;
 
                                 // Handle job numbers vs department IDs
@@ -3694,6 +3694,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                 matchedCheckoutRecords.push({
                                     ...record,
                                     allocatedQuantity: allocatedQty,
+                                    checkoutQuantity: record.quantity,  // Preserve original checkout quantity
                                     unitPrice: costPerUnit,
                                     totalCost: costPerUnit * allocatedQty,
                                     displayUser: displayUser,
@@ -3803,7 +3804,9 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     const pdfStorageData = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
 
                     // Archive processed checkout records and remove from checkout history
-                    await archiveAndRemoveCheckoutRecords(matchedCheckoutRecords);
+                    // Only archive records that actually received allocation (allocatedQuantity > 0)
+                    const recordsToArchive = matchedCheckoutRecords.filter(record => record.allocatedQuantity > 0);
+                    await archiveAndRemoveCheckoutRecords(recordsToArchive);
 
                     // Update processing results with storage data (Firebase or in-memory)
                     const resultData = {
