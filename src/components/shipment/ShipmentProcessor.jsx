@@ -378,11 +378,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Table header
             currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Qty', { x: 250, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Job/Cost Code', { x: 280, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Units', { x: 380, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Unit Price', { x: 420, y: yPos, size: 9, font: boldFont });
-            currentPage.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Qty', { x: 280, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Job/Cost Code', { x: 320, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Unit Price', { x: 440, y: yPos, size: 9, font: boldFont });
+            currentPage.drawText('Total Cost', { x: 510, y: yPos, size: 9, font: boldFont });
             yPos -= 15;
 
             // Table data
@@ -393,23 +392,21 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     yPos = height - 50;
                     // Re-draw table header on new page
                     currentPage.drawText('Item Description', { x: 50, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Qty', { x: 250, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Job/Cost Code', { x: 280, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Units', { x: 380, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Unit Price', { x: 420, y: yPos, size: 9, font: boldFont });
-                    currentPage.drawText('Total Cost', { x: 500, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Qty', { x: 280, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Job/Cost Code', { x: 320, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Unit Price', { x: 440, y: yPos, size: 9, font: boldFont });
+                    currentPage.drawText('Total Cost', { x: 510, y: yPos, size: 9, font: boldFont });
                     yPos -= 15;
                 }
 
-                const itemName = item.itemName.length > 35 ?
-                    item.itemName.substring(0, 35) + '...' : item.itemName;
+                const itemName = item.itemName.length > 45 ?
+                    item.itemName.substring(0, 45) + '...' : item.itemName;
 
                 currentPage.drawText(itemName, { x: 50, y: yPos, size: 9, font });
-                currentPage.drawText(String(item.quantity), { x: 250, y: yPos, size: 9, font });
-                currentPage.drawText(item.costCode || '-', { x: 280, y: yPos, size: 9, font });
-                currentPage.drawText(String(item.quantity), { x: 380, y: yPos, size: 9, font });
-                currentPage.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 420, y: yPos, size: 9, font });
-                currentPage.drawText(`$${item.totalCost.toFixed(2)}`, { x: 500, y: yPos, size: 9, font });
+                currentPage.drawText(String(item.quantity), { x: 280, y: yPos, size: 9, font });
+                currentPage.drawText(item.costCode || '-', { x: 320, y: yPos, size: 9, font });
+                currentPage.drawText(`$${item.unitPrice.toFixed(2)}`, { x: 440, y: yPos, size: 9, font });
+                currentPage.drawText(`$${item.totalCost.toFixed(2)}`, { x: 510, y: yPos, size: 9, font });
                 yPos -= 15;
             }
 
@@ -471,10 +468,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     yPos -= 15;
                 }
 
-                const itemName = checkout.inventoryItem.name.length > 25 ?
-                    checkout.inventoryItem.name.substring(0, 25) + '...' : checkout.inventoryItem.name;
-                const userName = (checkout.userName || checkout.user || 'N/A').length > 12 ?
-                    (checkout.userName || checkout.user || 'N/A').substring(0, 12) + '...' : (checkout.userName || checkout.user || 'N/A');
+                const itemName = checkout.inventoryItem.name.length > 30 ?
+                    checkout.inventoryItem.name.substring(0, 30) + '...' : checkout.inventoryItem.name;
+                const userName = (checkout.userName || checkout.user || 'N/A').length > 20 ?
+                    (checkout.userName || checkout.user || 'N/A').substring(0, 20) + '...' : (checkout.userName || checkout.user || 'N/A');
                 const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
                 const unitPrice = checkout.confirmedPrice;
                 const qty = checkout.quantity || 1;
