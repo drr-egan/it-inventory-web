@@ -502,10 +502,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            const filename = orderNumber ?
-                `receipt-with-allocation-${orderNumber}.pdf` :
-                `receipt-with-allocation-${new Date().toISOString().split('T')[0]}.pdf`;
-            link.download = filename;
+            // Use original uploaded filename to preserve file identity
+            link.download = uploadedPdf.name;
             link.click();
             URL.revokeObjectURL(url);
 
