@@ -155,7 +155,7 @@ const CheckoutHistory = ({ user }) => {
                 ...record,
                 archivedAt: serverTimestamp(),
                 manuallyArchived: true,
-                archivedBy: user?.email || 'unknown'
+                archivedBy: user?.employeeID || user?.email || 'unknown'
             };
             delete archiveData.id;
 

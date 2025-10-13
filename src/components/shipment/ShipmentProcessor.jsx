@@ -242,7 +242,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     orderNumber: orderNumber || 'N/A',
                     receiptDate: receiptDate || new Date().toISOString().split('T')[0],
                     processedAt: Timestamp.now(),
-                    processedBy: user?.email || 'Unknown',
+                    processedBy: user?.employeeID || user?.email || 'Unknown',
                     type: costCode.includes('Job') ? 'job' : 'it_stock'
                 });
 
@@ -251,7 +251,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     const archivedData = {
                         ...checkout,
                         archivedAt: Timestamp.now(),
-                        archivedBy: user?.email || 'Unknown',
+                        archivedBy: user?.employeeID || user?.email || 'Unknown',
                         archiveReason: 'Processed receipt'
                     };
                     delete archivedData.id;

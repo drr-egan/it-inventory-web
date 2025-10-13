@@ -45,7 +45,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                 minThreshold: parseInt(newItemForm.minThreshold) || 5,
                 createdAt: serverTimestamp(),
                 lastUpdated: serverTimestamp(),
-                createdBy: user?.email || 'admin'
+                createdBy: user?.employeeID || user?.email || 'admin'
             };
 
             await addDoc(collection(db, 'items'), itemData);
@@ -81,7 +81,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                 department: newUserForm.department || 'General',
                 status: 'active',
                 createdAt: serverTimestamp(),
-                createdBy: user?.email || 'admin'
+                createdBy: user?.employeeID || user?.email || 'admin'
             };
 
             await addDoc(collection(db, 'users'), userData);
@@ -226,7 +226,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
 
                         item.createdAt = serverTimestamp();
                         item.lastUpdated = serverTimestamp();
-                        item.createdBy = user?.email || 'csv-import';
+                        item.createdBy = user?.employeeID || user?.email || 'csv-import';
 
                         await addDoc(collection(db, 'items'), item);
                         successCount++;
@@ -301,7 +301,7 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                         userData.status = 'active';
                         userData.costCode = userData.costCode || `${Date.now()}-${Math.floor(Math.random() * 1000)}-5770`;
                         userData.createdAt = serverTimestamp();
-                        userData.createdBy = user?.email || 'csv-import';
+                        userData.createdBy = user?.employeeID || user?.email || 'csv-import';
 
                         await addDoc(collection(db, 'users'), userData);
                         successCount++;
