@@ -228,7 +228,13 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const total = subtotal + tax + fees;
 
             // Generate PDF report (append to uploaded PDF)
-            await generateCostAllocationReport(allocation, { subtotal, tax, fees, total, taxPerItem, feePerItem }, uploadedPdf, allCheckoutRecords);
+            await generateCostAllocationReport(
+                allocation,
+                { subtotal, tax, fees, total, taxPerItem, feePerItem },
+                uploadedPdf,
+                allCheckoutRecords,
+                { vendorName, orderNumber, receiptDate }
+            );
 
             // Use batch for atomic operations
             const batch = writeBatch(db);
@@ -319,7 +325,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     };
 
     // Generate PDF cost allocation report matching oldinvoice.pdf format
-    const generateCostAllocationReport = async (allocation, totals, uploadedPdf, allCheckoutRecords) => {
+    const generateCostAllocationReport = async (allocation, totals, uploadedPdf, allCheckoutRecords, shipmentDetails) => {
         try {
             const PDFLib = window.PDFLib;
             const { PDFDocument, rgb, StandardFonts } = PDFLib;
@@ -348,24 +354,38 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             });
             yPos -= 25;
 
-            // Generated timestamp
-            const generatedDate = new Date().toLocaleString('en-US', {
-                month: 'numeric',
-                day: 'numeric',
-                year: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric',
-                second: 'numeric',
-                hour12: true
-            });
-            currentPage.drawText(`Generated: ${generatedDate}`, {
-                x: 50,
-                y: yPos,
-                size: 10,
-                font: font,
-                color: rgb(0, 0, 0)
-            });
-            yPos -= 20;
+            // Shipment Details
+            if (shipmentDetails.vendorName) {
+                currentPage.drawText(`Vendor: ${shipmentDetails.vendorName}`, {
+                    x: 50,
+                    y: yPos,
+                    size: 10,
+                    font: font,
+                    color: rgb(0, 0, 0)
+                });
+                yPos -= 15;
+            }
+            if (shipmentDetails.orderNumber) {
+                currentPage.drawText(`Order Number: ${shipmentDetails.orderNumber}`, {
+                    x: 50,
+                    y: yPos,
+                    size: 10,
+                    font: font,
+                    color: rgb(0, 0, 0)
+                });
+                yPos -= 15;
+            }
+            if (shipmentDetails.receiptDate) {
+                currentPage.drawText(`Receipt Date: ${shipmentDetails.receiptDate}`, {
+                    x: 50,
+                    y: yPos,
+                    size: 10,
+                    font: font,
+                    color: rgb(0, 0, 0)
+                });
+                yPos -= 15;
+            }
+            yPos -= 5;
 
             // Tax and fees distribution note
             if (totals.tax > 0 || totals.fees > 0) {
