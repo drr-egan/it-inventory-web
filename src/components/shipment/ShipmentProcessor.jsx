@@ -653,10 +653,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-full mr-2 text-sm font-bold" style={{ background: 'var(--color-primary-blue)', color: 'white' }}>1</span>
                     <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>inventory_2</span>
-                    Select Items from Inventory ({selectedInventoryItems.length} selected)
+                    Search & Add Items ({selectedInventoryItems.length} selected)
                 </h3>
 
-                {/* Search */}
+                {/* Search Input */}
                 <div className="mb-4">
                     <div className="relative">
                         <input
@@ -664,84 +664,123 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                             placeholder="Search by item name, category, or ASIN..."
                             value={inventorySearchQuery}
                             onChange={(e) => setInventorySearchQuery(e.target.value)}
-                            className="w-full px-4 py-2 rounded-lg border border-[var(--md-sys-color-outline-variant)]"
+                            className="w-full px-4 py-3 rounded-lg border-2 border-[var(--md-sys-color-outline-variant)] focus:border-[var(--color-primary-blue)] transition-colors"
                             style={{
                                 background: 'var(--md-sys-color-surface)',
                                 color: 'var(--color-text-light)'
                             }}
                         />
-                        <span className="material-icons absolute right-3 top-2.5" style={{ color: 'var(--color-text-muted)' }}>
+                        <span className="material-icons absolute right-3 top-3" style={{ color: 'var(--color-text-muted)' }}>
                             search
                         </span>
                     </div>
                 </div>
 
-                {/* Inventory Items Table */}
-                <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                        <thead style={{ background: 'var(--md-sys-color-surface-container-high)' }}>
-                            <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Select</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Item</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Category</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Qty</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Price</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: 'var(--color-text-light)' }}>Cost Code</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredInventoryItems.slice(0, 20).map((item) => {
-                                const isSelected = selectedInventoryItems.some(selected => selected.id === item.id);
-                                const costCode = 'IT Stock 1-20-000-5770'; // Default, will be updated from checkout records during processing
+                {/* Search Results Dropdown */}
+                {inventorySearchQuery && filteredInventoryItems.length > 0 && (
+                    <div className="mb-4 border border-[var(--md-sys-color-outline-variant)] rounded-lg overflow-hidden" style={{ maxHeight: '300px', overflowY: 'auto', background: 'var(--md-sys-color-surface)' }}>
+                        {filteredInventoryItems.slice(0, 10).map((item) => {
+                            const isAlreadySelected = selectedInventoryItems.some(selected => selected.id === item.id);
 
-                                return (
-                                    <tr
-                                        key={item.id}
-                                        className={`border-b border-[var(--md-sys-color-outline-variant)] cursor-pointer hover:bg-[var(--md-sys-color-surface-container-highest)] ${
-                                            isSelected ? 'bg-[rgba(59,130,246,0.15)]' : ''
-                                        }`}
-                                        onClick={() => handleToggleInventoryItem(item)}
-                                    >
-                                        <td className="px-4 py-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => {}}
-                                                className="cursor-pointer"
-                                            />
-                                        </td>
-                                        <td className="px-4 py-2 text-sm font-medium" style={{ color: 'var(--color-text-light)' }}>
+                            return (
+                                <div
+                                    key={item.id}
+                                    className={`p-3 border-b border-[var(--md-sys-color-outline-variant)] cursor-pointer hover:bg-[var(--md-sys-color-surface-container-highest)] transition-colors ${
+                                        isAlreadySelected ? 'opacity-50' : ''
+                                    }`}
+                                    onClick={() => {
+                                        if (!isAlreadySelected) {
+                                            handleToggleInventoryItem(item);
+                                            setInventorySearchQuery('');
+                                        }
+                                    }}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                            <div className="font-medium" style={{ color: 'var(--color-text-light)' }}>
+                                                {item.name}
+                                                {isAlreadySelected && <span className="ml-2 text-xs" style={{ color: 'var(--color-success-green)' }}>✓ Added</span>}
+                                            </div>
+                                            <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                                                {item.category || 'Uncategorized'} • Qty: {item.quantity || 0}
+                                                {item.asin && ` • ${item.asin}`}
+                                            </div>
+                                        </div>
+                                        <div className="ml-4 text-right">
+                                            {item.price > 0 && (
+                                                <div className="font-medium" style={{ color: 'var(--color-success-green)' }}>
+                                                    ${item.price.toFixed(2)}
+                                                </div>
+                                            )}
+                                            {!isAlreadySelected && (
+                                                <span className="material-icons text-sm" style={{ color: 'var(--color-primary-blue)' }}>
+                                                    add_circle
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {filteredInventoryItems.length > 10 && (
+                            <div className="text-center py-2 text-xs" style={{ color: 'var(--color-text-muted)', background: 'var(--md-sys-color-surface-container-high)' }}>
+                                Showing 10 of {filteredInventoryItems.length} results - refine search to see more
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {inventorySearchQuery && filteredInventoryItems.length === 0 && (
+                    <div className="mb-4 p-4 text-center rounded-lg" style={{ background: 'var(--md-sys-color-surface-container-high)', color: 'var(--color-text-muted)' }}>
+                        No items found matching "{inventorySearchQuery}"
+                    </div>
+                )}
+
+                {/* Selected Items List */}
+                {selectedInventoryItems.length > 0 && (
+                    <div>
+                        <h4 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-light)' }}>
+                            Selected Items
+                        </h4>
+                        <div className="space-y-2">
+                            {selectedInventoryItems.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="flex items-center justify-between p-3 rounded-lg border border-[var(--md-sys-color-outline-variant)]"
+                                    style={{ background: 'var(--md-sys-color-surface-container-high)' }}
+                                >
+                                    <div className="flex-1">
+                                        <div className="font-medium" style={{ color: 'var(--color-text-light)' }}>
                                             {item.name}
-                                            {item.asin && <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{item.asin}</div>}
-                                        </td>
-                                        <td className="px-4 py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                            {item.category || 'Uncategorized'}
-                                        </td>
-                                        <td className="px-4 py-2 text-sm">
-                                            <span className="quantity-badge adequate-stock">{item.quantity || 0}</span>
-                                        </td>
-                                        <td className="px-4 py-2 text-sm" style={{ color: 'var(--color-success-green)' }}>
-                                            {item.price > 0 ? `$${item.price.toFixed(2)}` : '-'}
-                                        </td>
-                                        <td className="px-4 py-2 text-sm">
-                                            <span className="pill-badge">{costCode}</span>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                    {filteredInventoryItems.length === 0 && (
-                        <div className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
-                            No inventory items available
+                                        </div>
+                                        <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                                            {item.category || 'Uncategorized'} • Stock: {item.quantity || 0}
+                                            {item.price > 0 && ` • $${item.price.toFixed(2)}`}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleToggleInventoryItem(item)}
+                                        className="ml-4 p-2 rounded-full hover:bg-[var(--md-sys-color-surface-container-highest)] transition-colors"
+                                        title="Remove item"
+                                    >
+                                        <span className="material-icons text-sm" style={{ color: 'var(--color-error-red)' }}>
+                                            close
+                                        </span>
+                                    </button>
+                                </div>
+                            ))}
                         </div>
-                    )}
-                    {filteredInventoryItems.length > 20 && (
-                        <div className="text-center py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                            Showing first 20 of {filteredInventoryItems.length} items
-                        </div>
-                    )}
-                </div>
+                    </div>
+                )}
+
+                {selectedInventoryItems.length === 0 && !inventorySearchQuery && (
+                    <div className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
+                        <span className="material-icons text-4xl mb-2" style={{ color: 'var(--color-text-muted)', opacity: 0.5 }}>
+                            search
+                        </span>
+                        <p>Search for items to add to this shipment</p>
+                    </div>
+                )}
             </div>
 
             {/* Step 2: Matched Checkout Records */}
