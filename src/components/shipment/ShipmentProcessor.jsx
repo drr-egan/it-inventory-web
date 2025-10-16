@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { db } from '../../services/firebase';
-import { collection, addDoc, deleteDoc, doc, Timestamp, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs } from 'firebase/firestore';
 import MaterialButton from '../shared/MaterialButton';
 import MaterialInput from '../shared/MaterialInput';
 
@@ -14,14 +14,12 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
     // Processing state
     const [isProcessing, setIsProcessing] = useState(false);
-    const [vendorName, setVendorName] = useState('');
-    const [orderNumber, setOrderNumber] = useState('');
-    const [receiptDate, setReceiptDate] = useState('');
     const [manualTax, setManualTax] = useState('');
     const [manualFees, setManualFees] = useState('');
     const [uploadedPdf, setUploadedPdf] = useState(null);
     const [status, setStatus] = useState('');
     const [processingResults, setProcessingResults] = useState([]);
+    const [lastProcessedTransaction, setLastProcessedTransaction] = useState(null);
 
     // Format department ID or use job number as cost code
     const formatCostCode = (record) => {
@@ -98,6 +96,81 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             setUploadedPdf(file);
         } else {
             alert('Please select a valid PDF file.');
+        }
+    };
+
+    // Undo last processed transaction
+    const handleUndoProcessing = async () => {
+        if (!lastProcessedTransaction) {
+            alert('No transaction to undo');
+            return;
+        }
+
+        const confirmMessage = `This will undo the last processing of ${lastProcessedTransaction.itemsProcessed} items.\n\nThis will:\n• Restore checkout records from archive\n• Revert inventory quantity changes\n• Remove cost allocation records\n\nContinue?`;
+
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        try {
+            setStatus('⏳ Undoing last transaction...');
+            const batch = writeBatch(db);
+
+            // Restore checkout records from archive to active history
+            for (const checkout of lastProcessedTransaction.checkoutRecords) {
+                // Skip synthetic entries
+                if (checkout.id.startsWith('synthetic-')) continue;
+
+                // Move from archived back to active
+                const checkoutRef = doc(db, 'checkoutHistory', checkout.id);
+                const checkoutData = { ...checkout };
+                delete checkoutData.id;
+                delete checkoutData.inventoryItem;
+                delete checkoutData.confirmedPrice;
+                batch.set(checkoutRef, checkoutData);
+
+                // Delete from archive
+                const archivedRef = doc(db, 'archivedCheckouts', checkout.id);
+                batch.delete(archivedRef);
+            }
+
+            // Revert inventory quantity changes
+            for (const update of lastProcessedTransaction.inventoryUpdates) {
+                const item = items.find(i => i.id === update.itemId);
+                if (item) {
+                    const inventoryRef = doc(db, 'items', update.itemId);
+                    const revertedQty = Math.max(0, item.quantity - update.quantityAdded);
+                    batch.update(inventoryRef, { quantity: revertedQty });
+                }
+            }
+
+            // Delete cost allocation records for this transaction
+            // Note: We can't easily query and delete in a batch, so we'll do this separately
+            const costAllocationsQuery = await getDocs(collection(db, 'costAllocation'));
+            const transactionTime = new Date(lastProcessedTransaction.timestamp).getTime();
+            const timeWindow = 5000; // 5 second window
+
+            costAllocationsQuery.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                const processedTime = data.processedAt?.toDate?.()?.getTime();
+
+                if (processedTime && Math.abs(processedTime - transactionTime) < timeWindow) {
+                    batch.delete(doc(db, 'costAllocation', docSnap.id));
+                }
+            });
+
+            await batch.commit();
+
+            // Clear the last transaction
+            setLastProcessedTransaction(null);
+
+            // Remove from processing results
+            setProcessingResults(prev => prev.slice(0, -1));
+
+            setStatus('✅ Transaction successfully undone. Checkout records restored and inventory reverted.');
+        } catch (error) {
+            console.error('Error undoing transaction:', error);
+            setStatus(`❌ Error undoing transaction: ${error.message}`);
         }
     };
 
@@ -268,8 +341,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 allocation,
                 { subtotal, tax, fees, total, taxPerItem, feePerItem },
                 uploadedPdf,
-                allCheckoutRecords,
-                { vendorName, orderNumber, receiptDate }
+                allCheckoutRecords
             );
 
             // Use batch for atomic operations
@@ -294,9 +366,6 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     feeAllocation: itemFees,
                     costCode: costCode,
                     userName: checkout.userName || checkout.user || 'Unknown',
-                    vendor: vendorName || 'Unknown',
-                    orderNumber: orderNumber || 'N/A',
-                    receiptDate: receiptDate || new Date().toISOString().split('T')[0],
                     processedAt: Timestamp.now(),
                     processedBy: user?.employeeID || user?.email || 'Unknown',
                     type: costCode.includes('Job') ? 'job' : 'it_stock'
@@ -330,22 +399,30 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             await batch.commit();
 
-            // Save processing result
-            const result = {
+            // Save transaction data for undo functionality
+            const transactionData = {
                 timestamp: new Date().toISOString(),
-                orderNumber: orderNumber || 'N/A',
                 itemsProcessed: allCheckoutRecords.length,
                 totalAmount: total,
-                vendor: vendorName || 'Unknown'
+                checkoutRecords: allCheckoutRecords,
+                inventoryUpdates: matchedCheckouts.map(match => ({
+                    itemId: match.inventoryItem.id,
+                    quantityAdded: match.confirmedQuantity
+                }))
+            };
+            setLastProcessedTransaction(transactionData);
+
+            // Save processing result for display
+            const result = {
+                timestamp: new Date().toISOString(),
+                itemsProcessed: allCheckoutRecords.length,
+                totalAmount: total
             };
             setProcessingResults(prev => [...prev, result]);
 
             // Reset form
             setSelectedInventoryItems([]);
             setMatchedCheckouts([]);
-            setVendorName('');
-            setOrderNumber('');
-            setReceiptDate('');
             setManualTax('');
             setManualFees('');
             setUploadedPdf(null);
@@ -361,7 +438,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     };
 
     // Generate PDF cost allocation report matching oldinvoice.pdf format
-    const generateCostAllocationReport = async (allocation, totals, uploadedPdf, allCheckoutRecords, shipmentDetails) => {
+    const generateCostAllocationReport = async (allocation, totals, uploadedPdf, allCheckoutRecords) => {
         try {
             const PDFLib = window.PDFLib;
             const { PDFDocument, rgb, StandardFonts } = PDFLib;
@@ -388,40 +465,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 font: boldFont,
                 color: rgb(0, 0, 0)
             });
-            yPos -= 25;
-
-            // Shipment Details
-            if (shipmentDetails.vendorName) {
-                currentPage.drawText(`Vendor: ${shipmentDetails.vendorName}`, {
-                    x: 50,
-                    y: yPos,
-                    size: 10,
-                    font: font,
-                    color: rgb(0, 0, 0)
-                });
-                yPos -= 15;
-            }
-            if (shipmentDetails.orderNumber) {
-                currentPage.drawText(`Order Number: ${shipmentDetails.orderNumber}`, {
-                    x: 50,
-                    y: yPos,
-                    size: 10,
-                    font: font,
-                    color: rgb(0, 0, 0)
-                });
-                yPos -= 15;
-            }
-            if (shipmentDetails.receiptDate) {
-                currentPage.drawText(`Receipt Date: ${shipmentDetails.receiptDate}`, {
-                    x: 50,
-                    y: yPos,
-                    size: 10,
-                    font: font,
-                    color: rgb(0, 0, 0)
-                });
-                yPos -= 15;
-            }
-            yPos -= 5;
+            yPos -= 30;
 
             // Tax and fees distribution note
             if (totals.tax > 0 || totals.fees > 0) {
@@ -597,18 +641,19 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             <div className="mat-card p-6">
                 <h2 className="text-2xl font-bold flex items-center mb-4" style={{ color: 'var(--color-text-light)' }}>
                     <span className="material-icons mr-2">receipt_long</span>
-                    Process Receipt
+                    Process Shipment Receipt
                 </h2>
                 <p style={{ color: 'var(--color-text-muted)' }}>
-                    Select items from inventory and process receipts with cost allocation to appropriate billing codes.
+                    Follow the 3-step workflow: Select inventory items, confirm quantities & prices, then upload receipt and process with automatic cost allocation.
                 </p>
             </div>
 
-            {/* Inventory Item Selection */}
+            {/* Step 1: Inventory Item Selection */}
             <div className="mat-card p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full mr-2 text-sm font-bold" style={{ background: 'var(--color-primary-blue)', color: 'white' }}>1</span>
                     <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>inventory_2</span>
-                    Select from Inventory ({selectedInventoryItems.length} selected)
+                    Select Items from Inventory ({selectedInventoryItems.length} selected)
                 </h3>
 
                 {/* Search */}
@@ -699,12 +744,13 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 </div>
             </div>
 
-            {/* Matched Checkout Records */}
+            {/* Step 2: Matched Checkout Records */}
             {matchedCheckouts.length > 0 && (
                 <div className="mat-card p-6">
                     <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full mr-2 text-sm font-bold" style={{ background: 'var(--color-primary-blue)', color: 'white' }}>2</span>
                         <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>link</span>
-                        Matched Checkout Records ({matchedCheckouts.length} items)
+                        Confirm Quantities & Prices ({matchedCheckouts.length} items)
                     </h3>
 
                     <div className="space-y-4">
@@ -779,11 +825,12 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 </div>
             )}
 
-            {/* Processing Options */}
+            {/* Step 3: Processing Options */}
             <div className="mat-card p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
-                    <span className="material-icons mr-2" style={{ color: 'var(--color-success-green)' }}>settings</span>
-                    Shipment Details
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full mr-2 text-sm font-bold" style={{ background: 'var(--color-primary-blue)', color: 'white' }}>3</span>
+                    <span className="material-icons mr-2" style={{ color: 'var(--color-success-green)' }}>receipt_long</span>
+                    Upload Receipt & Finalize
                 </h3>
 
                 {/* PDF Upload Section */}
@@ -815,27 +862,6 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <MaterialInput
-                        type="text"
-                        label="Vendor Name"
-                        value={vendorName}
-                        onChange={(e) => setVendorName(e.target.value)}
-                        placeholder="e.g., Amazon, Staples"
-                    />
-                    <MaterialInput
-                        type="text"
-                        label="Order Number"
-                        value={orderNumber}
-                        onChange={(e) => setOrderNumber(e.target.value)}
-                        placeholder="e.g., 114-5534389-2755439"
-                    />
-                    <MaterialInput
-                        type="date"
-                        label="Receipt Date"
-                        value={receiptDate}
-                        onChange={(e) => setReceiptDate(e.target.value)}
-                    />
-                    <div></div>
-                    <MaterialInput
                         type="number"
                         label="Tax Amount"
                         value={manualTax}
@@ -843,7 +869,6 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                         step="0.01"
                         min="0"
                         placeholder="0.00"
-                        required
                     />
                     <MaterialInput
                         type="number"
@@ -855,6 +880,57 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                         placeholder="0.00"
                     />
                 </div>
+
+                {/* Live Cost Summary */}
+                {matchedCheckouts.length > 0 && (
+                    <div className="mt-6 p-4 rounded-lg" style={{ background: 'var(--md-sys-color-surface-container-highest)', border: '2px solid var(--color-primary-blue)' }}>
+                        <h4 className="font-semibold mb-3 flex items-center" style={{ color: 'var(--color-text-light)' }}>
+                            <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>calculate</span>
+                            Cost Summary
+                        </h4>
+                        <div className="space-y-2">
+                            {(() => {
+                                const subtotal = matchedCheckouts.reduce((sum, match) =>
+                                    sum + (match.confirmedQuantity * match.confirmedPrice), 0
+                                );
+                                const tax = parseFloat(manualTax) || 0;
+                                const fees = parseFloat(manualFees) || 0;
+                                const total = subtotal + tax + fees;
+
+                                return (
+                                    <>
+                                        <div className="flex justify-between text-sm">
+                                            <span style={{ color: 'var(--color-text-muted)' }}>Subtotal:</span>
+                                            <span className="font-medium" style={{ color: 'var(--color-text-light)' }}>
+                                                ${subtotal.toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span style={{ color: 'var(--color-text-muted)' }}>Tax:</span>
+                                            <span className="font-medium" style={{ color: 'var(--color-text-light)' }}>
+                                                ${tax.toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span style={{ color: 'var(--color-text-muted)' }}>Fees:</span>
+                                            <span className="font-medium" style={{ color: 'var(--color-text-light)' }}>
+                                                ${fees.toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="pt-2 mt-2 border-t border-[var(--md-sys-color-outline-variant)]">
+                                            <div className="flex justify-between">
+                                                <span className="font-bold" style={{ color: 'var(--color-text-light)' }}>Total:</span>
+                                                <span className="font-bold text-xl" style={{ color: 'var(--color-success-green)' }}>
+                                                    ${total.toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                )}
 
                 <MaterialButton
                     color="success"
@@ -887,6 +963,35 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 </div>
             )}
 
+            {/* Undo Button */}
+            {lastProcessedTransaction && (
+                <div className="mat-card p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-lg font-semibold flex items-center mb-2" style={{ color: 'var(--color-text-light)' }}>
+                                <span className="material-icons mr-2" style={{ color: 'var(--color-warning-orange)' }}>undo</span>
+                                Undo Last Processing
+                            </h3>
+                            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                Last processed: {lastProcessedTransaction.itemsProcessed} items • Total: ${lastProcessedTransaction.totalAmount.toFixed(2)}
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                                {new Date(lastProcessedTransaction.timestamp).toLocaleString()}
+                            </p>
+                        </div>
+                        <MaterialButton
+                            variant="outlined"
+                            color="error"
+                            onClick={handleUndoProcessing}
+                            className="ml-4"
+                        >
+                            <span className="material-icons mr-2">undo</span>
+                            Undo Transaction
+                        </MaterialButton>
+                    </div>
+                </div>
+            )}
+
             {/* Recent Processing */}
             {processingResults.length > 0 && (
                 <div className="mat-card p-6">
@@ -900,9 +1005,11 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                                 <div className="flex items-center space-x-3">
                                     <span className="material-icons" style={{ color: 'var(--color-success-green)' }}>check_circle</span>
                                     <div>
-                                        <p className="font-medium" style={{ color: 'var(--color-text-light)' }}>Order {result.orderNumber}</p>
+                                        <p className="font-medium" style={{ color: 'var(--color-text-light)' }}>
+                                            {result.itemsProcessed} items processed
+                                        </p>
                                         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                            {result.itemsProcessed} items • ${result.totalAmount.toFixed(2)} • {result.vendor}
+                                            Total: ${result.totalAmount.toFixed(2)}
                                         </p>
                                     </div>
                                 </div>
