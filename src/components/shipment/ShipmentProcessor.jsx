@@ -784,14 +784,14 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             </div>
 
             {/* Step 2: Matched Checkout Records */}
-            {matchedCheckouts.length > 0 && (
-                <div className="mat-card p-6">
-                    <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full mr-2 text-sm font-bold" style={{ background: 'var(--color-primary-blue)', color: 'white' }}>2</span>
-                        <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>link</span>
-                        Confirm Quantities & Prices ({matchedCheckouts.length} items)
-                    </h3>
+            <div className="mat-card p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center" style={{ color: 'var(--color-text-light)' }}>
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full mr-2 text-sm font-bold" style={{ background: 'var(--color-primary-blue)', color: 'white' }}>2</span>
+                    <span className="material-icons mr-2" style={{ color: 'var(--color-primary-blue)' }}>link</span>
+                    Confirm Quantities & Prices ({matchedCheckouts.length} items)
+                </h3>
 
+                {matchedCheckouts.length > 0 ? (
                     <div className="space-y-4">
                         {matchedCheckouts.map((match, index) => (
                             <div key={match.inventoryItem.id} className="border border-[var(--md-sys-color-outline-variant)] rounded-lg p-4">
@@ -861,8 +861,15 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                             </div>
                         ))}
                     </div>
-                </div>
-            )}
+                ) : (
+                    <div className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
+                        <span className="material-icons text-4xl mb-2" style={{ color: 'var(--color-text-muted)', opacity: 0.5 }}>
+                            fact_check
+                        </span>
+                        <p>Add items in Step 1 to confirm their quantities and prices</p>
+                    </div>
+                )}
+            </div>
 
             {/* Step 3: Processing Options */}
             <div className="mat-card p-6">
