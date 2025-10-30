@@ -3326,6 +3326,17 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
             const [isDeletingItem, setIsDeletingItem] = useState(false);
 
+            // Bulk edit states for inventory items
+            const [bulkEditMode, setBulkEditMode] = useState(false);
+            const [selectedItems, setSelectedItems] = useState(new Set());
+            const [bulkEditData, setBulkEditData] = useState({
+                quantity: '',
+                price: '',
+                category: '',
+                minThreshold: ''
+            });
+            const [isBulkSaving, setIsBulkSaving] = useState(false);
+
             // Form states for Add New User
             const [newUserForm, setNewUserForm] = useState({
                 firstName: '',
@@ -3419,6 +3430,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
             const [processingNotes, setProcessingNotes] = useState('');
             const [taxAmount, setTaxAmount] = useState(0);
             const [extraFees, setExtraFees] = useState(0);
+            const [discountAmount, setDiscountAmount] = useState(0);
             const [processingResults, setProcessingResults] = useState([]);
 
             // Process Shipment item selection states
@@ -3739,22 +3751,25 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         costCode: a.costCode || a.departmentId
                     })));
 
-                    // Calculate per-item tax and fee distribution
+                    // Calculate per-item tax, fee, and discount distribution
                     const totalQuantity = allocation.reduce((sum, item) => sum + (item.allocatedQuantity || item.quantity), 0);
                     const taxPerItem = totalQuantity > 0 ? (taxAmount || 0) / totalQuantity : 0;
                     const feePerItem = totalQuantity > 0 ? (extraFees || 0) / totalQuantity : 0;
+                    const discountPerItem = totalQuantity > 0 ? (discountAmount || 0) / totalQuantity : 0;
 
-                    // Update allocation with distributed taxes and fees
+                    // Update allocation with distributed taxes, fees, and discounts
                     const allocationWithDistribution = allocation.map(item => {
                         const itemQuantity = item.allocatedQuantity || item.quantity;
                         const itemTaxAllocation = taxPerItem * itemQuantity;
                         const itemFeeAllocation = feePerItem * itemQuantity;
-                        const adjustedTotalCost = item.totalCost + itemTaxAllocation + itemFeeAllocation;
+                        const itemDiscountAllocation = discountPerItem * itemQuantity;
+                        const adjustedTotalCost = item.totalCost + itemTaxAllocation + itemFeeAllocation - itemDiscountAllocation;
 
                         return {
                             ...item,
                             taxAllocation: itemTaxAllocation,
                             feeAllocation: itemFeeAllocation,
+                            discountAllocation: itemDiscountAllocation,
                             adjustedTotalCost: adjustedTotalCost,
                             originalTotalCost: item.totalCost // Keep original for reference
                         };
@@ -3764,7 +3779,8 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     const subtotal = allocation.reduce((sum, item) => sum + item.totalCost, 0);
                     const tax = taxAmount || 0;
                     const fees = extraFees || 0;
-                    const total = subtotal + tax + fees;
+                    const discount = discountAmount || 0;
+                    const total = subtotal + tax + fees - discount;
 
                     // Update inventory quantities
                     for (const itemName of selectedShipmentItems) {
@@ -3801,7 +3817,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         costCode: a.costCode || a.departmentId,
                         adjustedCost: a.adjustedTotalCost
                     })));
-                    const pdfStorageData = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, total, taxPerItem, feePerItem });
+                    const pdfStorageData = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, discount, total, taxPerItem, feePerItem, discountPerItem });
 
                     // Archive processed checkout records and remove from checkout history
                     // Only archive records that actually received allocation (allocatedQuantity > 0)
@@ -3843,6 +3859,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     setShipmentItemDetails({});
                     setTaxAmount(0);
                     setExtraFees(0);
+                    setDiscountAmount(0);
                     setVendorName('');
                     setReceiptDate('');
                     setProcessingNotes('');
@@ -4110,7 +4127,8 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     y -= 25;
 
                     // Metadata
-                    page.drawText(`Tax ($${totals.tax.toFixed(2)}) and Fees ($${totals.fees.toFixed(2)}) distributed evenly per item`, { x: leftMargin, y, size: 10, font });
+                    const metadataText = `Tax ($${totals.tax.toFixed(2)}), Fees ($${totals.fees.toFixed(2)})${totals.discount > 0 ? `, and Discount ($${totals.discount.toFixed(2)})` : ''} distributed evenly per item`;
+                    page.drawText(metadataText, { x: leftMargin, y, size: 10, font });
                     y -= 30;
 
                     // Cost Allocation Summary section title
@@ -4184,6 +4202,10 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     y -= 15;
                     currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
                     y -= 15;
+                    if (totals.discount > 0) {
+                        currentPage.drawText(`Discount: -$${totals.discount.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                        y -= 15;
+                    }
                     currentPage.drawLine({
                         start: { x: leftMargin, y },
                         end: { x: 200, y },
@@ -4981,6 +5003,115 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     return () => document.removeEventListener('keydown', handleKeyDown);
                 }
             }, [deleteConfirmItem, isDeletingItem]);
+
+            // Bulk edit functions
+            const toggleBulkEditMode = () => {
+                setBulkEditMode(prev => !prev);
+                setSelectedItems(new Set());
+                setBulkEditData({
+                    quantity: '',
+                    price: '',
+                    category: '',
+                    minThreshold: ''
+                });
+                // Cancel any ongoing single edit when entering bulk mode
+                if (editingItemId) {
+                    cancelEditItem();
+                }
+            };
+
+            const toggleItemSelection = (itemId) => {
+                setSelectedItems(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(itemId)) {
+                        newSet.delete(itemId);
+                    } else {
+                        newSet.add(itemId);
+                    }
+                    return newSet;
+                });
+            };
+
+            const toggleSelectAll = () => {
+                const currentPageItems = getPaginatedInventoryItems();
+                if (selectedItems.size === currentPageItems.length) {
+                    // Deselect all
+                    setSelectedItems(new Set());
+                } else {
+                    // Select all on current page
+                    setSelectedItems(new Set(currentPageItems.map(item => item.id)));
+                }
+            };
+
+            const handleBulkEditChange = (field, value) => {
+                setBulkEditData(prev => ({
+                    ...prev,
+                    [field]: value
+                }));
+            };
+
+            const applyBulkEdit = async () => {
+                if (selectedItems.size === 0) {
+                    showSnackbar('No items selected', 'warning');
+                    return;
+                }
+
+                // Check if at least one field has a value
+                const hasChanges = Object.values(bulkEditData).some(val => val !== '');
+                if (!hasChanges) {
+                    showSnackbar('No changes to apply', 'warning');
+                    return;
+                }
+
+                setIsBulkSaving(true);
+
+                try {
+                    const batch = db.batch();
+                    let updateCount = 0;
+
+                    selectedItems.forEach(itemId => {
+                        const itemRef = db.collection('items').doc(itemId);
+                        const updates = {};
+
+                        if (bulkEditData.quantity !== '') {
+                            updates.quantity = parseInt(bulkEditData.quantity) || 0;
+                        }
+                        if (bulkEditData.price !== '') {
+                            updates.price = parseFloat(bulkEditData.price) || 0;
+                        }
+                        if (bulkEditData.category !== '') {
+                            updates.category = bulkEditData.category.trim();
+                        }
+                        if (bulkEditData.minThreshold !== '') {
+                            updates.minThreshold = parseInt(bulkEditData.minThreshold) || 5;
+                        }
+
+                        if (Object.keys(updates).length > 0) {
+                            updates.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
+                            batch.update(itemRef, updates);
+                            updateCount++;
+                        }
+                    });
+
+                    await batch.commit();
+
+                    showSnackbar(`Updated ${updateCount} item${updateCount !== 1 ? 's' : ''} successfully`, 'success');
+
+                    // Reset bulk edit state
+                    setSelectedItems(new Set());
+                    setBulkEditData({
+                        quantity: '',
+                        price: '',
+                        category: '',
+                        minThreshold: ''
+                    });
+                } catch (error) {
+                    console.error('Error applying bulk edit:', error);
+                    showSnackbar('Failed to update items', 'error');
+                } finally {
+                    setIsBulkSaving(false);
+                }
+            };
 
             // Handle creating new item
             const handleCreateItem = async (e) => {
@@ -6969,15 +7100,121 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                     Inventory Management
                                 </h2>
                                 <MaterialCard elevation={1}>
-                                    <div className="mb-4 flex justify-between items-center">
+                                    <div className="mb-4 flex justify-between items-center flex-wrap gap-4">
                                         <p className="text-sm text-gray-400">
                                             Comprehensive inventory management with pagination
                                         </p>
-                                        <div className="flex items-center space-x-2">
-                                            <span className="material-icons text-green-500">trending_up</span>
-                                            <span className="text-sm text-gray-400">Real-time sync</span>
+                                        <div className="flex items-center space-x-4">
+                                            <MaterialButton
+                                                onClick={toggleBulkEditMode}
+                                                variant={bulkEditMode ? "contained" : "outlined"}
+                                                color={bulkEditMode ? "primary" : "secondary"}
+                                            >
+                                                <span className="material-icons mr-2 text-sm">
+                                                    {bulkEditMode ? 'edit_off' : 'edit_note'}
+                                                </span>
+                                                {bulkEditMode ? 'Exit Bulk Edit' : 'Bulk Edit Mode'}
+                                            </MaterialButton>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="material-icons text-green-500">trending_up</span>
+                                                <span className="text-sm text-gray-400">Real-time sync</span>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    {/* Bulk Edit Panel */}
+                                    {bulkEditMode && (
+                                        <div className="mb-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="flex items-center">
+                                                    <span className="material-icons mr-2 text-blue-400">edit_note</span>
+                                                    <h3 className="text-lg font-semibold text-white">
+                                                        Bulk Edit Mode
+                                                    </h3>
+                                                    {selectedItems.size > 0 && (
+                                                        <span className="ml-3 px-3 py-1 bg-blue-600 text-white rounded-full text-sm">
+                                                            {selectedItems.size} selected
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <p className="text-sm text-gray-400 mb-4">
+                                                Select items below and fill in the fields you want to update. Leave fields empty to keep existing values.
+                                            </p>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="number"
+                                                        value={bulkEditData.quantity}
+                                                        onChange={(e) => handleBulkEditChange('quantity', e.target.value)}
+                                                        placeholder=" "
+                                                        min="0"
+                                                        disabled={selectedItems.size === 0}
+                                                    />
+                                                    <label>Set Quantity</label>
+                                                </div>
+
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="number"
+                                                        value={bulkEditData.price}
+                                                        onChange={(e) => handleBulkEditChange('price', e.target.value)}
+                                                        placeholder=" "
+                                                        min="0"
+                                                        step="0.01"
+                                                        disabled={selectedItems.size === 0}
+                                                    />
+                                                    <label>Set Price</label>
+                                                </div>
+
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="text"
+                                                        value={bulkEditData.category}
+                                                        onChange={(e) => handleBulkEditChange('category', e.target.value)}
+                                                        placeholder=" "
+                                                        disabled={selectedItems.size === 0}
+                                                    />
+                                                    <label>Set Category</label>
+                                                </div>
+
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="number"
+                                                        value={bulkEditData.minThreshold}
+                                                        onChange={(e) => handleBulkEditChange('minThreshold', e.target.value)}
+                                                        placeholder=" "
+                                                        min="0"
+                                                        disabled={selectedItems.size === 0}
+                                                    />
+                                                    <label>Set Min Threshold</label>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-end">
+                                                <MaterialButton
+                                                    onClick={applyBulkEdit}
+                                                    variant="contained"
+                                                    color="primary"
+                                                    disabled={selectedItems.size === 0 || isBulkSaving}
+                                                >
+                                                    {isBulkSaving ? (
+                                                        <>
+                                                            <div className="mat-spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                                            Updating...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <span className="material-icons mr-2 text-sm">done_all</span>
+                                                            Apply to {selectedItems.size} Item{selectedItems.size !== 1 ? 's' : ''}
+                                                        </>
+                                                    )}
+                                                </MaterialButton>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Search Inventory */}
                                     <div className="mb-6">
@@ -7005,6 +7242,18 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                         <table className="min-w-full">
                                             <thead className="bg-gray-700">
                                                 <tr>
+                                                    {bulkEditMode && (
+                                                        <th className="px-3 py-3 text-left">
+                                                            <div className="flex items-center">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={getPaginatedInventoryItems().length > 0 && selectedItems.size === getPaginatedInventoryItems().length}
+                                                                    onChange={toggleSelectAll}
+                                                                    className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-500 rounded focus:ring-blue-500 focus:ring-2"
+                                                                />
+                                                            </div>
+                                                        </th>
+                                                    )}
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                                         <div className="flex items-center">
                                                             <span className="material-icons mr-1 text-sm">inventory</span>
@@ -7035,18 +7284,39 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                             Price
                                                         </div>
                                                     </th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                                        <div className="flex items-center">
+                                                            <span className="material-icons mr-1 text-sm">warning</span>
+                                                            Min Threshold
+                                                        </div>
+                                                    </th>
                                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-gray-800 divide-y divide-gray-700">
                                                 {getPaginatedInventoryItems().map(item => {
                                                     const isEditing = editingItemId === item.id;
+                                                    const isSelected = selectedItems.has(item.id);
                                                     return (
                                                         <tr key={item.id} className={`edit-mode-transition ${
                                                             isEditing
                                                                 ? 'edit-mode-row bg-blue-900/20'
+                                                                : isSelected && bulkEditMode
+                                                                ? 'bg-blue-900/10'
                                                                 : 'hover:bg-gray-700'
                                                         }`}>
+                                                            {/* Checkbox for bulk edit */}
+                                                            {bulkEditMode && (
+                                                                <td className="px-3 py-4">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isSelected}
+                                                                        onChange={() => toggleItemSelection(item.id)}
+                                                                        disabled={isEditing}
+                                                                        className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-500 rounded focus:ring-blue-500 focus:ring-2"
+                                                                    />
+                                                                </td>
+                                                            )}
                                                             {/* Item Name */}
                                                             <td className="px-6 py-4">
                                                                 {isEditing ? (
@@ -7162,6 +7432,27 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                 )}
                                                             </td>
 
+                                                            {/* Min Threshold */}
+                                                            <td className="px-6 py-4">
+                                                                {isEditing ? (
+                                                                    <div className="mat-input">
+                                                                        <input
+                                                                            type="number"
+                                                                            value={editFormData.minThreshold || 5}
+                                                                            onChange={(e) => handleEditFormChange('minThreshold', e.target.value)}
+                                                                            className="w-20"
+                                                                            min="0"
+                                                                            placeholder=" "
+                                                                        />
+                                                                        <label>Min</label>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-sm text-gray-400">
+                                                                        {item.minThreshold || 5}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+
                                                             {/* Actions */}
                                                             <td className="px-6 py-4">
                                                                 <div className="flex items-center space-x-2 edit-action-buttons">
@@ -7202,6 +7493,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                                                 color="primary"
                                                                                 className="!p-2 !min-w-0"
                                                                                 title="Edit item"
+                                                                                disabled={bulkEditMode}
                                                                             >
                                                                                 <span className="material-icons text-sm">edit</span>
                                                                             </MaterialButton>
@@ -8224,7 +8516,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                 <div className="mat-input">
                                                     <input
                                                         type="number"
@@ -8246,6 +8538,17 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                                                         onChange={(e) => setExtraFees(parseFloat(e.target.value) || 0)}
                                                     />
                                                     <label>Extra Fees (Shipping, etc.) ($)</label>
+                                                </div>
+                                                <div className="mat-input">
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        placeholder="0.00"
+                                                        value={discountAmount || ''}
+                                                        onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                                                    />
+                                                    <label>Discount/Promo ($)</label>
                                                 </div>
                                             </div>
 
