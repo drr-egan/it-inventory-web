@@ -16,6 +16,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [manualTax, setManualTax] = useState('');
     const [manualFees, setManualFees] = useState('');
+    const [manualDiscount, setManualDiscount] = useState('');
     const [uploadedPdf, setUploadedPdf] = useState(null);
     const [status, setStatus] = useState('');
     const [processingResults, setProcessingResults] = useState([]);
@@ -215,9 +216,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
         setStatus('⏳ Processing receipt and generating cost allocation...');
 
         try {
-            // Parse tax and fees
+            // Parse tax, fees, and discount
             const tax = parseFloat(manualTax) || 0;
             const fees = parseFloat(manualFees) || 0;
+            const discount = parseFloat(manualDiscount) || 0;
 
             // Build checkout records from the matched checkouts (selected items only)
             const allCheckoutRecords = matchedCheckouts.flatMap(match => {
@@ -297,9 +299,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             }
             console.log('========================');
 
-            // Distribute tax and fees per item unit (quantity-based)
+            // Distribute tax, fees, and discount per item unit (quantity-based)
             const taxPerItem = totalQuantity > 0 ? tax / totalQuantity : 0;
             const feePerItem = totalQuantity > 0 ? fees / totalQuantity : 0;
+            const discountPerItem = totalQuantity > 0 ? discount / totalQuantity : 0;
 
             // Group checkout records by item name and cost code
             const groupedByItemAndCostCode = allCheckoutRecords.reduce((groups, checkout) => {
@@ -320,26 +323,28 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 const unitPrice = checkouts[0].confirmedPrice;
                 const itemTax = taxPerItem * totalQty;
                 const itemFees = feePerItem * totalQty;
+                const itemDiscount = discountPerItem * totalQty;
 
                 return {
                     itemName: itemName,
                     quantity: totalQty,
                     unitPrice: unitPrice,
-                    totalCost: (unitPrice * totalQty) + itemTax + itemFees,
+                    totalCost: (unitPrice * totalQty) + itemTax + itemFees - itemDiscount,
                     taxAllocation: itemTax,
                     feeAllocation: itemFees,
+                    discountAllocation: itemDiscount,
                     costCode: costCode
                 };
             });
 
             // Calculate totals
             const subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-            const total = subtotal + tax + fees;
+            const total = subtotal + tax + fees - discount;
 
             // Generate PDF report (append to uploaded PDF)
             await generateCostAllocationReport(
                 allocation,
-                { subtotal, tax, fees, total, taxPerItem, feePerItem },
+                { subtotal, tax, fees, discount, total, taxPerItem, feePerItem, discountPerItem },
                 uploadedPdf,
                 allCheckoutRecords
             );
@@ -354,6 +359,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 const unitPrice = checkout.confirmedPrice;
                 const itemTax = taxPerItem * qty;
                 const itemFees = feePerItem * qty;
+                const itemDiscount = discountPerItem * qty;
 
                 const costAllocationRef = doc(collection(db, 'costAllocation'));
                 batch.set(costAllocationRef, {
@@ -361,9 +367,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     itemName: checkout.inventoryItem.name,
                     quantity: qty,
                     unitPrice: unitPrice,
-                    totalCost: (unitPrice * qty) + itemTax + itemFees,
+                    totalCost: (unitPrice * qty) + itemTax + itemFees - itemDiscount,
                     taxAllocation: itemTax,
                     feeAllocation: itemFees,
+                    discountAllocation: itemDiscount,
                     costCode: costCode,
                     userName: checkout.userName || checkout.user || 'Unknown',
                     processedAt: Timestamp.now(),
@@ -425,6 +432,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             setMatchedCheckouts([]);
             setManualTax('');
             setManualFees('');
+            setManualDiscount('');
             setUploadedPdf(null);
 
             setStatus(`✅ Shipment processed successfully! ${totalQuantity} items from ${matchedCheckouts.length} product type(s) included in report. PDF downloaded and items archived.`);
@@ -443,9 +451,10 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const PDFLib = window.PDFLib;
             const { PDFDocument, rgb, StandardFonts } = PDFLib;
 
-            // Extract taxPerItem and feePerItem from totals
+            // Extract taxPerItem, feePerItem, and discountPerItem from totals
             const taxPerItem = totals.taxPerItem || 0;
             const feePerItem = totals.feePerItem || 0;
+            const discountPerItem = totals.discountPerItem || 0;
 
             // Load the uploaded PDF as base document
             const uploadedPdfBytes = await uploadedPdf.arrayBuffer();
@@ -467,10 +476,14 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             });
             yPos -= 30;
 
-            // Tax and fees distribution note
-            if (totals.tax > 0 || totals.fees > 0) {
-                const taxFeeNote = `Tax ($${totals.tax.toFixed(2)}) and Fees ($${totals.fees.toFixed(2)}) distributed evenly per item`;
-                currentPage.drawText(taxFeeNote, {
+            // Tax, fees, and discount distribution note
+            if (totals.tax > 0 || totals.fees > 0 || totals.discount > 0) {
+                const parts = [];
+                if (totals.tax > 0) parts.push(`Tax ($${totals.tax.toFixed(2)})`);
+                if (totals.fees > 0) parts.push(`Fees ($${totals.fees.toFixed(2)})`);
+                if (totals.discount > 0) parts.push(`Discount ($${totals.discount.toFixed(2)})`);
+                const distributionNote = `${parts.join(', ')} distributed evenly per item`;
+                currentPage.drawText(distributionNote, {
                     x: 50,
                     y: yPos,
                     size: 10,
@@ -538,7 +551,12 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             currentPage.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
             yPos -= 12;
             currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
-            yPos -= 15;
+            yPos -= 12;
+            if (totals.discount > 0) {
+                currentPage.drawText(`Discount: -$${totals.discount.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
+                yPos -= 12;
+            }
+            yPos -= 3;
             currentPage.drawText(`Grand Total: $${totals.total.toFixed(2)}`, { x: totalsX, y: yPos, size: 10, font: boldFont });
             yPos -= 30;
 
@@ -591,7 +609,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 const qty = checkout.quantity || 1;
                 const itemTax = taxPerItem * qty;
                 const itemFees = feePerItem * qty;
-                const totalCost = (unitPrice * qty) + itemTax + itemFees;
+                const itemDiscount = discountPerItem * qty;
+                const totalCost = (unitPrice * qty) + itemTax + itemFees - itemDiscount;
 
                 currentPage.drawText(itemName, { x: 50, y: yPos, size: 9, font });
                 currentPage.drawText(userName, { x: 210, y: yPos, size: 9, font });
@@ -906,7 +925,7 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <MaterialInput
                         type="number"
                         label="Tax Amount"
@@ -921,6 +940,15 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                         label="Fees (Shipping/Handling)"
                         value={manualFees}
                         onChange={(e) => setManualFees(e.target.value)}
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                    />
+                    <MaterialInput
+                        type="number"
+                        label="Discount/Promo"
+                        value={manualDiscount}
+                        onChange={(e) => setManualDiscount(e.target.value)}
                         step="0.01"
                         min="0"
                         placeholder="0.00"
@@ -941,7 +969,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                                 );
                                 const tax = parseFloat(manualTax) || 0;
                                 const fees = parseFloat(manualFees) || 0;
-                                const total = subtotal + tax + fees;
+                                const discount = parseFloat(manualDiscount) || 0;
+                                const total = subtotal + tax + fees - discount;
 
                                 return (
                                     <>
@@ -963,6 +992,14 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                                                 ${fees.toFixed(2)}
                                             </span>
                                         </div>
+                                        {discount > 0 && (
+                                            <div className="flex justify-between text-sm">
+                                                <span style={{ color: 'var(--color-text-muted)' }}>Discount:</span>
+                                                <span className="font-medium" style={{ color: 'var(--color-error-red)' }}>
+                                                    -${discount.toFixed(2)}
+                                                </span>
+                                            </div>
+                                        )}
                                         <div className="pt-2 mt-2 border-t border-[var(--md-sys-color-outline-variant)]">
                                             <div className="flex justify-between">
                                                 <span className="font-bold" style={{ color: 'var(--color-text-light)' }}>Total:</span>
