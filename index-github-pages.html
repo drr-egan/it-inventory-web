@@ -3751,25 +3751,27 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         costCode: a.costCode || a.departmentId
                     })));
 
-                    // Calculate per-item tax, fee, and discount distribution
-                    const totalQuantity = allocation.reduce((sum, item) => sum + (item.allocatedQuantity || item.quantity), 0);
-                    const taxPerItem = totalQuantity > 0 ? (taxAmount || 0) / totalQuantity : 0;
-                    const feePerItem = totalQuantity > 0 ? (extraFees || 0) / totalQuantity : 0;
-                    const discountPerItem = totalQuantity > 0 ? (discountAmount || 0) / totalQuantity : 0;
+                    // Validate all items have prices
+                    const itemsWithoutPrices = allocation.filter(item => !item.unitPrice || item.unitPrice <= 0);
+                    if (itemsWithoutPrices.length > 0) {
+                        const itemNames = itemsWithoutPrices.map(item => item.itemName).join(', ');
+                        throw new Error(`Cannot process shipment: The following items are missing prices: ${itemNames}. Please add prices to all items before processing.`);
+                    }
 
-                    // Update allocation with distributed taxes, fees, and discounts
+                    // Calculate proportional tax distribution based on item value
+                    const totalSubtotal = allocation.reduce((sum, item) => sum + item.totalCost, 0);
+
+                    // Update allocation with proportionally distributed taxes
+                    // Fees and discounts are NOT distributed - they remain as separate line items
                     const allocationWithDistribution = allocation.map(item => {
-                        const itemQuantity = item.allocatedQuantity || item.quantity;
-                        const itemTaxAllocation = taxPerItem * itemQuantity;
-                        const itemFeeAllocation = feePerItem * itemQuantity;
-                        const itemDiscountAllocation = discountPerItem * itemQuantity;
-                        const adjustedTotalCost = item.totalCost + itemTaxAllocation + itemFeeAllocation - itemDiscountAllocation;
+                        const itemSubtotal = item.totalCost;
+                        const itemTaxPercentage = totalSubtotal > 0 ? itemSubtotal / totalSubtotal : 0;
+                        const itemTaxAllocation = (taxAmount || 0) * itemTaxPercentage;
+                        const adjustedTotalCost = itemSubtotal + itemTaxAllocation;
 
                         return {
                             ...item,
                             taxAllocation: itemTaxAllocation,
-                            feeAllocation: itemFeeAllocation,
-                            discountAllocation: itemDiscountAllocation,
                             adjustedTotalCost: adjustedTotalCost,
                             originalTotalCost: item.totalCost // Keep original for reference
                         };
@@ -3817,7 +3819,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                         costCode: a.costCode || a.departmentId,
                         adjustedCost: a.adjustedTotalCost
                     })));
-                    const pdfStorageData = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, discount, total, taxPerItem, feePerItem, discountPerItem });
+                    const pdfStorageData = await generateCostAllocationReport(allocationWithDistribution, { subtotal, tax, fees, discount, total });
 
                     // Archive processed checkout records and remove from checkout history
                     // Only archive records that actually received allocation (allocatedQuantity > 0)
@@ -4127,7 +4129,7 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
                     y -= 25;
 
                     // Metadata
-                    const metadataText = `Tax ($${totals.tax.toFixed(2)}), Fees ($${totals.fees.toFixed(2)})${totals.discount > 0 ? `, and Discount ($${totals.discount.toFixed(2)})` : ''} distributed evenly per item`;
+                    const metadataText = `Tax ($${totals.tax.toFixed(2)}) distributed proportionally based on item value${totals.fees > 0 ? `. Fees: $${totals.fees.toFixed(2)}` : ''}${totals.discount > 0 ? `. Discount: $${totals.discount.toFixed(2)}` : ''}`;
                     page.drawText(metadataText, { x: leftMargin, y, size: 10, font });
                     y -= 30;
 
@@ -4196,12 +4198,13 @@ ${diagnostics.isAndroid && diagnostics.browserName.includes('Chrome') && diagnos
 
                     // Financial summary without "FINANCIAL SUMMARY" header, just the numbers
                     y -= 10;
-                    currentPage.drawText(`Subtotal (Items): $${totals.subtotal.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                    const subtotalWithTax = totals.subtotal + totals.tax;
+                    currentPage.drawText(`Subtotal (Items with Tax): $${subtotalWithTax.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
                     y -= 15;
-                    currentPage.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
-                    y -= 15;
-                    currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
-                    y -= 15;
+                    if (totals.fees > 0) {
+                        currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
+                        y -= 15;
+                    }
                     if (totals.discount > 0) {
                         currentPage.drawText(`Discount: -$${totals.discount.toFixed(2)}`, { x: leftMargin, y, size: 10, font });
                         y -= 15;
