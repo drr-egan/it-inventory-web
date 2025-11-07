@@ -299,10 +299,17 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             }
             console.log('========================');
 
-            // Distribute tax, fees, and discount per item unit (quantity-based)
-            const taxPerItem = totalQuantity > 0 ? tax / totalQuantity : 0;
-            const feePerItem = totalQuantity > 0 ? fees / totalQuantity : 0;
-            const discountPerItem = totalQuantity > 0 ? discount / totalQuantity : 0;
+            // Validate all items have prices
+            const itemsWithoutPrices = matchedCheckouts.filter(match => !match.confirmedPrice || match.confirmedPrice <= 0);
+            if (itemsWithoutPrices.length > 0) {
+                const itemNames = itemsWithoutPrices.map(match => match.inventoryItem.name).join(', ');
+                throw new Error(`Cannot process shipment: The following items are missing prices: ${itemNames}. Please add prices to all items before processing.`);
+            }
+
+            // Calculate subtotal for proportional tax distribution
+            const subtotal = matchedCheckouts.reduce((sum, match) =>
+                sum + (match.confirmedQuantity * match.confirmedPrice), 0
+            );
 
             // Group checkout records by item name and cost code
             const groupedByItemAndCostCode = allCheckoutRecords.reduce((groups, checkout) => {
@@ -316,35 +323,35 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 return groups;
             }, {});
 
-            // Build allocation records aggregated by item and cost code
+            // Build allocation records aggregated by item and cost code with proportional tax
             const allocation = Object.entries(groupedByItemAndCostCode).map(([key, checkouts]) => {
                 const [itemName, costCode] = key.split('|');
                 const totalQty = checkouts.reduce((sum, c) => sum + (c.quantity || 1), 0);
                 const unitPrice = checkouts[0].confirmedPrice;
-                const itemTax = taxPerItem * totalQty;
-                const itemFees = feePerItem * totalQty;
-                const itemDiscount = discountPerItem * totalQty;
+                const itemSubtotal = unitPrice * totalQty;
+
+                // Calculate proportional tax based on item's percentage of total subtotal
+                const itemTaxPercentage = subtotal > 0 ? itemSubtotal / subtotal : 0;
+                const itemTax = tax * itemTaxPercentage;
 
                 return {
                     itemName: itemName,
                     quantity: totalQty,
                     unitPrice: unitPrice,
-                    totalCost: (unitPrice * totalQty) + itemTax + itemFees - itemDiscount,
+                    itemSubtotal: itemSubtotal,
+                    totalCost: itemSubtotal + itemTax, // Only includes item cost + proportional tax
                     taxAllocation: itemTax,
-                    feeAllocation: itemFees,
-                    discountAllocation: itemDiscount,
                     costCode: costCode
                 };
             });
 
-            // Calculate totals
-            const subtotal = allocation.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+            // Calculate final total (items with tax + fees - discount)
             const total = subtotal + tax + fees - discount;
 
             // Generate PDF report (append to uploaded PDF)
             await generateCostAllocationReport(
                 allocation,
-                { subtotal, tax, fees, discount, total, taxPerItem, feePerItem, discountPerItem },
+                { subtotal, tax, fees, discount, total },
                 uploadedPdf,
                 allCheckoutRecords
             );
@@ -352,14 +359,16 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             // Use batch for atomic operations
             const batch = writeBatch(db);
 
-            // Create cost allocation records per checkout
+            // Create cost allocation records per checkout with proportional tax
             for (const checkout of allCheckoutRecords) {
                 const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
                 const qty = checkout.quantity || 1;
                 const unitPrice = checkout.confirmedPrice;
-                const itemTax = taxPerItem * qty;
-                const itemFees = feePerItem * qty;
-                const itemDiscount = discountPerItem * qty;
+                const checkoutSubtotal = unitPrice * qty;
+
+                // Calculate proportional tax for this checkout
+                const checkoutTaxPercentage = subtotal > 0 ? checkoutSubtotal / subtotal : 0;
+                const itemTax = tax * checkoutTaxPercentage;
 
                 const costAllocationRef = doc(collection(db, 'costAllocation'));
                 batch.set(costAllocationRef, {
@@ -367,10 +376,8 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                     itemName: checkout.inventoryItem.name,
                     quantity: qty,
                     unitPrice: unitPrice,
-                    totalCost: (unitPrice * qty) + itemTax + itemFees - itemDiscount,
+                    totalCost: checkoutSubtotal + itemTax, // Only item cost + proportional tax
                     taxAllocation: itemTax,
-                    feeAllocation: itemFees,
-                    discountAllocation: itemDiscount,
                     costCode: costCode,
                     userName: checkout.userName || checkout.user || 'Unknown',
                     processedAt: Timestamp.now(),
@@ -451,11 +458,6 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             const PDFLib = window.PDFLib;
             const { PDFDocument, rgb, StandardFonts } = PDFLib;
 
-            // Extract taxPerItem, feePerItem, and discountPerItem from totals
-            const taxPerItem = totals.taxPerItem || 0;
-            const feePerItem = totals.feePerItem || 0;
-            const discountPerItem = totals.discountPerItem || 0;
-
             // Load the uploaded PDF as base document
             const uploadedPdfBytes = await uploadedPdf.arrayBuffer();
             const pdfDoc = await PDFDocument.load(uploadedPdfBytes);
@@ -476,14 +478,20 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
             });
             yPos -= 30;
 
-            // Tax, fees, and discount distribution note
-            if (totals.tax > 0 || totals.fees > 0 || totals.discount > 0) {
-                const parts = [];
-                if (totals.tax > 0) parts.push(`Tax ($${totals.tax.toFixed(2)})`);
-                if (totals.fees > 0) parts.push(`Fees ($${totals.fees.toFixed(2)})`);
-                if (totals.discount > 0) parts.push(`Discount ($${totals.discount.toFixed(2)})`);
-                const distributionNote = `${parts.join(', ')} distributed evenly per item`;
-                currentPage.drawText(distributionNote, {
+            // Tax distribution note and fee/discount info
+            const metadataParts = [];
+            if (totals.tax > 0) {
+                metadataParts.push(`Tax ($${totals.tax.toFixed(2)}) distributed proportionally based on item value`);
+            }
+            if (totals.fees > 0) {
+                metadataParts.push(`Fees: $${totals.fees.toFixed(2)}`);
+            }
+            if (totals.discount > 0) {
+                metadataParts.push(`Discount: $${totals.discount.toFixed(2)}`);
+            }
+            if (metadataParts.length > 0) {
+                const metadataText = metadataParts.join('. ');
+                currentPage.drawText(metadataText, {
                     x: 50,
                     y: yPos,
                     size: 10,
@@ -546,12 +554,13 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
 
             // Financial totals (right-aligned like the invoice)
             const totalsX = 420;
-            currentPage.drawText(`Subtotal (Items): $${totals.subtotal.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
+            const subtotalWithTax = totals.subtotal + totals.tax;
+            currentPage.drawText(`Subtotal (Items with Tax): $${subtotalWithTax.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
             yPos -= 12;
-            currentPage.drawText(`Tax: $${totals.tax.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
-            yPos -= 12;
-            currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
-            yPos -= 12;
+            if (totals.fees > 0) {
+                currentPage.drawText(`Fees: $${totals.fees.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
+                yPos -= 12;
+            }
             if (totals.discount > 0) {
                 currentPage.drawText(`Discount: -$${totals.discount.toFixed(2)}`, { x: totalsX, y: yPos, size: 9, font });
                 yPos -= 12;
@@ -607,10 +616,12 @@ const ShipmentProcessor = ({ items, checkoutHistory, user }) => {
                 const costCode = checkout.departmentId || checkout.costCode || 'IT Stock 1-20-000-5770';
                 const unitPrice = checkout.confirmedPrice;
                 const qty = checkout.quantity || 1;
-                const itemTax = taxPerItem * qty;
-                const itemFees = feePerItem * qty;
-                const itemDiscount = discountPerItem * qty;
-                const totalCost = (unitPrice * qty) + itemTax + itemFees - itemDiscount;
+                const checkoutSubtotal = unitPrice * qty;
+
+                // Calculate proportional tax for this checkout
+                const checkoutTaxPercentage = totals.subtotal > 0 ? checkoutSubtotal / totals.subtotal : 0;
+                const itemTax = totals.tax * checkoutTaxPercentage;
+                const totalCost = checkoutSubtotal + itemTax;
 
                 currentPage.drawText(itemName, { x: 50, y: yPos, size: 9, font });
                 currentPage.drawText(userName, { x: 210, y: yPos, size: 9, font });
