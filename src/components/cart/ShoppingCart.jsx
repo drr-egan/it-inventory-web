@@ -133,8 +133,8 @@ const ShoppingCart = ({ cart, addToCart, removeFromCart, clearCart, users, onChe
                     <div className="space-y-3 max-h-60 overflow-y-auto">
                         {cart.map(item => (
                             <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-gray-900 dark:text-white truncate">{item.name}</div>
+                                <div className="flex-1 min-w-0 mr-3">
+                                    <div className="font-medium text-gray-900 dark:text-white break-words">{item.name}</div>
                                     <div className="text-sm text-gray-600 dark:text-gray-400">
                                         Qty: {item.cartQuantity}
                                         {item.price > 0 && (
