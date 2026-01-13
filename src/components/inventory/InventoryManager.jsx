@@ -38,6 +38,12 @@ const InventoryManager = ({ user }) => {
     const [bulkValue, setBulkValue] = useState('');
     const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
+    // Delete functionality
+    const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+    const [isDeletingItem, setIsDeletingItem] = useState(false);
+    const [bulkDeleteConfirmItems, setBulkDeleteConfirmItems] = useState(null);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
     const scanInputRef = useRef(null);
 
     useEffect(() => {
@@ -290,6 +296,88 @@ const InventoryManager = ({ user }) => {
         }
     };
 
+    // Delete handlers
+    const confirmDeleteItem = (item) => {
+        setDeleteConfirmItem(item);
+    };
+
+    const cancelDeleteItem = () => {
+        setDeleteConfirmItem(null);
+    };
+
+    const deleteItem = async () => {
+        if (!deleteConfirmItem || isDeletingItem) return;
+
+        setIsDeletingItem(true);
+        try {
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(doc(db, 'items', deleteConfirmItem.id));
+            cancelDeleteItem();
+        } catch (error) {
+            console.error('Error deleting item:', error);
+            alert(`Failed to delete item: ${error.message}`);
+        } finally {
+            setIsDeletingItem(false);
+        }
+    };
+
+    const confirmBulkDelete = () => {
+        if (selectedItems.size === 0) {
+            alert('No items selected');
+            return;
+        }
+
+        const itemsToDelete = items.filter(item => selectedItems.has(item.id));
+        setBulkDeleteConfirmItems(itemsToDelete);
+    };
+
+    const cancelBulkDelete = () => {
+        setBulkDeleteConfirmItems(null);
+    };
+
+    const executeBulkDelete = async () => {
+        if (!bulkDeleteConfirmItems || bulkDeleteConfirmItems.length === 0 || isBulkDeleting) return;
+
+        setIsBulkDeleting(true);
+        try {
+            const { deleteDoc, writeBatch } = await import('firebase/firestore');
+            const batch = writeBatch(db);
+
+            bulkDeleteConfirmItems.forEach(item => {
+                batch.delete(doc(db, 'items', item.id));
+            });
+
+            await batch.commit();
+
+            setSelectedItems(new Set());
+            cancelBulkDelete();
+            alert(`Successfully deleted ${bulkDeleteConfirmItems.length} item${bulkDeleteConfirmItems.length > 1 ? 's' : ''}!`);
+        } catch (error) {
+            console.error('Error bulk deleting items:', error);
+            alert(`Failed to delete items: ${error.message}`);
+        } finally {
+            setIsBulkDeleting(false);
+        }
+    };
+
+    // ESC key handler for dialogs
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (deleteConfirmItem && !isDeletingItem) {
+                    cancelDeleteItem();
+                } else if (bulkDeleteConfirmItems && !isBulkDeleting) {
+                    cancelBulkDelete();
+                }
+            }
+        };
+
+        if (deleteConfirmItem || bulkDeleteConfirmItems) {
+            document.addEventListener('keydown', handleKeyDown);
+            return () => document.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [deleteConfirmItem, isDeletingItem, bulkDeleteConfirmItems, isBulkDeleting]);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -511,11 +599,19 @@ const InventoryManager = ({ user }) => {
                                     />
                                 )}
                                 <MaterialButton
+                                    onClick={confirmBulkDelete}
+                                    disabled={isBulkDeleting}
+                                    variant="contained"
+                                    color="error"
+                                >
+                                    <span className="material-icons mr-2">delete_sweep</span>
+                                    {isBulkDeleting ? 'Deleting...' : `Delete ${selectedItems.size}`}
+                                </MaterialButton>
+                                <MaterialButton
                                     onClick={handleBulkAction}
                                     disabled={isBulkProcessing || !bulkAction}
                                     variant="contained"
                                     color="primary"
-                                    className="md:col-span-2"
                                 >
                                     <span className="material-icons mr-2">done_all</span>
                                     {isBulkProcessing ? 'Processing...' : 'Apply to Selected'}
@@ -631,17 +727,27 @@ const InventoryManager = ({ user }) => {
                                                         </MaterialButton>
                                                     </div>
                                                 ) : (
-                                                    <MaterialButton
-                                                        onClick={() => setEditingItems(prev => ({
-                                                            ...prev,
-                                                            [item.id]: { quantity: item.quantity ?? 0, price: item.price ?? 0 }
-                                                        }))}
-                                                        variant="text"
-                                                        color="primary"
-                                                        className="!p-2 !min-w-0"
-                                                    >
-                                                        <span className="material-icons text-sm">edit</span>
-                                                    </MaterialButton>
+                                                    <div className="flex items-center space-x-1">
+                                                        <MaterialButton
+                                                            onClick={() => setEditingItems(prev => ({
+                                                                ...prev,
+                                                                [item.id]: { quantity: item.quantity ?? 0, price: item.price ?? 0 }
+                                                            }))}
+                                                            variant="text"
+                                                            color="primary"
+                                                            className="!p-2 !min-w-0"
+                                                        >
+                                                            <span className="material-icons text-sm">edit</span>
+                                                        </MaterialButton>
+                                                        <MaterialButton
+                                                            onClick={() => confirmDeleteItem(item)}
+                                                            variant="contained"
+                                                            color="error"
+                                                            className="!p-2.5 !min-w-0"
+                                                        >
+                                                            <span className="material-icons">delete</span>
+                                                        </MaterialButton>
+                                                    </div>
                                                 )}
                                             </td>
                                         </tr>
@@ -659,6 +765,173 @@ const InventoryManager = ({ user }) => {
                         />
                     </MaterialCard>
                 </>
+            )}
+
+            {/* Single Item Delete Confirmation Dialog */}
+            {deleteConfirmItem && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={(e) => e.target === e.currentTarget && cancelDeleteItem()}
+                >
+                    <MaterialCard elevation={3} className="max-w-md w-full">
+                        <div className="p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                <span className="material-icons mr-2 text-red-600">warning</span>
+                                Confirm Delete
+                            </h3>
+
+                            <div className="mb-6">
+                                <p className="text-gray-600 dark:text-gray-300 mb-3">
+                                    Are you sure you want to delete this item? This action cannot be undone.
+                                </p>
+
+                                <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="font-medium text-gray-900 dark:text-white">
+                                            {deleteConfirmItem.name}
+                                        </span>
+                                        <span className={`px-2 py-1 rounded-full text-xs ${
+                                            deleteConfirmItem.quantity <= (deleteConfirmItem.minThreshold || 5)
+                                                ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+                                                : 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                                        }`}>
+                                            Qty: {deleteConfirmItem.quantity}
+                                        </span>
+                                    </div>
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                        <div>Category: {deleteConfirmItem.category || 'Uncategorized'}</div>
+                                        {deleteConfirmItem.asin && (
+                                            <div>ASIN: {deleteConfirmItem.asin}</div>
+                                        )}
+                                        {deleteConfirmItem.price > 0 && (
+                                            <div>Price: ${deleteConfirmItem.price}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex space-x-3">
+                                <MaterialButton
+                                    onClick={cancelDeleteItem}
+                                    variant="outlined"
+                                    color="secondary"
+                                    disabled={isDeletingItem}
+                                    className="flex-1"
+                                >
+                                    Cancel
+                                </MaterialButton>
+                                <MaterialButton
+                                    onClick={deleteItem}
+                                    variant="contained"
+                                    color="error"
+                                    disabled={isDeletingItem}
+                                    className="flex-1"
+                                >
+                                    {isDeletingItem ? (
+                                        <>
+                                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-icons mr-2">delete</span>
+                                            Delete
+                                        </>
+                                    )}
+                                </MaterialButton>
+                            </div>
+                        </div>
+                    </MaterialCard>
+                </div>
+            )}
+
+            {/* Bulk Delete Confirmation Dialog */}
+            {bulkDeleteConfirmItems && bulkDeleteConfirmItems.length > 0 && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                    onClick={(e) => e.target === e.currentTarget && cancelBulkDelete()}
+                >
+                    <MaterialCard elevation={3} className="max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                        <div className="p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                                <span className="material-icons mr-2 text-red-600">warning</span>
+                                Confirm Bulk Delete
+                            </h3>
+
+                            <div className="mb-6">
+                                <p className="text-gray-600 dark:text-gray-300 mb-3">
+                                    Are you sure you want to delete {bulkDeleteConfirmItems.length} item{bulkDeleteConfirmItems.length > 1 ? 's' : ''}? This action cannot be undone.
+                                </p>
+
+                                <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg mb-4">
+                                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Items to be deleted:</h4>
+                                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                                        {bulkDeleteConfirmItems.slice(0, 10).map((item) => (
+                                            <div key={item.id} className="flex items-center justify-between bg-white dark:bg-gray-600 p-2 rounded">
+                                                <div className="flex-1">
+                                                    <div className="font-medium text-gray-900 dark:text-white text-sm">{item.name}</div>
+                                                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                                                        {item.category || 'Uncategorized'} • Qty: {item.quantity}
+                                                        {item.price > 0 && ` • $${item.price}`}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {bulkDeleteConfirmItems.length > 10 && (
+                                            <div className="text-sm text-gray-600 dark:text-gray-400 italic">
+                                                ...and {bulkDeleteConfirmItems.length - 10} more item{bulkDeleteConfirmItems.length - 10 > 1 ? 's' : ''}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 p-3 rounded-lg">
+                                    <div className="flex items-center text-red-600 dark:text-red-400 text-sm">
+                                        <span className="material-icons mr-2 text-sm">info</span>
+                                        <div>
+                                            <div className="font-semibold">Summary:</div>
+                                            <div>Total items: {bulkDeleteConfirmItems.length}</div>
+                                            <div>
+                                                Categories: {Array.from(new Set(bulkDeleteConfirmItems.map(item => item.category || 'Uncategorized'))).join(', ')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex space-x-3">
+                                <MaterialButton
+                                    onClick={cancelBulkDelete}
+                                    variant="outlined"
+                                    color="secondary"
+                                    disabled={isBulkDeleting}
+                                    className="flex-1"
+                                >
+                                    Cancel
+                                </MaterialButton>
+                                <MaterialButton
+                                    onClick={executeBulkDelete}
+                                    variant="contained"
+                                    color="error"
+                                    disabled={isBulkDeleting}
+                                    className="flex-1"
+                                >
+                                    {isBulkDeleting ? (
+                                        <>
+                                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-icons mr-2">delete_sweep</span>
+                                            Delete {bulkDeleteConfirmItems.length} Item{bulkDeleteConfirmItems.length > 1 ? 's' : ''}
+                                        </>
+                                    )}
+                                </MaterialButton>
+                            </div>
+                        </div>
+                    </MaterialCard>
+                </div>
             )}
         </div>
     );
