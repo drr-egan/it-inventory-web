@@ -15,7 +15,8 @@
       "Bash(cp:*)",
       "Bash(npm run build:*)",
       "Bash(npm uninstall:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []
