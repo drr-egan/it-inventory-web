@@ -146,10 +146,10 @@ const ShopManager = ({ user, cart, addToCart, removeFromCart, clearCart }) => {
                         {getPaginatedItems().map(item => (
                             <MaterialCard key={item.id} elevation={1} className="!p-3 lg:!p-4 hover:mat-elevation-4">
                                 <div className="flex justify-between items-start mb-3">
-                                    <h3 className="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">
+                                    <h3 className="font-medium text-sm text-gray-900 dark:text-white flex-1 mr-3 break-words">
                                         {item.name}
                                     </h3>
-                                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    <div className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
                                         item.quantity <= (item.minThreshold || 5)
                                             ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300'
                                             : 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
