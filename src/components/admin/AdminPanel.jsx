@@ -218,7 +218,10 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
             const summary = files.length
                 ? `Downloaded ${files.map((file) => `${file.count} ${file.collectionName}`).join(', ')}.`
                 : 'No files downloaded.';
-            const failureSummary = failures.length ? ` Failed: ${failures.join('; ')}.` : '';
+            const failureText = failures.join('; ');
+            const failureSummary = failureText
+                ? ` Failed: ${failureText}${/[.!?]$/.test(failureText) ? '' : '.'}`
+                : '';
             setMigrationStatus(`${summary}${failureSummary} Firestore was only read.`);
 
             if (failures.length) {
