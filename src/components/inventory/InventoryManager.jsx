@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { escapeCsvField } from '../../utils/csv';
 import { db } from '../../services/firebase';
 import LoadingSpinner from '../shared/LoadingSpinner';
 import MaterialCard from '../shared/MaterialCard';
@@ -205,9 +206,14 @@ const InventoryManager = ({ user }) => {
 
     const exportToCSV = () => {
         const csvHeader = 'Item,Current Quantity,New Quantity,Price,ASIN,Category\n';
-        const csvData = items.map(item =>
-            `"${item.name}",${item.quantity || 0},,${item.price || ''},${item.asin || ''},${item.category || ''}`
-        ).join('\n');
+        const csvData = items.map(item => [
+            item.name,
+            item.quantity || 0,
+            '',
+            item.price || '',
+            item.asin || '',
+            item.category || ''
+        ].map(escapeCsvField).join(',')).join('\n');
 
         const blob = new Blob([csvHeader + csvData], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);

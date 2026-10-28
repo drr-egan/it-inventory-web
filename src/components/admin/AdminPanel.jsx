@@ -4,6 +4,13 @@ import { collection, doc, addDoc, updateDoc, getDocs, writeBatch, serverTimestam
 import MaterialCard from '../shared/MaterialCard';
 import MaterialButton from '../shared/MaterialButton';
 import MaterialInput from '../shared/MaterialInput';
+import { quoteCsvField } from '../../utils/csv';
+import {
+    MIGRATION_COLLECTIONS,
+    downloadTextFile,
+    fetchCollectionDocuments,
+    filesForDocuments
+} from '../../utils/migrationExport';
 
 const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
     // Form states
@@ -31,6 +38,10 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
         exportingUsers: false
     });
     const [replaceAllUsers, setReplaceAllUsers] = useState(false);
+    const [migrationFormat, setMigrationFormat] = useState('csv');
+    const [migrationBusy, setMigrationBusy] = useState(null);
+    const [migrationStatus, setMigrationStatus] = useState('');
+    const [migrationResult, setMigrationResult] = useState(null);
 
     // Create new item
     const handleCreateItem = async (e) => {
@@ -113,11 +124,11 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
 
             items.forEach(item => {
                 const row = [
-                    `"${item.name || ''}"`,
-                    `"${item.category || 'Uncategorized'}"`,
+                    quoteCsvField(item.name || ''),
+                    quoteCsvField(item.category || 'Uncategorized'),
                     item.quantity || 0,
                     item.price || 0,
-                    `"${item.asin || ''}"`,
+                    quoteCsvField(item.asin || ''),
                     item.minThreshold || 5
                 ];
                 csvRows.push(row.join(','));
@@ -148,12 +159,12 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
 
             users.forEach(user => {
                 const row = [
-                    `"${user.employeeID || ''}"`,
-                    `"${user.firstName || ''}"`,
-                    `"${user.lastName || ''}"`,
-                    `"${user.costCode || user.cost_code || ''}"`,
-                    `"${user.department || ''}"`,
-                    `"${user.status || 'active'}"`
+                    quoteCsvField(user.employeeID || ''),
+                    quoteCsvField(user.firstName || ''),
+                    quoteCsvField(user.lastName || ''),
+                    quoteCsvField(user.costCode || user.cost_code || ''),
+                    quoteCsvField(user.department || ''),
+                    quoteCsvField(user.status || 'active')
                 ];
                 csvRows.push(row.join(','));
             });
@@ -170,6 +181,55 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
             alert(`Export failed: ${error.message}`);
         } finally {
             setCsvOperations(prev => ({ ...prev, exportingUsers: false }));
+        }
+    };
+
+    // Read-only full-collection export for the new inventory importer.
+    const runMigrationExport = async (collectionNames) => {
+        if (migrationBusy) return;
+
+        const busyKey = collectionNames.length === 1 ? collectionNames[0] : 'all';
+        setMigrationBusy(busyKey);
+        setMigrationResult(null);
+        setMigrationStatus('Starting read-only export…');
+
+        const files = [];
+        const failures = [];
+
+        try {
+            for (const collectionName of collectionNames) {
+                setMigrationStatus(`Reading ${collectionName}…`);
+                try {
+                    const documents = await fetchCollectionDocuments(db, collectionName, ({ fetched }) => {
+                        setMigrationStatus(`Reading ${collectionName}… ${fetched} documents`);
+                    });
+                    files.push(filesForDocuments(collectionName, documents, migrationFormat));
+                } catch (error) {
+                    console.error(`Migration export failed for ${collectionName}:`, error);
+                    failures.push(`${collectionName}: ${error.message}`);
+                }
+            }
+
+            for (const file of files) {
+                downloadTextFile(file.filename, file.content, file.mimeType);
+            }
+
+            setMigrationResult(files);
+            const summary = files.length
+                ? `Downloaded ${files.map((file) => `${file.count} ${file.collectionName}`).join(', ')}.`
+                : 'No files downloaded.';
+            const failureSummary = failures.length ? ` Failed: ${failures.join('; ')}.` : '';
+            setMigrationStatus(`${summary}${failureSummary} Firestore was only read.`);
+
+            if (failures.length) {
+                alert(`Some migration exports failed:\n${failures.join('\n')}`);
+            }
+        } catch (error) {
+            console.error('Migration export failed:', error);
+            setMigrationStatus(`Export failed: ${error.message}`);
+            alert(`Export failed: ${error.message}`);
+        } finally {
+            setMigrationBusy(null);
         }
     };
 
@@ -789,6 +849,88 @@ const AdminPanel = ({ user, items, users, checkoutHistory, notifications }) => {
                                     )}
                                 </MaterialButton>
                             </div>
+                        </div>
+                        <div className="border-t border-[var(--md-sys-color-outline-variant)] pt-4">
+                            <h4 className="font-medium text-[var(--md-sys-color-on-surface)] mb-1">Migration export</h4>
+                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] mb-3">
+                                Reads every document for the new importer. Each file starts with documentId (the Firestore document id) and then every stored field, unchanged. Timestamps are ISO strings. Choose CSV or JSON.
+                            </p>
+                            <div className="flex gap-2 mb-3" role="group" aria-label="Migration file format">
+                                {['csv', 'json'].map((format) => (
+                                    <button
+                                        key={format}
+                                        type="button"
+                                        onClick={() => setMigrationFormat(format)}
+                                        aria-pressed={migrationFormat === format}
+                                        disabled={Boolean(migrationBusy)}
+                                        className={`px-3 py-1 text-xs font-medium rounded border ${
+                                            migrationFormat === format
+                                                ? 'bg-blue-600 text-white border-blue-600'
+                                                : 'border-[var(--md-sys-color-outline)] text-[var(--md-sys-color-on-surface)]'
+                                        }`}
+                                    >
+                                        {format.toUpperCase()}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {MIGRATION_COLLECTIONS.map((collectionName) => (
+                                    <MaterialButton
+                                        key={collectionName}
+                                        type="button"
+                                        onClick={() => runMigrationExport([collectionName])}
+                                        variant="outlined"
+                                        color="secondary"
+                                        className="w-full"
+                                        disabled={Boolean(migrationBusy)}
+                                    >
+                                        {migrationBusy === collectionName ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                                                Reading…
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="material-icons mr-2">download</span>
+                                                Export {collectionName}
+                                            </>
+                                        )}
+                                    </MaterialButton>
+                                ))}
+                            </div>
+                            <MaterialButton
+                                type="button"
+                                onClick={() => runMigrationExport(MIGRATION_COLLECTIONS)}
+                                variant="contained"
+                                color="primary"
+                                className="w-full mt-2"
+                                disabled={Boolean(migrationBusy)}
+                            >
+                                {migrationBusy === 'all' ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                                        Exporting…
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-icons mr-2">download</span>
+                                        Export all for migration
+                                    </>
+                                )}
+                            </MaterialButton>
+                            {migrationStatus && (
+                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-3">{migrationStatus}</p>
+                            )}
+                            {migrationResult && migrationResult.length > 0 && (
+                                <div className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-2 space-y-1 break-words">
+                                    {migrationResult.map((file) => (
+                                        <p key={file.collectionName}>
+                                            <span className="font-medium">{file.collectionName}</span>
+                                            {` (${file.count}): ${file.columns.join(', ')}`}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div className="text-xs text-[var(--md-sys-color-on-surface-variant)] p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                             <p className="font-medium mb-1">📋 CSV Format Tips:</p>
