@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { db } from '../../services/firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
+import { quoteCsvField } from '../../utils/csv';
 import MaterialButton from '../shared/MaterialButton';
 import MaterialInput from '../shared/MaterialInput';
 import MaterialPagination from '../shared/MaterialPagination';
@@ -220,7 +221,7 @@ const UsersManager = ({ users }) => {
 
         const csvContent = [
             headers.join(','),
-            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+            ...rows.map(row => row.map(cell => quoteCsvField(cell ?? '')).join(','))
         ].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv' });
